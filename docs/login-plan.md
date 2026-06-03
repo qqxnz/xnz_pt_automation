@@ -147,3 +147,44 @@ PUT  /api/auth/password
 - 登录失败时显示明确错误。
 - 未登录访问 `/dashboard`、`/sites` 会跳转 `/login`。
 - 已登录访问 `/login` 会跳转 `/dashboard`。
+
+## 8. 开发补充规范
+
+页面入口和跳转：
+
+- `/login` 不使用后台主布局，避免未登录状态加载业务导航。
+- 登录成功默认跳转 `/dashboard`。
+- 如果路由守卫携带 `redirect` 查询参数，登录成功后优先跳转原访问地址。
+- 点击退出登录后调用 `POST /api/auth/logout`，成功后清空 `authStore` 并跳转 `/login`。
+
+前端状态：
+
+```ts
+type AuthState = {
+  user?: { id: string; username: string; passwordChangedAt?: string }
+  initialized: boolean
+  loading: boolean
+}
+```
+
+异常和 loading：
+
+- 首次进入业务页面时先调用 `GET /api/auth/me` 判断登录态。
+- `GET /api/auth/me` 返回 `401` 时不显示错误 snackbar，直接跳转登录页。
+- 登录提交中按钮显示 loading，并禁用用户名和密码输入框。
+- 网络错误展示“登录失败，请稍后重试”。
+
+后端处理：
+
+- 用户不存在时初始化流程创建 `admin`，登录接口本身不创建用户。
+- 密码校验使用 `bcrypt` 或 `argon2`。
+- 登录成功后更新 `lastLoginAt`。
+- 修改密码成功后更新 `passwordChangedAt`。
+- 登录失败响应不区分用户名不存在和密码错误。
+
+安全要求：
+
+- Cookie 必须设置 `httpOnly`。
+- 生产环境 Cookie 建议设置 `sameSite=lax`，HTTPS 下设置 `secure`。
+- 日志不得记录密码、Cookie、Authorization 头。
+- 登录失败限频维度至少包含 IP，推荐同时包含用户名。

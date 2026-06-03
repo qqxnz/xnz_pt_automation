@@ -1089,7 +1089,38 @@ app.listen(3000)
 - 高级数据分析
 - RSS 自动订阅
 
-## 19. 开发顺序
+## 19. 模块文档体系
+
+工程开发按模块推进，每个模块都必须有独立方案文档。模块文档需要达到 AI 读取后即可完成该模块所有功能开发的粒度，不能只写概要。
+
+模块文档索引：
+
+| 模块 | 文档 | 设计稿 |
+| --- | --- | --- |
+| 登录 | `docs/login-plan.md` | `designs/login.svg` |
+| 首页 | `docs/dashboard-plan.md` | `designs/dashboard.svg` |
+| 站点 | `docs/sites-plan.md` | `designs/sites.svg`、`designs/sites-form.svg` |
+| 免费种子 | `docs/free-torrents-plan.md` | 待生成 |
+| qBittorrent | `docs/qbittorrent-plan.md` | 待生成 |
+| 代理管理 | `docs/proxies-plan.md` | 待生成 |
+| 数据统计 | `docs/statistics-plan.md` | 待生成 |
+| 定时任务 | `docs/jobs-plan.md` | 待生成 |
+| 系统设置 | `docs/settings-plan.md` | 待生成 |
+
+每个模块文档必须包含：
+
+- 模块目标和业务边界
+- 页面路径、入口和跳转关系
+- 页面布局、响应式规则和设计稿文件
+- 功能列表、交互流程、表单和列表字段
+- 接口路径、请求参数、响应结构和错误处理
+- 前端状态、loading、空状态和异常状态
+- 后端处理规则、数据持久化规则和安全要求
+- 可逐项执行的开发清单、TODO 和验收标准
+
+模块开发状态以 `README.md` 当前进度表为准。
+
+## 20. 开发顺序
 
 1. 初始化 monorepo 目录结构
 2. 初始化 Express + TypeScript 后端
@@ -1112,7 +1143,7 @@ app.listen(3000)
 19. 实现任务日志和 Dashboard
 20. 增加鉴权和敏感信息加密
 
-## 20. 最终推荐方案
+## 21. 最终推荐方案
 
 本项目推荐采用：
 

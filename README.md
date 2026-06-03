@@ -24,6 +24,12 @@ designs/
 | [docs/login-plan.md](docs/login-plan.md) | 登录模块方案、设计稿说明、执行清单和 TODO。 |
 | [docs/dashboard-plan.md](docs/dashboard-plan.md) | 首页模块方案、设计稿说明、执行清单和 TODO。 |
 | [docs/sites-plan.md](docs/sites-plan.md) | 站点模块方案、设计稿说明、执行清单和 TODO。 |
+| [docs/free-torrents-plan.md](docs/free-torrents-plan.md) | 免费种子模块方案、执行清单和 TODO。 |
+| [docs/qbittorrent-plan.md](docs/qbittorrent-plan.md) | qBittorrent 模块方案、执行清单和 TODO。 |
+| [docs/proxies-plan.md](docs/proxies-plan.md) | 代理管理模块方案、执行清单和 TODO。 |
+| [docs/statistics-plan.md](docs/statistics-plan.md) | 数据统计模块方案、执行清单和 TODO。 |
+| [docs/jobs-plan.md](docs/jobs-plan.md) | 定时任务模块方案、执行清单和 TODO。 |
+| [docs/settings-plan.md](docs/settings-plan.md) | 系统设置模块方案、执行清单和 TODO。 |
 | [designs/design-spec.md](designs/design-spec.md) | 设计规范、设计稿产出规则和文件命名约定。 |
 | [designs/login.svg](designs/login.svg) | 登录页设计稿。 |
 | [designs/dashboard.svg](designs/dashboard.svg) | Dashboard 设计稿。 |
@@ -34,9 +40,15 @@ designs/
 
 | 模块 | 设计稿 | 方案&执行清单 | 开发完成 | 说明 |
 | --- | --- | --- | --- | --- |
-| 登录 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | 已有登录页 SVG 设计稿和独立模块方案。 |
-| 首页 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | 已有 Dashboard SVG 设计稿和独立模块方案。 |
-| 站点 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | 已有站点管理、站点新增与编辑 SVG 设计稿和独立模块方案。 |
+| 登录 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/login.svg`，`docs/login-plan.md`。 |
+| 首页 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/dashboard.svg`，`docs/dashboard-plan.md`。 |
+| 站点 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/sites.svg`、`designs/sites-form.svg`，`docs/sites-plan.md`。 |
+| 免费种子 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/free-torrents.svg`，已完成 `docs/free-torrents-plan.md`。 |
+| qBittorrent | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/qbittorrent.svg`，已完成 `docs/qbittorrent-plan.md`。 |
+| 代理管理 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/proxies.svg`，已完成 `docs/proxies-plan.md`。 |
+| 数据统计 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/statistics.svg`，已完成 `docs/statistics-plan.md`。 |
+| 定时任务 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/jobs.svg`，已完成 `docs/jobs-plan.md`。 |
+| 系统设置 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/settings.svg`，已完成 `docs/settings-plan.md`。 |
 
 ## 设计稿产出规则
 

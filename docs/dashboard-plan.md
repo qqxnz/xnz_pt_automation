@@ -144,3 +144,44 @@ type DashboardOverview = {
 - 风险提示能引导用户进入对应页面。
 - 刷新时有 loading 状态。
 - 移动端指标卡片不溢出屏幕。
+
+## 8. 开发补充规范
+
+页面入口和跳转：
+
+- `/dashboard` 使用后台主布局。
+- 点击“新增站点”跳转 `/sites` 并打开新增站点弹窗，或进入站点页后由站点模块处理新增入口。
+- 点击“配置 qBittorrent”跳转 `/qbittorrent`。
+- 点击认证失败风险提示跳转 `/sites?connectivityStatus=AUTH_FAILED`。
+
+前端状态：
+
+```ts
+type DashboardState = {
+  overview?: DashboardOverview
+  loading: boolean
+  error?: string
+  lastUpdatedAt?: string
+}
+```
+
+空状态和异常状态：
+
+- 无站点时站点统计全部为 0，并展示“添加第一个站点”。
+- qBittorrent 未配置时速度和总量展示 `--`，同时展示配置提示。
+- 统计接口失败时保留旧数据，并展示顶部错误提示和重试按钮。
+- 首次加载无数据时展示骨架屏或 loading 卡片。
+
+后端聚合规则：
+
+- `sites` 指标来自 `sites` 表按连通状态聚合。
+- `torrents.todayNew` 按当天创建时间统计。
+- `torrents.expiringSoon` 默认统计 2 小时内免费结束且未删除的种子。
+- `transfer` 优先来自 qBittorrent 状态接口；未配置时返回 `null` 或 0，并由前端展示占位。
+- `risks` 由后端统一生成，避免前端重复判断业务规则。
+
+安全和性能：
+
+- Dashboard 不返回 Cookie、密钥、下载链接等敏感数据。
+- 聚合接口避免逐站实时请求 PT 站点，只读取数据库快照和 qB 当前状态。
+- 刷新按钮需要前端防抖，避免频繁请求。

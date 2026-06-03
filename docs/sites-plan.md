@@ -292,3 +292,60 @@ type TestSiteConnectivityResponse = {
 - 最近失败原因过长时可查看完整内容。
 - 无站点时展示空状态和新增入口。
 - 移动端不出现横向宽表格。
+
+## 10. 开发补充规范
+
+页面入口和跳转：
+
+- `/sites` 使用后台主布局。
+- URL 查询参数需要支持 `keyword`、`connectivityStatus`、`proxyMode`、`enabled`，便于从首页风险提示跳转。
+- 从首页“新增站点”进入时可使用 `?action=create` 打开新增弹窗。
+
+前端状态：
+
+```ts
+type SitesState = {
+  items: SiteListItem[]
+  total: number
+  loading: boolean
+  filters: SiteFilter
+  formVisible: boolean
+  editingSiteId?: string
+}
+```
+
+筛选类型：
+
+```ts
+type SiteFilter = {
+  keyword?: string
+  connectivityStatus?: 'ALL' | 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+  proxyMode?: 'ALL' | 'NONE' | 'GLOBAL' | 'CUSTOM'
+  enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
+  page: number
+  pageSize: number
+}
+```
+
+空状态和异常状态：
+
+- 无站点时展示新增站点主按钮。
+- 筛选无结果时展示“没有符合条件的站点”，并提供清空筛选。
+- 全部离线时展示网络、代理、Cookie 检查提示。
+- 认证失败站点行突出显示“编辑凭证”快捷操作。
+
+后端处理：
+
+- 新增和编辑时对 `baseUrl`、`freeTorrentUrl`、`profileUrl` 做 URL 规范化。
+- `accessKey`、`cookie`、`userAgent`、代理密码等敏感字段写入前加密。
+- 列表接口只返回是否已配置敏感字段，不返回明文。
+- 连通性测试必须按密钥优先、Cookie 兜底执行。
+- 连通性测试必须使用站点代理策略。
+- 每次测试写入 `site_connectivity_logs`。
+- 删除站点前如果存在关联 torrent，需要确认是软删除站点还是阻止删除；第一版建议阻止删除并提示先处理关联数据。
+
+安全和日志：
+
+- 日志不记录 Cookie、密钥、passkey、完整下载链接。
+- 测试失败原因需要脱敏后存储和展示。
+- 手动同步免费种子和同步流量需要限频，避免频繁访问 PT 站点。
