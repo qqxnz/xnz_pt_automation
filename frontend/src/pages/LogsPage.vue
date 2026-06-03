@@ -1,0 +1,144 @@
+<template>
+  <AppLayout>
+    <div class="dashboard-head">
+      <div>
+        <h1>日志</h1>
+        <p>查看系统操作记录和定时任务运行记录。</p>
+      </div>
+      <div class="head-actions">
+        <span v-if="lastUpdatedAt">最近更新：{{ lastUpdatedAt }}</span>
+        <button class="primary-button compact" type="button" :disabled="loading" @click="loadLogs">
+          {{ loading ? '刷新中...' : '刷新' }}
+        </button>
+      </div>
+    </div>
+
+    <div v-if="error" class="error-banner">
+      {{ error }}
+      <button type="button" @click="loadLogs">重试</button>
+    </div>
+
+    <section class="panel logs-panel">
+      <div class="logs-toolbar">
+        <div class="tabs">
+          <button type="button" :class="{ active: activeType === 'operation' }" @click="switchType('operation')">
+            操作日志
+          </button>
+          <button type="button" :class="{ active: activeType === 'task' }" @click="switchType('task')">
+            定时任务日志
+          </button>
+        </div>
+        <span>{{ total }} 条记录</span>
+      </div>
+
+      <div v-if="items.length" class="log-list">
+        <article v-for="item in items" :key="item.id" class="log-row">
+          <div class="log-meta">
+            <time>{{ formatTime(item.createdAt) }}</time>
+            <span class="status-badge" :class="item.status.toLowerCase()">{{ statusText(item.status) }}</span>
+          </div>
+          <div>
+            <strong>{{ primaryText(item) }}</strong>
+            <p>{{ item.message }}</p>
+            <small>{{ secondaryText(item) }}</small>
+          </div>
+        </article>
+      </div>
+      <div v-else class="empty-tip">
+        {{ activeType === 'operation' ? '暂无操作日志。' : '暂无定时任务日志。' }}
+      </div>
+
+      <div class="pager">
+        <button type="button" :disabled="page <= 1 || loading" @click="changePage(page - 1)">上一页</button>
+        <span>第 {{ page }} / {{ totalPages }} 页</span>
+        <button type="button" :disabled="page >= totalPages || loading" @click="changePage(page + 1)">下一页</button>
+      </div>
+    </section>
+  </AppLayout>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import AppLayout from '../components/AppLayout.vue'
+import { getLogs, type LogType, type OperationLog, type TaskLog } from '../api/logs'
+
+const activeType = ref<LogType>('operation')
+const operationLogs = ref<OperationLog[]>([])
+const taskLogs = ref<TaskLog[]>([])
+const loading = ref(false)
+const error = ref('')
+const lastUpdatedAt = ref('')
+const page = ref(1)
+const pageSize = 20
+const total = ref(0)
+
+const items = computed(() => (activeType.value === 'operation' ? operationLogs.value : taskLogs.value))
+const totalPages = computed(() => Math.max(Math.ceil(total.value / pageSize), 1))
+
+function switchType(type: LogType) {
+  if (activeType.value === type) {
+    return
+  }
+  activeType.value = type
+  page.value = 1
+  loadLogs()
+}
+
+function changePage(nextPage: number) {
+  page.value = Math.min(Math.max(nextPage, 1), totalPages.value)
+  loadLogs()
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function statusText(status: OperationLog['status'] | TaskLog['status']) {
+  const map = {
+    SUCCESS: '成功',
+    FAILED: '失败',
+    RUNNING: '运行中'
+  }
+  return map[status]
+}
+
+function primaryText(item: OperationLog | TaskLog) {
+  return item.type === 'OPERATION' ? item.action : item.taskName
+}
+
+function secondaryText(item: OperationLog | TaskLog) {
+  if (item.type === 'TASK') {
+    return [
+      item.taskId ? `任务 ID：${item.taskId}` : '系统任务',
+      item.startedAt ? `开始：${formatTime(item.startedAt)}` : '',
+      item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : ''
+    ]
+      .filter(Boolean)
+      .join(' / ')
+  }
+  return [item.actorName ? `操作者：${item.actorName}` : '操作者：未知', item.ip ? `IP：${item.ip}` : ''].filter(Boolean).join(' / ')
+}
+
+async function loadLogs() {
+  loading.value = true
+  error.value = ''
+  try {
+    if (activeType.value === 'operation') {
+      const result = await getLogs('operation', page.value, pageSize)
+      operationLogs.value = result.items
+      total.value = result.total
+    } else {
+      const result = await getLogs('task', page.value, pageSize)
+      taskLogs.value = result.items
+      total.value = result.total
+    }
+    lastUpdatedAt.value = new Date().toLocaleString('zh-CN')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '日志加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadLogs)
+</script>

@@ -543,6 +543,135 @@ a {
   color: #6b7280;
 }
 
+.logs-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.logs-toolbar,
+.log-row,
+.log-meta,
+.pager {
+  display: flex;
+  align-items: center;
+}
+
+.logs-toolbar {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.logs-toolbar > span,
+.log-row small,
+.log-row time,
+.pager span {
+  color: #6b7280;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 8px;
+  border-radius: 14px;
+  padding: 4px;
+  background: #f1f5f9;
+}
+
+.tabs button,
+.pager button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tabs button {
+  min-height: 38px;
+  padding: 0 16px;
+  color: #475569;
+  font-weight: 850;
+}
+
+.tabs button.active {
+  color: #2563eb;
+  background: #fff;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 8%);
+}
+
+.log-list {
+  display: grid;
+}
+
+.log-row {
+  gap: 24px;
+  align-items: flex-start;
+  border-top: 1px solid #e5e7eb;
+  padding: 18px 0;
+}
+
+.log-row:first-child {
+  border-top: 0;
+}
+
+.log-meta {
+  flex: 0 0 240px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.log-row strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.log-row p {
+  margin: 0 0 8px;
+  color: #374151;
+}
+
+.status-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-badge.success {
+  color: #047857 !important;
+  background: #ecfdf5;
+}
+
+.status-badge.failed {
+  color: #b91c1c !important;
+  background: #fef2f2;
+}
+
+.status-badge.running {
+  color: #2563eb !important;
+  background: #eff6ff;
+}
+
+.pager {
+  justify-content: flex-end;
+  gap: 14px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 20px;
+}
+
+.pager button {
+  min-height: 38px;
+  padding: 0 14px;
+  color: #2563eb;
+  background: #eff6ff;
+  font-weight: 850;
+}
+
+.pager button:disabled {
+  color: #94a3b8;
+  background: #f1f5f9;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1024px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -606,7 +735,10 @@ a {
 
   .dashboard-head,
   .head-actions,
-  .risk-item {
+  .risk-item,
+  .logs-toolbar,
+  .log-row,
+  .log-meta {
     flex-direction: column;
     align-items: stretch;
   }
@@ -617,6 +749,19 @@ a {
 
   .dashboard-head h1 {
     font-size: 28px;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .log-meta {
+    flex-basis: auto;
+  }
+
+  .pager {
+    justify-content: space-between;
   }
 
   .metric-grid,

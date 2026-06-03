@@ -16,6 +16,7 @@
       <router-link class="nav-item" to="/downloaders">下载器</router-link>
       <router-link class="nav-item" to="/proxies">代理管理</router-link>
       <router-link class="nav-item" to="/tasks">任务</router-link>
+      <router-link class="nav-item" to="/logs">日志</router-link>
       <router-link class="nav-item" to="/settings">系统设置</router-link>
     </aside>
 
