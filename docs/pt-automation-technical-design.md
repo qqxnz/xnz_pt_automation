@@ -127,8 +127,8 @@ xnz_pt_automation
 - 启用、禁用站点
 - 配置站点 Cookie
 - 配置站点密钥
-- 配置 User-Agent
-- 配置站点代理策略
+- 配置 User-Agent，新增站点时默认填入当前浏览器 User-Agent，也允许用户自定义
+- 配置站点代理，默认不使用代理，需要代理时从代理管理模块中选择一个已启用代理
 - 配置种子页面地址
 - 测试密钥是否有效
 - 测试 Cookie 是否有效
@@ -151,7 +151,6 @@ type Site = {
   freeTorrentUrl: string
   profileUrl?: string
   proxyId?: string
-  proxyMode: 'NONE' | 'GLOBAL' | 'CUSTOM'
   connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   lastConnectedAt?: Date
   lastConnectError?: string
@@ -218,17 +217,21 @@ type SiteConnectivityCheckResult = {
 }
 ```
 
-### 5.3 代理配置
+### 5.3 User-Agent 和代理配置
 
-系统支持全局代理和站点级代理。
+User-Agent 规则：
 
-代理模式：
+- 新增站点时，前端默认读取当前浏览器的 `navigator.userAgent` 并填入站点表单。
+- 用户可以直接编辑 User-Agent 字段；保存后后端使用站点保存的最终字符串访问 PT 站点。
+- 编辑站点时展示已保存的 User-Agent，可一键恢复为当前浏览器 User-Agent。
+- User-Agent 不按敏感字段处理，但日志中仍避免输出完整请求头。
 
-```text
-NONE    不使用代理
-GLOBAL  使用全局默认代理
-CUSTOM  使用站点绑定的指定代理
-```
+代理规则：
+
+- 代理配置由 `/proxies` 代理管理模块统一维护。
+- 站点默认不使用代理，即 `proxyId` 为空。
+- 站点需要走代理时，只能从代理管理模块中选择一个已启用代理，并保存该代理的 `proxyId`。
+- 不再设计全局默认代理或站点代理模式枚举，避免“默认代理”带来隐式访问路径。
 
 代理配置示例：
 
@@ -242,7 +245,6 @@ type ProxyConfig = {
   port: number
   username?: string
   password?: string
-  isDefault: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -251,11 +253,12 @@ type ProxyConfig = {
 使用规则：
 
 - 每个站点可以选择不走代理
-- 每个站点可以选择使用全局默认代理
-- 每个站点可以绑定一个指定代理
+- 每个站点最多绑定一个指定代理
 - 下载器 API 默认不走站点代理
-- 测试站点连接时必须使用该站点的代理策略
-- 抓取种子、统计上传下载、下载 torrent 文件都必须使用该站点的代理策略
+- 测试站点连接时必须使用该站点保存的 `proxyId`
+- 抓取种子、统计上传下载、下载 torrent 文件都必须使用该站点保存的 `proxyId`
+- 如果 `proxyId` 为空则直接访问，不使用任何代理
+- 如果 `proxyId` 指向的代理不存在或被禁用，站点连通性检测和任务运行需要失败并记录明确原因
 
 ## 6. 种子抓取
 
@@ -266,7 +269,7 @@ type ProxyConfig = {
   |
 读取已启用站点
   |
-根据站点代理策略创建 HTTP Client
+根据站点保存的 User-Agent 和可选 proxyId 创建 HTTP Client
   |
 按密钥优先、Cookie 兜底的策略获取访问凭证
   |
@@ -533,6 +536,8 @@ type TestSiteConnectivityResponse = {
   status: 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   accessMethod?: 'ACCESS_KEY' | 'COOKIE'
   usedProxy: boolean
+  proxyId?: string
+  proxyName?: string
   errorMessage?: string
 }
 ```
@@ -590,7 +595,6 @@ GET    /api/proxies/:id
 PUT    /api/proxies/:id
 DELETE /api/proxies/:id
 POST   /api/proxies/:id/test
-PUT    /api/proxies/:id/default
 ```
 
 ### 11.7 认证与账户接口
@@ -674,7 +678,7 @@ type ChangePasswordRequest = {
 - 启用状态
 - 连通状态
 - 当前可用访问方式
-- 代理模式
+- 代理
 - 最近成功连接时间
 - 最近失败原因
 - 操作
@@ -683,7 +687,8 @@ type ChangePasswordRequest = {
 
 - 配置站点密钥
 - 配置站点 Cookie
-- 配置站点代理策略
+- 配置站点 User-Agent，默认来自当前浏览器，也可自定义
+- 配置站点代理，默认不使用，需要时从代理管理模块选择
 - 测试密钥
 - 测试 Cookie
 - 测试站点连通性
@@ -728,7 +733,6 @@ type ChangePasswordRequest = {
 - 地址
 - 端口
 - 启用状态
-- 是否默认代理
 - 最近测试结果
 - 操作
 
@@ -738,7 +742,6 @@ type ChangePasswordRequest = {
 - 编辑代理
 - 删除代理
 - 测试代理连通性
-- 设置默认代理
 
 ### 12.7 统计页
 
@@ -817,7 +820,7 @@ type User = {
 }
 ```
 
-`sites` 表需要保存站点密钥、Cookie、代理模式、最近连通状态等字段。密钥、Cookie 和代理密码必须加密存储。
+`sites` 表需要保存站点密钥、Cookie、User-Agent、可选 `proxyId`、最近连通状态等字段。密钥、Cookie 和代理密码必须加密存储；User-Agent 不属于敏感字段，但不应在日志中完整输出请求头。
 
 `site_connectivity_logs` 用于记录每次连通性检测结果，便于前端展示站点是否可用以及失败原因。
 
@@ -1117,7 +1120,7 @@ app.listen(3000)
 - 站点
 - 站点密钥和 Cookie 双凭证访问
 - 站点连通状态检测
-- 代理配置和站点级代理策略
+- 代理配置和站点级可选代理选择
 - NexusPHP 种子抓取
 - 种子列表
 - 手动推送到下载器

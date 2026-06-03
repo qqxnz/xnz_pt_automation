@@ -11,7 +11,7 @@
 
 ## 2. 模块目标
 
-站点模块负责 PT 站点配置、凭证维护、代理策略、启停控制和连通性检测。
+站点模块负责 PT 站点配置、凭证维护、User-Agent、可选代理、启停控制和连通性检测。
 
 交付结果：
 
@@ -34,7 +34,7 @@
 - 站点统计卡片。
 - 关键词搜索。
 - 连通状态筛选。
-- 代理模式筛选。
+- 代理使用状态筛选。
 - 启用状态筛选。
 - 桌面表格展示。
 - 移动卡片展示。
@@ -46,7 +46,7 @@
 启用状态
 连通状态
 当前凭证
-代理模式
+代理
 最近成功连接
 最近失败原因
 操作
@@ -80,7 +80,7 @@
 访问凭证
   站点密钥
   Cookie
-  User-Agent
+  User-Agent，默认使用当前浏览器，可自定义
 
 抓取配置
   种子地址
@@ -88,8 +88,7 @@
   检查间隔
 
 代理配置
-  代理模式
-  指定代理
+  使用代理
 
 底部操作
   取消
@@ -110,7 +109,6 @@ type SiteForm = {
   parserType: 'NEXUSPHP'
   freeTorrentUrl: string
   profileUrl?: string
-  proxyMode: 'NONE' | 'GLOBAL' | 'CUSTOM'
   proxyId?: string
   checkIntervalMinutes: number
 }
@@ -121,9 +119,10 @@ type SiteForm = {
 - 站点名称必填。
 - 站点地址必填且必须是 URL。
 - 站点密钥和 Cookie 至少填写一个。
-- `proxyMode` 为 `CUSTOM` 时必须选择指定代理。
 - 检查间隔最小 5 分钟。
 - 编辑时敏感字段默认展示为脱敏占位，不返回明文。
+- User-Agent 新增时默认填入当前浏览器 `navigator.userAgent`，允许用户修改；保存时以后端收到的最终字符串为准。
+- 代理默认不使用，即 `proxyId` 为空；选择代理时必须来自代理管理模块的已启用代理列表。
 
 保存规则：
 
@@ -132,6 +131,7 @@ type SiteForm = {
 - 新增成功但测试失败时保留站点配置，并展示错误原因。
 - 编辑敏感字段留空时表示不修改原值。
 - 清空敏感字段需要明确操作，不能因为输入框留空而误删原值。
+- 点击“恢复当前浏览器 User-Agent”时重新读取当前浏览器 `navigator.userAgent` 并覆盖表单 User-Agent 字段。
 
 保存并测试结果：
 
@@ -139,6 +139,7 @@ type SiteForm = {
 连接成功，当前使用密钥访问
 连接成功，密钥失败，已使用 Cookie 访问
 连接失败，代理不可用
+连接失败，已选择的代理不存在或已禁用
 认证失败，密钥和 Cookie 都不可用
 ```
 
@@ -161,18 +162,17 @@ COOKIE      Cookie
 NONE        无可用凭证
 ```
 
-代理模式展示：
+代理展示：
 
 ```text
-NONE    不代理
-GLOBAL  全局代理
-CUSTOM  自定义代理
+未选择代理       不使用代理
+已选择代理       展示代理名称，例如 HK SOCKS5
 ```
 
 接口：
 
 ```text
-GET    /api/sites?keyword=&connectivityStatus=&proxyMode=&enabled=&page=&pageSize=
+GET    /api/sites?keyword=&connectivityStatus=&proxyUsage=&enabled=&page=&pageSize=
 POST   /api/sites
 GET    /api/sites/:id
 PUT    /api/sites/:id
@@ -192,7 +192,7 @@ type SiteListItem = {
   enabled: boolean
   connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   currentAccessMethod?: 'ACCESS_KEY' | 'COOKIE'
-  proxyMode: 'NONE' | 'GLOBAL' | 'CUSTOM'
+  proxyId?: string
   proxyName?: string
   lastConnectedAt?: string
   lastConnectError?: string
@@ -207,6 +207,8 @@ type TestSiteConnectivityResponse = {
   status: 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   accessMethod?: 'ACCESS_KEY' | 'COOKIE'
   usedProxy: boolean
+  proxyId?: string
+  proxyName?: string
   errorMessage?: string
 }
 ```
@@ -222,7 +224,7 @@ type TestSiteConnectivityResponse = {
 
 - 顶部展示站点标题和新增站点按钮。
 - 使用统计卡片展示全部、在线、认证失败、离线、未知状态。
-- 使用筛选区承载关键词、状态、代理模式、启用状态和刷新按钮。
+- 使用筛选区承载关键词、状态、代理使用状态、启用状态和刷新按钮。
 - 使用表格展示站点列表。
 
 移动端：
@@ -240,7 +242,7 @@ type TestSiteConnectivityResponse = {
 - 实现站点列表查询。
 - 实现关键词筛选。
 - 实现连通状态筛选。
-- 实现代理模式筛选。
+- 实现代理使用状态筛选。
 - 实现启用状态筛选。
 - 实现顶部统计卡片。
 - 桌面端使用表格展示站点。
@@ -253,7 +255,7 @@ type TestSiteConnectivityResponse = {
 - 实现站点名称必填校验。
 - 实现站点地址 URL 校验。
 - 实现密钥和 Cookie 至少一个的校验。
-- 实现自定义代理必选校验。
+- 实现代理下拉只展示代理管理模块中的已启用代理。
 - 实现检查间隔最小值校验。
 - 实现保存。
 - 实现保存并测试。
@@ -288,7 +290,8 @@ type TestSiteConnectivityResponse = {
 - 可启用和禁用站点。
 - 连通性测试能展示最终状态和访问方式。
 - 密钥和 Cookie 至少一个为空校验生效。
-- 自定义代理未选择代理时不能保存。
+- 不选择代理时保存为不使用代理。
+- 已选择代理被禁用或删除时，连通性测试展示明确错误。
 - 最近失败原因过长时可查看完整内容。
 - 无站点时展示空状态和新增入口。
 - 移动端不出现横向宽表格。
@@ -298,7 +301,7 @@ type TestSiteConnectivityResponse = {
 页面入口和跳转：
 
 - `/sites` 使用后台主布局。
-- URL 查询参数需要支持 `keyword`、`connectivityStatus`、`proxyMode`、`enabled`，便于从首页风险提示跳转。
+- URL 查询参数需要支持 `keyword`、`connectivityStatus`、`proxyUsage`、`enabled`，便于从首页风险提示跳转。
 - 从首页“新增站点”进入时可使用 `?action=create` 打开新增弹窗。
 
 前端状态：
@@ -320,7 +323,7 @@ type SitesState = {
 type SiteFilter = {
   keyword?: string
   connectivityStatus?: 'ALL' | 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  proxyMode?: 'ALL' | 'NONE' | 'GLOBAL' | 'CUSTOM'
+  proxyUsage?: 'ALL' | 'NONE' | 'ENABLED'
   enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
   page: number
   pageSize: number
@@ -337,10 +340,10 @@ type SiteFilter = {
 后端处理：
 
 - 新增和编辑时对 `baseUrl`、`freeTorrentUrl`、`profileUrl` 做 URL 规范化。
-- `accessKey`、`cookie`、`userAgent`、代理密码等敏感字段写入前加密。
+- `accessKey`、`cookie`、代理密码等敏感字段写入前加密；`userAgent` 按普通配置保存。
 - 列表接口只返回是否已配置敏感字段，不返回明文。
 - 连通性测试必须按密钥优先、Cookie 兜底执行。
-- 连通性测试必须使用站点代理策略。
+- 连通性测试必须使用站点保存的 User-Agent 和可选 `proxyId`。
 - 每次测试写入 `site_connectivity_logs`。
 - 删除站点前如果存在关联 torrent，需要确认是软删除站点还是阻止删除；第一版建议阻止删除并提示先处理关联数据。
 

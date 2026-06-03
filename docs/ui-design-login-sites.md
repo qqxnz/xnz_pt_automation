@@ -188,7 +188,7 @@ LoginPage.vue
 │ PT Automation                                      admin  系统设置  退出    │
 ├───────────────┬────────────────────────────────────────────────────────────┤
 │ Dashboard     │ 站点                                      [新增站点]    │
-│ 站点      │ 管理 PT 站点访问凭证、代理策略和连通状态                    │
+│ 站点      │ 管理 PT 站点访问凭证、User-Agent、代理和连通状态             │
 │ 种子      │                                                            │
 │ 下载器   │ ┌────────┐ ┌────────┐ ┌────────────┐ ┌──────────────┐     │
 │ 代理管理      │ │全部 12 │ │在线 9  │ │认证失败 2 │ │离线 1        │     │
@@ -200,9 +200,9 @@ LoginPage.vue
 │               │                                                            │
 │               │ ┌──────────────────────────────────────────────────────┐   │
 │               │ │ 站点       状态       凭证     代理      最近成功    │   │
-│               │ │ MTeam      在线       密钥     自定义    10:20       │   │
-│               │ │ HDHome     认证失败   Cookie   不代理    昨天        │   │
-│               │ │ PTP        离线       -        全局代理  -           │   │
+│               │ │ MTeam      在线       密钥     HK SOCKS5 10:20       │   │
+│               │ │ HDHome     认证失败   Cookie   不使用    昨天        │   │
+│               │ │ PTP        离线       -        不使用    -           │   │
 │               │ │                                      操作            │   │
 │               │ └──────────────────────────────────────────────────────┘   │
 └───────────────┴────────────────────────────────────────────────────────────┘
@@ -222,7 +222,7 @@ LoginPage.vue
 │ ┌────────────────────┐ │
 │ │ MTeam        在线  │ │
 │ │ 凭证：密钥         │ │
-│ │ 代理：自定义代理    │ │
+│ │ 代理：HK SOCKS5    │ │
 │ │ 最近成功：10:20    │ │
 │ │ [测试] [编辑] [更多]│ │
 │ └────────────────────┘ │
@@ -264,7 +264,7 @@ LoginPage.vue
 ```text
 关键词搜索
 状态筛选
-代理模式筛选
+代理使用状态筛选
 启用状态筛选
 刷新按钮
 ```
@@ -275,7 +275,7 @@ LoginPage.vue
 type SiteFilter = {
   keyword?: string
   connectivityStatus?: 'ALL' | 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  proxyMode?: 'ALL' | 'NONE' | 'GLOBAL' | 'CUSTOM'
+  proxyUsage?: 'ALL' | 'NONE' | 'ENABLED'
   enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
 }
 ```
@@ -289,7 +289,7 @@ type SiteFilter = {
 启用状态
 连通状态
 当前凭证
-代理模式
+代理
 最近成功连接
 最近失败原因
 操作
@@ -312,7 +312,7 @@ type SiteFilter = {
 连通状态
 启用状态
 当前凭证
-代理模式
+代理
 最近成功连接
 最近失败原因
 快捷操作
@@ -353,7 +353,7 @@ type SiteFilter = {
 │ 访问凭证                             │
 │ 站点密钥 [ ********            ]      │
 │ Cookie   [ ********            ]      │
-│ User-Agent [                  ]       │
+│ User-Agent [当前浏览器 UA      ] [恢复当前浏览器] │
 │                                      │
 │ 抓取配置                             │
 │ 种子地址 [                ]       │
@@ -361,8 +361,7 @@ type SiteFilter = {
 │ 检查间隔 [ 30 分钟            ]       │
 │                                      │
 │ 代理配置                             │
-│ 代理模式 [不使用代理          v ]     │
-│ 指定代理 [请选择              v ]     │
+│ 使用代理 [不使用代理          v ]     │
 │                                      │
 │ [取消] [保存并测试] [保存]            │
 └──────────────────────────────────────┘
@@ -381,7 +380,6 @@ type SiteForm = {
   parserType: string
   freeTorrentUrl: string
   profileUrl?: string
-  proxyMode: 'NONE' | 'GLOBAL' | 'CUSTOM'
   proxyId?: string
   checkIntervalMinutes: number
 }
@@ -392,7 +390,8 @@ type SiteForm = {
 - 站点名称必填
 - 站点地址必填，必须是 URL
 - 站点密钥和 Cookie 至少填写一个
-- 代理模式为 `CUSTOM` 时必须选择代理
+- User-Agent 默认填入当前浏览器 `navigator.userAgent`，允许用户自定义
+- 代理默认不使用；选择代理时必须来自代理管理模块中的已启用代理
 - 检查间隔最小 5 分钟
 
 ### 5.3 保存并测试
@@ -419,6 +418,7 @@ type SiteForm = {
 连接成功，当前使用密钥访问
 连接成功，密钥失败，已使用 Cookie 访问
 连接失败，代理不可用
+连接失败，已选择的代理不存在或已禁用
 认证失败，密钥和 Cookie 都不可用
 ```
 
@@ -441,12 +441,11 @@ COOKIE      Cookie
 NONE        无可用凭证
 ```
 
-### 6.3 代理模式 Chip
+### 6.3 代理 Chip
 
 ```text
-NONE    不代理
-GLOBAL  全局代理
-CUSTOM  自定义代理
+未选择代理       不使用代理
+已选择代理       展示代理名称，例如 HK SOCKS5
 ```
 
 ## 7. 页面数据接口
@@ -454,7 +453,7 @@ CUSTOM  自定义代理
 ### 7.1 获取站点列表
 
 ```text
-GET /api/sites?keyword=&connectivityStatus=&proxyMode=&enabled=&page=&pageSize=
+GET /api/sites?keyword=&connectivityStatus=&proxyUsage=&enabled=&page=&pageSize=
 ```
 
 响应示例：
@@ -467,7 +466,7 @@ type SiteListItem = {
   enabled: boolean
   connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   currentAccessMethod?: 'ACCESS_KEY' | 'COOKIE'
-  proxyMode: 'NONE' | 'GLOBAL' | 'CUSTOM'
+  proxyId?: string
   proxyName?: string
   lastConnectedAt?: string
   lastConnectError?: string
@@ -567,7 +566,7 @@ desktop  >= 1200px
 
 - 创建 `/sites` 页面
 - 实现站点统计卡片
-- 实现关键词、状态、代理模式和启用状态筛选
+- 实现关键词、状态、代理使用状态和启用状态筛选
 - 桌面端使用表格展示站点列表
 - 移动端使用卡片列表展示站点列表
 - 实现新增站点入口
@@ -584,11 +583,11 @@ desktop  >= 1200px
 - 支持站点密钥、Cookie 和 User-Agent
 - 支持种子地址和个人信息地址
 - 支持检查间隔配置
-- 支持不代理、全局代理和自定义代理
+- 支持默认不使用代理，需要时从代理模块选择已启用代理
 - 校验站点名称必填
 - 校验站点地址必须是 URL
 - 校验站点密钥和 Cookie 至少填写一个
-- 校验自定义代理必须选择代理配置
+- 新增站点时默认填入当前浏览器 User-Agent，并支持恢复当前浏览器 User-Agent
 - 支持保存
 - 支持保存并测试
 
