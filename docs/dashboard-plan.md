@@ -33,9 +33,9 @@
 已配置站点数量
 在线站点数量
 认证失败站点数量
-今日新增免费种子数
-已推送 qBittorrent 数量
-即将过期免费种子数量
+今日新增种子数
+已推送下载器数量
+即将过期种子数量
 当前上传速度
 当前下载速度
 总上传量
@@ -45,9 +45,9 @@
 模块区域：
 
 - 站点健康状态：展示在线、离线、认证失败、未检测。
-- 最近任务：展示同步免费种子、同步流量、连通性测试等任务的最近结果。
-- 快捷操作：新增站点、测试全部站点、同步免费种子、配置 qBittorrent。
-- 风险提示：认证失败、全部离线、默认密码未修改、qBittorrent 未配置。
+- 最近任务：展示同步种子、同步流量、连通性测试等任务的最近结果。
+- 快捷操作：新增站点、新增下载器、新建任务、查看种子。
+- 风险提示：认证失败、全部离线、默认密码未修改、下载器未配置。
 
 接口建议：
 
@@ -78,7 +78,7 @@ type DashboardOverview = {
     downloadedTotal: number
   }
   risks: Array<{
-    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'QB_NOT_CONFIGURED'
+    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
     message: string
     actionText?: string
     actionPath?: string
@@ -113,7 +113,7 @@ type DashboardOverview = {
 - 创建首页概览 API 客户端。
 - 实现 `GET /api/stats/overview` 聚合接口。
 - 实现站点统计卡片。
-- 实现免费种子统计卡片。
+- 实现种子统计卡片。
 - 实现上传下载速度展示。
 - 实现总上传量和总下载量展示。
 - 实现站点健康状态区。
@@ -133,8 +133,8 @@ type DashboardOverview = {
 - [ ] 确认首页指标第一版是否全部接真实接口，还是部分使用空值占位。
 - [ ] 确认最近任务数据来源，第一版可从 job logs 聚合或暂用空状态。
 - [ ] 确认风险提示是否包含默认密码未修改。
-- [ ] 确认快捷操作中“测试全部站点”是否第一版实现。
-- [ ] 确认上传下载速度来自 qBittorrent 还是站点统计。
+- [ ] 确认快捷操作是否需要直接打开对应新增弹窗。
+- [ ] 确认上传下载速度来自下载器还是站点统计。
 
 ## 7. 验收标准
 
@@ -151,7 +151,9 @@ type DashboardOverview = {
 
 - `/dashboard` 使用后台主布局。
 - 点击“新增站点”跳转 `/sites` 并打开新增站点弹窗，或进入站点页后由站点模块处理新增入口。
-- 点击“配置 qBittorrent”跳转 `/qbittorrent`。
+- 点击“新增下载器”跳转 `/downloaders`。
+- 点击“新建任务”跳转 `/tasks`。
+- 点击“查看种子”跳转 `/torrents`。
 - 点击认证失败风险提示跳转 `/sites?connectivityStatus=AUTH_FAILED`。
 
 前端状态：
@@ -168,7 +170,7 @@ type DashboardState = {
 空状态和异常状态：
 
 - 无站点时站点统计全部为 0，并展示“添加第一个站点”。
-- qBittorrent 未配置时速度和总量展示 `--`，同时展示配置提示。
+- 下载器未配置时速度和总量展示 `--`，同时展示配置提示。
 - 统计接口失败时保留旧数据，并展示顶部错误提示和重试按钮。
 - 首次加载无数据时展示骨架屏或 loading 卡片。
 
@@ -177,11 +179,11 @@ type DashboardState = {
 - `sites` 指标来自 `sites` 表按连通状态聚合。
 - `torrents.todayNew` 按当天创建时间统计。
 - `torrents.expiringSoon` 默认统计 2 小时内免费结束且未删除的种子。
-- `transfer` 优先来自 qBittorrent 状态接口；未配置时返回 `null` 或 0，并由前端展示占位。
+- `transfer` 优先来自下载器状态接口；未配置时返回 `null` 或 0，并由前端展示占位。
 - `risks` 由后端统一生成，避免前端重复判断业务规则。
 
 安全和性能：
 
 - Dashboard 不返回 Cookie、密钥、下载链接等敏感数据。
-- 聚合接口避免逐站实时请求 PT 站点，只读取数据库快照和 qB 当前状态。
+- 聚合接口避免逐站实时请求 PT 站点，只读取数据库快照和下载器当前状态。
 - 刷新按钮需要前端防抖，避免频繁请求。

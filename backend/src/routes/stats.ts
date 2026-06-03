@@ -26,17 +26,18 @@ statsRouter.get('/overview', requireAuth, (_req, res) => {
         actionPath: '/settings'
       },
       {
-        type: 'QB_NOT_CONFIGURED',
-        message: 'qBittorrent 尚未配置，免费种子无法自动推送',
-        actionText: '配置 qBittorrent',
-        actionPath: '/qbittorrent'
+        type: 'DOWNLOADER_NOT_CONFIGURED',
+        message: '下载器尚未配置，种子无法自动推送',
+        actionText: '新增下载器',
+        actionPath: '/downloaders'
       }
     ],
     recentJobs: [],
     quickActions: [
       { text: '新增站点', path: '/sites' },
-      { text: '同步免费种子', path: '/free-torrents' },
-      { text: '配置 qBittorrent', path: '/qbittorrent' }
+      { text: '新增下载器', path: '/downloaders' },
+      { text: '新建任务', path: '/tasks' },
+      { text: '查看种子', path: '/torrents' }
     ]
   })
 })

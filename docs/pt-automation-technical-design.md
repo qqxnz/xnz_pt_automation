@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-实现一个部署在 NAS 上的 PT 自动化系统，用于定时抓取 PT 站点免费种子，自动推送到 qBittorrent，定时检查免费时间是否过期，并按配置自动删除任务。同时统计各 PT 站点上传量、下载量、分享率等数据。
+实现一个部署在 NAS 上的 PT 自动化系统，用于按用户任务规则定时抓取 PT 站点种子，自动推送到下载器，定时检查免费时间是否过期，并按配置自动删除下载器任务。同时统计各 PT 站点上传量、下载量、分享率等数据。第一版下载器支持 qBittorrent/QB，架构上按多下载器扩展设计。
 
 系统面向个人或家庭 NAS 使用，不考虑大型分布式部署。
 
@@ -47,11 +47,25 @@ Express Application
   |
   |-- Vue 静态页面
   |-- REST API
-  |-- 定时任务 Scheduler
+  |-- 任务 Scheduler
   |-- PT 站点适配器
   |-- 站点访问策略和代理管理
-  |-- qBittorrent Client
+  |-- 下载器抽象 Client
   |-- SQLite Database
+```
+
+核心业务链路：
+
+```text
+站点模块新增站点
+  |
+下载器模块新增 QB 下载器
+  |
+任务模块选择站点、下载器、间隔、免费规则并创建任务
+  |
+任务定时抓取站点种子并按规则推送到下载器
+  |
+种子模块查看抓取记录、当前是否免费、推送到哪个下载器和下载器任务状态
 ```
 
 访问路径：
@@ -103,7 +117,7 @@ xnz_pt_automation
 
 ## 5. 核心功能
 
-### 5.1 站点管理
+### 5.1 站点
 
 用于配置 PT 站点信息。
 
@@ -115,11 +129,11 @@ xnz_pt_automation
 - 配置站点密钥
 - 配置 User-Agent
 - 配置站点代理策略
-- 配置免费种子页面地址
+- 配置种子页面地址
 - 测试密钥是否有效
 - 测试 Cookie 是否有效
 - 显示站点连通状态
-- 测试免费种子解析是否正常
+- 测试种子解析是否正常
 - 测试上传下载统计解析是否正常
 
 站点数据示例：
@@ -239,16 +253,16 @@ type ProxyConfig = {
 - 每个站点可以选择不走代理
 - 每个站点可以选择使用全局默认代理
 - 每个站点可以绑定一个指定代理
-- qBittorrent API 默认不走站点代理
+- 下载器 API 默认不走站点代理
 - 测试站点连接时必须使用该站点的代理策略
-- 抓取免费种子、统计上传下载、下载 torrent 文件都必须使用该站点的代理策略
+- 抓取种子、统计上传下载、下载 torrent 文件都必须使用该站点的代理策略
 
-## 6. 免费种子抓取
+## 6. 种子抓取
 
 ### 6.1 抓取流程
 
 ```text
-定时任务触发
+任务触发
   |
 读取已启用站点
   |
@@ -256,11 +270,11 @@ type ProxyConfig = {
   |
 按密钥优先、Cookie 兜底的策略获取访问凭证
   |
-请求免费种子页面
+请求种子页面
   |
 使用站点适配器解析页面
   |
-提取免费种子信息
+提取种子信息
   |
 按 siteId + torrentId 去重
   |
@@ -269,7 +283,7 @@ type ProxyConfig = {
 
 如果密钥访问失败但 Cookie 成功，需要记录本次任务使用了 Cookie 兜底。如果密钥和 Cookie 都失败，需要将站点状态更新为 `AUTH_FAILED`，并跳过该站点后续抓取。
 
-免费种子数据示例：
+种子数据示例：
 
 ```ts
 type FreeTorrent = {
@@ -302,9 +316,9 @@ siteId + torrentId
 siteId + downloadUrl
 ```
 
-推送到 qBittorrent 后，应记录 qBittorrent 返回或同步到的 torrent hash。
+推送到下载器后，应记录下载器返回或同步到的 torrent hash。
 
-## 7. qBittorrent 集成
+## 7. 下载器集成
 
 ### 7.1 配置项
 
@@ -320,7 +334,7 @@ type QbittorrentConfig = {
 }
 ```
 
-### 7.2 使用的 qBittorrent API
+### 7.2 使用的下载器 API
 
 ```text
 POST /api/v2/auth/login
@@ -333,15 +347,15 @@ GET  /api/v2/transfer/info
 ### 7.3 推送流程
 
 ```text
-找到待推送免费种子
+找到待推送种子
   |
 检查是否已经推送
   |
 下载 torrent 文件或提交下载 URL
   |
-调用 qBittorrent 添加任务接口
+调用下载器添加任务接口
   |
-同步 qBittorrent 任务 hash
+同步下载器任务 hash
   |
 更新数据库状态为 PUSHED
 ```
@@ -351,15 +365,15 @@ GET  /api/v2/transfer/info
 ### 8.1 检查流程
 
 ```text
-定时任务触发
+任务触发
   |
-查询已推送且未删除的免费种子
+查询已推送且未删除的种子
   |
 判断 freeEndAt 是否已过期
   |
 判断是否满足删除规则
   |
-调用 qBittorrent 删除接口
+调用下载器删除接口
   |
 更新数据库状态
 ```
@@ -384,7 +398,7 @@ type AutoDeleteRule = {
 
 - 自动删除默认关闭
 - 免费结束后延迟 30 分钟再处理
-- 默认只删除 qBittorrent 任务，不删除文件
+- 默认只删除下载器任务，不删除文件
 - 可手动开启删除已下载文件
 - 支持达到最小分享率后再删除
 
@@ -417,9 +431,9 @@ type SiteTrafficSnapshot = {
 - 7 天上传下载趋势
 - 30 天上传下载趋势
 
-### 9.2 qBittorrent 统计
+### 9.2 下载器统计
 
-通过 qBittorrent API 同步当前任务状态。
+通过下载器 API 同步当前任务状态。
 
 ```ts
 type QbTorrentSnapshot = {
@@ -436,30 +450,53 @@ type QbTorrentSnapshot = {
 }
 ```
 
-## 10. 定时任务
+## 10. 任务
 
-建议任务列表：
+任务分为用户任务和系统维护作业。
+
+用户任务由用户在 `/tasks` 创建，用于绑定一个站点和一个下载器，并设置抓取、过滤和推送规则：
 
 ```text
-sync-free-torrents
-每 10-30 分钟执行一次
-抓取各站点免费种子并入库
+任务名称
+站点
+下载器
+执行间隔
+是否只抓免费
+是否自动推送
+优惠类型范围
+即将过期阈值
+保存路径、分类、标签覆盖
+```
 
-push-free-torrents
-每 5-10 分钟执行一次
-将符合规则的免费种子推送到 qBittorrent
+用户任务运行流程：
 
-check-free-expired
-每 10 分钟执行一次
-检查免费期是否结束，并按规则删除
+```text
+任务触发
+  |
+读取绑定站点和下载器
+  |
+按站点访问策略抓取种子
+  |
+按 freeOnly、优惠类型、免费结束时间过滤
+  |
+写入或更新种子记录
+  |
+autoPush=true 时推送到绑定下载器
+  |
+记录目标下载器、torrent hash、推送状态和任务日志
+```
+
+系统维护作业由系统内置，用于支撑任务运行：
+
+```text
+check-free-expired-torrents
+检查免费期是否结束，并按规则删除下载器任务
 
 sync-site-traffic
-每 30-60 分钟执行一次
 采集站点上传、下载、分享率
 
-sync-qb-status
-每 1-5 分钟执行一次
-同步 qBittorrent 当前任务状态
+sync-downloader-status
+同步下载器当前任务状态
 ```
 
 任务要求：
@@ -467,6 +504,7 @@ sync-qb-status
 - 同一个任务未结束时，不允许重复启动
 - 任务失败需要记录错误日志
 - 手动执行任务也需要走同一套任务锁
+- 站点或下载器被禁用时跳过运行并记录明确错误
 - 避免高频访问 PT 站点
 
 ## 11. 后端 API 设计
@@ -483,7 +521,7 @@ POST   /api/sites/:id/test-access-key
 POST   /api/sites/:id/test-cookie
 POST   /api/sites/:id/test-connectivity
 POST   /api/sites/:id/test-parser
-POST   /api/sites/:id/sync-free-torrents
+POST   /api/sites/:id/sync-torrents
 POST   /api/sites/:id/sync-traffic
 ```
 
@@ -499,24 +537,27 @@ type TestSiteConnectivityResponse = {
 }
 ```
 
-### 11.2 免费种子接口
+### 11.2 种子接口
 
 ```text
 GET    /api/torrents
 GET    /api/torrents/:id
 POST   /api/torrents/:id/push
-POST   /api/torrents/:id/delete-from-qb
+POST   /api/torrents/:id/delete-from-downloader
 POST   /api/torrents/batch-push
 ```
 
-### 11.3 qBittorrent 接口
+### 11.3 下载器接口
 
 ```text
-GET    /api/qb/config
-PUT    /api/qb/config
-POST   /api/qb/test
-GET    /api/qb/torrents
-GET    /api/qb/status
+GET    /api/downloaders
+POST   /api/downloaders
+GET    /api/downloaders/:id
+PUT    /api/downloaders/:id
+DELETE /api/downloaders/:id
+POST   /api/downloaders/:id/test
+GET    /api/downloaders/:id/torrents
+GET    /api/downloaders/:id/status
 ```
 
 ### 11.4 统计接口
@@ -528,13 +569,16 @@ GET /api/stats/sites/:id/traffic
 GET /api/stats/torrents
 ```
 
-### 11.5 定时任务接口
+### 11.5 任务接口
 
 ```text
-GET  /api/jobs
-POST /api/jobs/:name/run
-PUT  /api/jobs/:name/config
-GET  /api/jobs/:name/logs
+GET    /api/tasks
+POST   /api/tasks
+GET    /api/tasks/:id
+PUT    /api/tasks/:id
+DELETE /api/tasks/:id
+POST   /api/tasks/:id/run
+GET    /api/tasks/:id/logs
 ```
 
 ### 11.6 代理接口
@@ -587,12 +631,12 @@ type ChangePasswordRequest = {
 ```text
 /dashboard       首页概览
 /login           登录
-/sites           站点管理
+/sites           站点
 /sites/:id       站点详情
-/free-torrents   免费种子
-/qbittorrent     下载器管理
+/torrents        种子
+/downloaders     下载器
 /statistics      数据统计
-/jobs            定时任务
+/tasks           任务
 /proxies         代理管理
 /settings        系统设置
 ```
@@ -602,9 +646,9 @@ type ChangePasswordRequest = {
 展示：
 
 - 已配置站点数量
-- 今日新增免费种子数
-- 已推送 qBittorrent 数量
-- 即将过期免费种子数量
+- 今日新增种子数
+- 已推送下载器数量
+- 即将过期种子数量
 - 当前上传速度
 - 当前下载速度
 - 总上传量
@@ -622,7 +666,7 @@ type ChangePasswordRequest = {
 - 登录失败显示明确错误提示
 - 登录成功后跳转 Dashboard
 
-### 12.4 站点管理页
+### 12.4 站点页
 
 展示字段：
 
@@ -643,32 +687,35 @@ type ChangePasswordRequest = {
 - 测试密钥
 - 测试 Cookie
 - 测试站点连通性
-- 手动同步免费种子
+- 手动同步种子
 - 手动同步上传下载统计
 
-### 12.5 免费种子页
+### 12.5 种子页
 
 展示字段：
 
 - 站点
 - 标题
 - 大小
-- 免费类型
+- 优惠类型
+- 当前是否免费
 - 免费结束时间
 - 剩余免费时间
 - 做种数
 - 下载数
 - 推送状态
-- qBittorrent 状态
+- 目标下载器
+- 下载器任务状态
 - 操作
 
 支持操作：
 
 - 单个推送
 - 批量推送
-- 删除 qBittorrent 任务
+- 删除下载器任务
 - 查看失败原因
 - 按站点筛选
+- 按下载器筛选
 - 按状态筛选
 - 按关键词搜索
 
@@ -702,7 +749,7 @@ type ChangePasswordRequest = {
 - 分享率趋势
 - 每日上传增量
 - 每日下载增量
-- 免费种子推送数量趋势
+- 种子推送数量趋势
 - 自动删除数量统计
 
 ### 12.8 系统设置页
@@ -724,7 +771,7 @@ users
 sites
 proxy_configs
 site_connectivity_logs
-qbittorrent_configs
+downloader_configs
 torrents
 torrent_events
 push_rules
@@ -812,13 +859,13 @@ NAS 推荐挂载：
 需要做数据保留策略：
 
 - 任务日志保留 30-90 天
-- qBittorrent 快照保留 7-30 天
+- 下载器快照保留 7-30 天
 - 站点流量快照可长期保留
 - 高频快照后续可按天聚合
 
 ### 14.1 启动初始化与迁移
 
-应用启动时必须先完成数据库检查、表结构初始化和迁移，再启动 HTTP 服务和定时任务。
+应用启动时必须先完成数据库检查、表结构初始化和迁移，再启动 HTTP 服务和任务。
 
 启动流程：
 
@@ -837,7 +884,7 @@ NAS 推荐挂载：
   |
 启动 Express HTTP 服务
   |
-启动定时任务 Scheduler
+启动任务 Scheduler
 ```
 
 初始化内容：
@@ -869,7 +916,7 @@ NAS 推荐挂载：
 迁移失败处理：
 
 - 不启动 HTTP 服务
-- 不启动定时任务
+- 不启动任务
 - 在容器日志中输出错误原因
 - 不删除已有数据库文件
 - 不自动回滚用户数据
@@ -1034,7 +1081,7 @@ app.listen(3000)
 
 - PT Cookie
 - PT 站点密钥
-- qBittorrent 用户名和密码
+- 下载器用户名和密码
 - passkey
 - torrent 下载链接
 - 代理用户名和密码
@@ -1066,15 +1113,15 @@ app.listen(3000)
 - 单用户登录
 - 默认用户 `admin` / `123456`
 - 修改密码
-- qBittorrent 配置和连接测试
-- 站点管理
+- 下载器配置和连接测试
+- 站点
 - 站点密钥和 Cookie 双凭证访问
 - 站点连通状态检测
 - 代理配置和站点级代理策略
-- NexusPHP 免费种子抓取
-- 免费种子列表
-- 手动推送到 qBittorrent
-- 定时抓取免费种子
+- NexusPHP 种子抓取
+- 种子列表
+- 手动推送到下载器
+- 定时抓取种子
 - 免费过期自动删除
 - 站点上传下载统计
 - 任务日志
@@ -1100,11 +1147,11 @@ app.listen(3000)
 | 登录 | `docs/login-plan.md` | `designs/login.svg` |
 | 首页 | `docs/dashboard-plan.md` | `designs/dashboard.svg` |
 | 站点 | `docs/sites-plan.md` | `designs/sites.svg`、`designs/sites-form.svg` |
-| 免费种子 | `docs/free-torrents-plan.md` | 待生成 |
-| qBittorrent | `docs/qbittorrent-plan.md` | 待生成 |
+| 种子 | `docs/torrents-plan.md` | 待生成 |
+| 下载器 | `docs/downloaders-plan.md` | 待生成 |
 | 代理管理 | `docs/proxies-plan.md` | 待生成 |
 | 数据统计 | `docs/statistics-plan.md` | 待生成 |
-| 定时任务 | `docs/jobs-plan.md` | 待生成 |
+| 任务 | `docs/tasks-plan.md` | 待生成 |
 | 系统设置 | `docs/settings-plan.md` | 待生成 |
 
 每个模块文档必须包含：
@@ -1129,19 +1176,20 @@ app.listen(3000)
 5. 实现启动时数据库检查、迁移和 seed 初始化
 6. 实现单用户登录和修改密码
 7. 实现 Dockerfile 和 docker-compose.yml
-8. 实现 qBittorrent API Client
+8. 实现下载器抽象接口和 QB API Client
 9. 实现代理配置和 HTTP Client 工厂
 10. 实现站点 CRUD
 11. 实现站点密钥优先、Cookie 兜底的访问策略
 12. 实现站点连通性检测和状态记录
 13. 实现 NexusPHP 站点适配器
-14. 实现免费种子抓取和入库
-15. 实现免费种子推送到 qBittorrent
-16. 实现过期检查和自动删除
-17. 实现上传下载统计采集
-18. 实现前端管理页面
-19. 实现任务日志和 Dashboard
-20. 增加鉴权和敏感信息加密
+14. 实现任务配置和任务调度
+15. 实现种子抓取和入库
+16. 实现种子推送到下载器
+17. 实现过期检查和自动删除
+18. 实现上传下载统计采集
+19. 实现前端管理页面
+20. 实现任务日志和 Dashboard
+21. 增加鉴权和敏感信息加密
 
 ## 21. 最终推荐方案
 

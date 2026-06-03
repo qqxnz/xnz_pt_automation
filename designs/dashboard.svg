@@ -17,29 +17,29 @@
   <g class="t nav">
     <rect x="24" y="116" width="184" height="44" rx="12" fill="#eff6ff"/>
     <text x="56" y="144" fill="#2563eb" font-weight="800">Dashboard</text>
-    <text x="56" y="204" fill="#374151">站点管理</text>
-    <text x="56" y="260" fill="#374151">免费种子</text>
-    <text x="56" y="316" fill="#374151">qBittorrent</text>
+    <text x="56" y="204" fill="#374151">站点</text>
+    <text x="56" y="260" fill="#374151">种子</text>
+    <text x="56" y="316" fill="#374151">下载器</text>
     <text x="56" y="372" fill="#374151">代理管理</text>
-    <text x="56" y="428" fill="#374151">定时任务</text>
+    <text x="56" y="428" fill="#374151">任务</text>
     <text x="56" y="484" fill="#374151">系统设置</text>
   </g>
   <g transform="translate(280 112)">
     <text x="0" y="0" class="t dark h1">首页概览</text>
-    <text x="0" y="34" class="t muted" font-size="16">查看 PT 站点、免费种子、下载器和定时任务的整体运行状态</text>
+    <text x="0" y="34" class="t muted" font-size="16">查看 PT 站点、种子、下载器和任务的整体运行状态</text>
     <rect x="904" y="-28" width="176" height="46" rx="14" fill="#3f7cff"/>
-    <text x="992" y="1" text-anchor="middle" class="t" fill="#fff" font-size="16" font-weight="800">手动同步</text>
+    <text x="992" y="1" text-anchor="middle" class="t" fill="#fff" font-size="16" font-weight="800">新建任务</text>
     <g transform="translate(0 78)" filter="url(#card)">
       <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">已配置站点</text><text x="24" y="88" class="t dark" font-size="38" font-weight="800">12</text><text x="90" y="86" class="t muted small">个站点</text>
     </g>
     <g transform="translate(278 78)" filter="url(#card)">
-      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">今日免费种子</text><text x="24" y="88" class="t dark" font-size="38" font-weight="800">48</text><text x="96" y="86" class="t muted small">新增</text>
+      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">今日种子</text><text x="24" y="88" class="t dark" font-size="38" font-weight="800">48</text><text x="96" y="86" class="t muted small">新增</text>
     </g>
     <g transform="translate(556 78)" filter="url(#card)">
-      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">已推送 qB</text><text x="24" y="88" fill="#10b981" class="t" font-size="38" font-weight="800">31</text><text x="96" y="86" class="t muted small">任务</text>
+      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">已推送下载器</text><text x="24" y="88" fill="#10b981" class="t" font-size="38" font-weight="800">31</text><text x="96" y="86" class="t muted small">任务</text>
     </g>
     <g transform="translate(834 78)" filter="url(#card)">
-      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">即将过期</text><text x="24" y="88" fill="#f59e0b" class="t" font-size="38" font-weight="800">7</text><text x="62" y="86" class="t muted small">个免费种子</text>
+      <rect width="246" height="132" rx="24" fill="#fff"/><text x="24" y="42" class="t muted label">即将过期</text><text x="24" y="88" fill="#f59e0b" class="t" font-size="38" font-weight="800">7</text><text x="62" y="86" class="t muted small">个种子</text>
     </g>
     <g transform="translate(0 252)" filter="url(#card)">
       <rect width="524" height="292" rx="28" fill="#fff"/>
@@ -58,7 +58,7 @@
     <g transform="translate(0 584)" filter="url(#card)">
       <rect width="1080" height="212" rx="28" fill="#fff"/>
       <text x="28" y="44" class="t dark" font-size="20" font-weight="800">最近任务</text>
-      <text x="28" y="92" class="t muted label">sync-free-torrents</text><text x="302" y="92" fill="#10b981" class="t label">成功</text><text x="420" y="92" class="t muted small">抓取 48 个免费种子，推送 31 个</text><text x="928" y="92" class="t muted small">10:20</text>
+      <text x="28" y="92" class="t muted label">PT 自动化任务</text><text x="302" y="92" fill="#10b981" class="t label">成功</text><text x="420" y="92" class="t muted small">抓取 48 个种子，推送 31 个</text><text x="928" y="92" class="t muted small">10:20</text>
       <line x1="28" y1="118" x2="1052" y2="118" stroke="#e5e7eb"/>
       <text x="28" y="154" class="t muted label">sync-site-traffic</text><text x="302" y="154" fill="#10b981" class="t label">成功</text><text x="420" y="154" class="t muted small">更新 12 个站点上传下载统计</text><text x="928" y="154" class="t muted small">10:00</text>
     </g>

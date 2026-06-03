@@ -4,7 +4,7 @@
       <div class="logo-box">PT</div>
       <h1>PT Automation</h1>
       <p>Free torrent monitor for NAS</p>
-      <p class="hero-desc">自动抓取 PT 免费种子，推送 qBittorrent，并持续追踪站点健康状态。</p>
+      <p class="hero-desc">按任务抓取 PT 站点种子，推送到下载器，并持续追踪站点健康状态。</p>
       <div class="hero-tags">
         <span>NAS Ready</span>
         <span>Vue 3 + Varlet</span>

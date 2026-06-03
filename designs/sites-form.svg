@@ -3,7 +3,7 @@
   <rect x="48" y="40" width="1344" height="920" rx="28" fill="#ffffff" stroke="#e5e7eb"/>
   <rect x="48" y="40" width="1344" height="70" rx="28" fill="#111827"/>
   <text x="84" y="84" fill="#ffffff" font-family="Arial, sans-serif" font-size="23" font-weight="700">PT Automation</text>
-  <text x="1210" y="84" fill="#d1d5db" font-family="Arial, sans-serif" font-size="15">站点管理</text>
+  <text x="1210" y="84" fill="#d1d5db" font-family="Arial, sans-serif" font-size="15">站点</text>
 
   <text x="92" y="164" fill="#111827" font-family="Arial, sans-serif" font-size="30" font-weight="700">站点新增 / 编辑</text>
   <text x="92" y="196" fill="#6b7280" font-family="Arial, sans-serif" font-size="16">桌面端使用弹窗，移动端使用全屏弹层。保存并测试会先保存配置，再执行连通性检测。</text>
@@ -43,7 +43,7 @@
   <text x="918" y="282" fill="#111827" font-family="Arial, sans-serif" font-size="22" font-weight="700">配置细节</text>
 
   <text x="918" y="336" fill="#111827" font-family="Arial, sans-serif" font-size="18" font-weight="700">抓取配置</text>
-  <text x="918" y="374" fill="#6b7280" font-family="Arial, sans-serif" font-size="14">免费种子地址</text>
+  <text x="918" y="374" fill="#6b7280" font-family="Arial, sans-serif" font-size="14">种子地址</text>
   <rect x="918" y="388" width="332" height="44" rx="10" fill="#ffffff" stroke="#d1d5db"/>
   <text x="938" y="416" fill="#111827" font-family="Arial, sans-serif" font-size="15">/torrents.php?spstate=2</text>
   <text x="918" y="462" fill="#6b7280" font-family="Arial, sans-serif" font-size="14">个人信息地址</text>

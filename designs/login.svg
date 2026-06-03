@@ -18,7 +18,7 @@
     <path d="M20 39h24M20 28h24M26 18h12" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
     <text x="0" y="116" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="800">PT Automation</text>
     <text x="0" y="158" fill="#6b7280" font-family="Inter, Arial, sans-serif" font-size="20">Free torrent monitor for NAS</text>
-    <text x="0" y="206" fill="#374151" font-family="Inter, Arial, sans-serif" font-size="18">自动抓取 PT 免费种子，推送 qBittorrent，并持续追踪站点健康状态。</text>
+    <text x="0" y="206" fill="#374151" font-family="Inter, Arial, sans-serif" font-size="18">自动抓取 PT 种子，推送下载器，并持续追踪站点健康状态。</text>
     <g transform="translate(0 284)">
       <rect width="148" height="42" rx="21" fill="#ecfdf5"/>
       <circle cx="26" cy="21" r="6" fill="#10b981"/>

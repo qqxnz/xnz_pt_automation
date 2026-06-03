@@ -276,14 +276,13 @@ a {
   font-weight: 700;
 }
 
-.nav-item.active {
+.nav-item.router-link-active {
   color: #2563eb;
   background: #eff6ff;
 }
 
 .content {
-  max-width: 1160px;
-  margin: 0 auto;
+  width: 100%;
   padding: 40px 40px 64px;
 }
 
@@ -490,6 +489,42 @@ a {
   background: #f9fafb;
 }
 
+.module-page {
+  display: grid;
+  gap: 32px;
+}
+
+.module-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.module-step {
+  display: grid;
+  min-height: 128px;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(17 24 39 / 6%);
+}
+
+.module-step span {
+  color: #2563eb;
+  font-weight: 850;
+}
+
+.module-step strong {
+  margin-top: 16px;
+  font-size: 18px;
+}
+
+.module-step small {
+  margin-top: 8px;
+  color: #6b7280;
+}
+
 .jobs-panel {
   margin-top: 32px;
 }
@@ -520,7 +555,8 @@ a {
   }
 
   .metric-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .module-flow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -587,7 +623,8 @@ a {
   .dashboard-grid,
   .transfer-grid,
   .transfer-total,
-  .quick-actions {
+  .quick-actions,
+  .module-flow {
     grid-template-columns: 1fr;
     gap: 16px;
   }

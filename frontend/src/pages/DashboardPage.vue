@@ -3,7 +3,7 @@
     <div class="dashboard-head">
       <div>
         <h1>首页概览</h1>
-        <p>查看 PT 站点、免费种子、下载器和定时任务的整体运行状态</p>
+        <p>查看 PT 站点、种子、下载器和任务的整体运行状态</p>
       </div>
       <div class="head-actions">
         <span v-if="lastUpdatedAt">最近更新：{{ lastUpdatedAt }}</span>
@@ -25,19 +25,19 @@
         <small>个站点</small>
       </article>
       <article class="metric-card">
-        <span>今日免费种子</span>
+        <span>今日种子</span>
         <strong>{{ overview?.torrents.todayNew ?? 0 }}</strong>
         <small>新增</small>
       </article>
       <article class="metric-card">
-        <span>已推送 qB</span>
+        <span>已推送下载器</span>
         <strong class="success">{{ overview?.torrents.pushed ?? 0 }}</strong>
         <small>任务</small>
       </article>
       <article class="metric-card">
         <span>即将过期</span>
         <strong class="warning">{{ overview?.torrents.expiringSoon ?? 0 }}</strong>
-        <small>个免费种子</small>
+        <small>个种子</small>
       </article>
     </section>
 

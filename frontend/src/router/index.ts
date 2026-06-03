@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginPage from '../pages/LoginPage.vue'
 import DashboardPage from '../pages/DashboardPage.vue'
+import ModulePage from '../pages/ModulePage.vue'
 import { useAuthStore } from '../stores/auth'
 
 export const router = createRouter({
@@ -9,6 +10,12 @@ export const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/login', component: LoginPage, meta: { guestOnly: true } },
     { path: '/dashboard', component: DashboardPage, meta: { requiresAuth: true } },
+    { path: '/sites', name: 'sites', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/downloaders', name: 'downloaders', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/tasks', name: 'tasks', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/torrents', name: 'torrents', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/proxies', name: 'proxies', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/settings', name: 'settings', component: ModulePage, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' }
   ]
 })

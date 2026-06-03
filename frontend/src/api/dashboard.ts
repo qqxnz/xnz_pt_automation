@@ -20,7 +20,7 @@ export type DashboardOverview = {
     downloadedTotal: number
   } | null
   risks: Array<{
-    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'QB_NOT_CONFIGURED'
+    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
     message: string
     actionText?: string
     actionPath?: string
