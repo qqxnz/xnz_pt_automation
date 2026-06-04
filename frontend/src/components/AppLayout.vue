@@ -5,7 +5,7 @@
       <div class="brand-title">PT Automation</div>
       <div class="topbar-spacer" />
       <span class="username">{{ auth.user?.username }}</span>
-      <button class="text-button hide-mobile" type="button">系统设置</button>
+      <router-link class="text-button hide-mobile" to="/settings">系统设置</router-link>
       <button class="text-button" type="button" @click="handleLogout">退出</button>
     </header>
 

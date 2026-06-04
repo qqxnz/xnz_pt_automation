@@ -43,12 +43,12 @@ designs/
 | 登录 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/login.svg`，`docs/login-plan.md`。 |
 | 首页 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/dashboard.svg`，`docs/dashboard-plan.md`。 |
 | 站点 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/sites.svg`、`designs/sites-form.svg`，`docs/sites-plan.md`。 |
-| 种子 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/torrents.svg`，已完成 `docs/torrents-plan.md`。 |
-| 下载器 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/downloaders.svg`，已完成 `docs/downloaders-plan.md`。 |
-| 代理管理 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/proxies.svg`，已完成 `docs/proxies-plan.md`。 |
-| 数据统计 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/statistics.svg`，已完成 `docs/statistics-plan.md`。 |
-| 任务 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/tasks.svg`，已完成 `docs/tasks-plan.md`。 |
-| 系统设置 | ⬜ 未开始 | ✅ 已完成 | ⬜ 未开始 | 待生成 `designs/settings.svg`，已完成 `docs/settings-plan.md`。 |
+| 种子 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/torrents.svg`，`docs/torrents-plan.md`。 |
+| 下载器 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/downloaders.svg`，`docs/downloaders-plan.md`。 |
+| 代理管理 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/proxies.svg`，`docs/proxies-plan.md`。 |
+| 数据统计 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/statistics.svg`，`docs/statistics-plan.md`。 |
+| 任务 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |
+| 系统设置 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/settings.svg`，`docs/settings-plan.md`。 |
 
 ## 开发前限制规则
 

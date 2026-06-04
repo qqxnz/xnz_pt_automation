@@ -37,10 +37,46 @@ export type TaskLogRecord = {
   createdAt: string
 }
 
+export type ProxyRecord = {
+  id: string
+  name: string
+  enabled: boolean
+  type: 'HTTP' | 'HTTPS' | 'SOCKS5'
+  host: string
+  port: number
+  username?: string
+  password?: string
+  lastTestStatus?: 'UNKNOWN' | 'ONLINE' | 'OFFLINE'
+  lastTestedAt?: string
+}
+
+export type SiteRecord = {
+  id: string
+  name: string
+  baseUrl: string
+  enabled: boolean
+  accessKey?: string
+  cookie?: string
+  userAgent?: string
+  parserType: 'NEXUSPHP'
+  freeTorrentUrl: string
+  profileUrl?: string
+  proxyId?: string
+  connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+  currentAccessMethod?: 'ACCESS_KEY' | 'COOKIE'
+  lastConnectedAt?: string
+  lastConnectError?: string
+  checkIntervalMinutes: number
+  createdAt: string
+  updatedAt: string
+}
+
 type AppState = {
   users: UserRecord[]
   operationLogs: OperationLogRecord[]
   taskLogs: TaskLogRecord[]
+  sites: SiteRecord[]
+  proxies: ProxyRecord[]
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -57,7 +93,9 @@ async function initialState(): Promise<AppState> {
       }
     ],
     operationLogs: [],
-    taskLogs: []
+    taskLogs: [],
+    sites: [],
+    proxies: []
   }
 }
 
@@ -65,7 +103,9 @@ function normalizeState(state: Partial<AppState>): AppState {
   return {
     users: state.users ?? [],
     operationLogs: state.operationLogs ?? [],
-    taskLogs: state.taskLogs ?? []
+    taskLogs: state.taskLogs ?? [],
+    sites: state.sites ?? [],
+    proxies: state.proxies ?? []
   }
 }
 

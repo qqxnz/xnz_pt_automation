@@ -67,7 +67,7 @@ type ProxyConfig = {
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/proxies.svg`。
+设计稿文件：`designs/proxies.svg`。
 
 桌面端使用统计卡片、表格和弹窗表单。移动端使用代理卡片和全屏弹层表单。
 
@@ -84,7 +84,7 @@ type ProxyConfig = {
 
 ## 8. TODO
 
-- [ ] 生成 `designs/proxies.svg`。
+- [x] 生成 `designs/proxies.svg`。
 - [ ] 确认代理测试目标 URL。
 - [ ] 确认删除被站点引用代理时的处理策略。
 

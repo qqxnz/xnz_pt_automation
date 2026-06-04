@@ -104,7 +104,7 @@ type TorrentListItem = {
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/torrents.svg`。
+设计稿文件：`designs/torrents.svg`。
 
 桌面端使用筛选区 + 表格 + 分页。移动端使用筛选折叠区 + 种子卡片列表。
 
@@ -124,7 +124,7 @@ type TorrentListItem = {
 
 ## 8. TODO
 
-- [ ] 生成 `designs/torrents.svg`。
+- [x] 生成 `designs/torrents.svg`。
 - [ ] 确认即将过期阈值，推荐 2 小时。
 - [ ] 确认已过期种子是否允许手动推送。
 - [ ] 确认删除下载器任务是否支持删除文件选项。

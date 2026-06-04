@@ -104,7 +104,7 @@ type DownloaderConfig = {
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/downloaders.svg`。
+设计稿文件：`designs/downloaders.svg`。
 
 桌面端左侧列表 + 右侧状态详情，下方展示下载器任务表格；新增/编辑使用弹窗。移动端列表、状态、任务按纵向卡片排列。
 
@@ -125,7 +125,7 @@ type DownloaderConfig = {
 
 ## 8. TODO
 
-- [ ] 生成 `designs/downloaders.svg`。
+- [x] 生成 `designs/downloaders.svg`。
 - [ ] 确认默认保存路径是否必填。
 - [ ] 确认分类和标签默认值。
 - [ ] 确认连接测试超时时间。

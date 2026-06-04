@@ -1,0 +1,36 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><filter id="card" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#111827" flood-opacity="0.08"/></filter><style>.t{font-family:Inter,Arial,sans-serif}.dark{fill:#111827}.muted{fill:#6b7280}.small{font-size:14px}.label{font-size:16px;font-weight:700}.h1{font-size:30px;font-weight:800}</style></defs>
+  <rect width="1440" height="960" fill="#f6f8fb"/>
+  <rect width="1440" height="72" fill="#fff"/><rect y="71" width="1440" height="1" fill="#e5e7eb"/>
+  <rect x="32" y="18" width="36" height="36" rx="10" fill="#3f7cff"/><path d="M44 42h12M44 32h20M56 22h8" stroke="#fff" stroke-width="3" stroke-linecap="round"/><text x="84" y="43" class="t dark" font-size="20" font-weight="800">PT Automation</text><text x="1210" y="43" class="t muted small">admin</text><text x="1270" y="43" class="t muted small">系统设置</text><text x="1350" y="43" class="t muted small">退出</text>
+  <rect x="0" y="72" width="232" height="888" fill="#fff"/><rect x="231" y="72" width="1" height="888" fill="#e5e7eb"/>
+  <g class="t" font-size="15"><text x="56" y="144" fill="#374151">Dashboard</text><text x="56" y="204" fill="#374151">站点</text><text x="56" y="260" fill="#374151">种子</text><rect x="24" y="288" width="184" height="44" rx="12" fill="#eff6ff"/><text x="56" y="316" fill="#2563eb" font-weight="800">下载器</text><text x="56" y="372" fill="#374151">代理管理</text><text x="56" y="428" fill="#374151">任务</text><text x="56" y="484" fill="#374151">系统设置</text></g>
+  <g transform="translate(280 112)">
+    <text x="0" y="0" class="t dark h1">下载器</text><text x="0" y="34" class="t muted" font-size="16">配置 qBittorrent 连接、查看传输状态和当前任务</text><rect x="908" y="-28" width="172" height="46" rx="14" fill="#3f7cff"/><text x="994" y="1" text-anchor="middle" fill="#fff" class="t" font-size="16" font-weight="800">新增下载器</text>
+    <g transform="translate(0 78)" filter="url(#card)"><rect width="330" height="690" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">下载器列表</text>
+      <rect x="24" y="72" width="282" height="124" rx="20" fill="#eff6ff" stroke="#bfdbfe"/><text x="46" y="110" class="t dark" font-size="18" font-weight="800">NAS QB</text><rect x="220" y="88" width="64" height="28" rx="14" fill="#dcfce7"/><text x="252" y="107" text-anchor="middle" fill="#15803d" class="t" font-size="12" font-weight="800">在线</text><text x="46" y="146" class="t muted small">http://nas:8080</text><text x="46" y="174" class="t muted small">默认路径 /downloads/pt</text>
+      <rect x="24" y="216" width="282" height="116" rx="20" fill="#fff" stroke="#e5e7eb"/><text x="46" y="252" class="t dark" font-size="18" font-weight="800">Backup QB</text><rect x="220" y="230" width="64" height="28" rx="14" fill="#f3f4f6"/><text x="252" y="249" text-anchor="middle" fill="#6b7280" class="t" font-size="12" font-weight="800">未检测</text><text x="46" y="286" class="t muted small">http://backup:8080</text>
+      <rect x="24" y="570" width="282" height="86" rx="18" fill="#f8fafc"/><text x="46" y="604" class="t muted small">被任务引用的下载器不能直接删除。</text><text x="46" y="634" fill="#2563eb" class="t small" font-weight="800">查看引用任务</text>
+    </g>
+    <g transform="translate(360 78)" filter="url(#card)"><rect width="720" height="212" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">NAS QB 状态</text><rect x="604" y="22" width="88" height="36" rx="12" fill="#eef6ff"/><text x="648" y="45" text-anchor="middle" fill="#2563eb" class="t small" font-weight="800">测试连接</text>
+      <text x="28" y="94" class="t muted small">上传速度</text><text x="28" y="132" fill="#10b981" class="t" font-size="30" font-weight="800">12.8 MB/s</text>
+      <text x="226" y="94" class="t muted small">下载速度</text><text x="226" y="132" fill="#3f7cff" class="t" font-size="30" font-weight="800">48.2 MB/s</text>
+      <text x="430" y="94" class="t muted small">总上传</text><text x="430" y="132" class="t dark" font-size="30" font-weight="800">32.4 TB</text>
+      <text x="588" y="94" class="t muted small">最近同步</text><text x="588" y="132" class="t dark label">10:20</text>
+      <rect x="28" y="158" width="664" height="32" rx="12" fill="#f8fafc"/><text x="48" y="179" class="t muted small">默认分类：PT · 标签：free, auto · 添加后不暂停</text>
+    </g>
+    <g transform="translate(360 326)" filter="url(#card)"><rect width="720" height="442" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">当前任务</text><text x="588" y="44" fill="#2563eb" class="t small" font-weight="800">刷新任务</text><line x1="28" y1="68" x2="692" y2="68" stroke="#e5e7eb"/>
+      <text x="28" y="102" class="t muted small" font-weight="800">名称</text><text x="342" y="102" class="t muted small" font-weight="800">进度</text><text x="458" y="102" class="t muted small" font-weight="800">状态</text><text x="574" y="102" class="t muted small" font-weight="800">分享率</text>
+      <text x="28" y="158" class="t dark label">Ubuntu 26.04 BluRay Remux</text><rect x="342" y="137" width="82" height="28" rx="14" fill="#dbeafe"/><text x="383" y="156" text-anchor="middle" fill="#1d4ed8" class="t" font-size="12" font-weight="800">82%</text><text x="458" y="158" class="t dark small">downloading</text><text x="574" y="158" class="t dark small">0.42</text>
+      <line x1="28" y1="190" x2="692" y2="190" stroke="#e5e7eb"/>
+      <text x="28" y="238" class="t dark label">Documentary Complete Pack</text><rect x="342" y="217" width="82" height="28" rx="14" fill="#dcfce7"/><text x="383" y="236" text-anchor="middle" fill="#15803d" class="t" font-size="12" font-weight="800">100%</text><text x="458" y="238" class="t dark small">uploading</text><text x="574" y="238" class="t dark small">2.18</text>
+      <line x1="28" y1="270" x2="692" y2="270" stroke="#e5e7eb"/>
+      <text x="28" y="318" class="t dark label">Classic Movie 1998 1080p</text><rect x="342" y="297" width="82" height="28" rx="14" fill="#f3f4f6"/><text x="383" y="316" text-anchor="middle" fill="#374151" class="t" font-size="12" font-weight="800">paused</text><text x="458" y="318" class="t dark small">pausedUP</text><text x="574" y="318" class="t dark small">1.03</text>
+      <rect x="28" y="358" width="664" height="56" rx="18" fill="#f8fafc"/><text x="50" y="392" class="t muted small">密码不明文回显；连接错误区分认证失败、网络失败和地址无效。</text>
+    </g>
+  </g>
+  <g transform="translate(1040 660)" filter="url(#card)"><rect width="296" height="226" rx="26" fill="#fff"/><text x="22" y="42" class="t dark label">移动端</text><rect x="22" y="66" width="252" height="126" rx="18" fill="#f8fafc"/><text x="42" y="100" class="t dark" font-size="16" font-weight="800">NAS QB</text><text x="42" y="132" class="t muted small">↑ 12.8 MB/s · ↓ 48.2 MB/s</text><text x="42" y="164" fill="#2563eb" class="t small" font-weight="800">测试</text><text x="92" y="164" fill="#2563eb" class="t small" font-weight="800">编辑</text><text x="142" y="164" fill="#6b7280" class="t small" font-weight="800">任务</text></g>
+</svg>

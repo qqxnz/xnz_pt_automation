@@ -1150,12 +1150,12 @@ app.listen(3000)
 | 登录 | `docs/login-plan.md` | `designs/login.svg` |
 | 首页 | `docs/dashboard-plan.md` | `designs/dashboard.svg` |
 | 站点 | `docs/sites-plan.md` | `designs/sites.svg`、`designs/sites-form.svg` |
-| 种子 | `docs/torrents-plan.md` | 待生成 |
-| 下载器 | `docs/downloaders-plan.md` | 待生成 |
-| 代理管理 | `docs/proxies-plan.md` | 待生成 |
-| 数据统计 | `docs/statistics-plan.md` | 待生成 |
-| 任务 | `docs/tasks-plan.md` | 待生成 |
-| 系统设置 | `docs/settings-plan.md` | 待生成 |
+| 种子 | `docs/torrents-plan.md` | `designs/torrents.svg` |
+| 下载器 | `docs/downloaders-plan.md` | `designs/downloaders.svg` |
+| 代理管理 | `docs/proxies-plan.md` | `designs/proxies.svg` |
+| 数据统计 | `docs/statistics-plan.md` | `designs/statistics.svg` |
+| 任务 | `docs/tasks-plan.md` | `designs/tasks.svg` |
+| 系统设置 | `docs/settings-plan.md` | `designs/settings.svg` |
 
 每个模块文档必须包含：
 

@@ -59,7 +59,7 @@ type SystemInfo = {
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/settings.svg`。
+设计稿文件：`designs/settings.svg`。
 
 桌面端使用分组卡片。移动端使用单列卡片。
 
@@ -76,7 +76,7 @@ type SystemInfo = {
 
 ## 8. TODO
 
-- [ ] 生成 `designs/settings.svg`。
+- [x] 生成 `designs/settings.svg`。
 - [ ] 确认密码复杂度规则。
 - [ ] 确认修改密码后是否强制退出登录。
 - [ ] 确认第一版可配置的系统基础参数范围。

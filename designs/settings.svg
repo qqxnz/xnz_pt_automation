@@ -1,0 +1,36 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><filter id="card" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#111827" flood-opacity="0.08"/></filter><style>.t{font-family:Inter,Arial,sans-serif}.dark{fill:#111827}.muted{fill:#6b7280}.small{font-size:14px}.label{font-size:16px;font-weight:700}.h1{font-size:30px;font-weight:800}</style></defs>
+  <rect width="1440" height="960" fill="#f6f8fb"/>
+  <rect width="1440" height="72" fill="#fff"/><rect y="71" width="1440" height="1" fill="#e5e7eb"/>
+  <rect x="32" y="18" width="36" height="36" rx="10" fill="#3f7cff"/><path d="M44 42h12M44 32h20M56 22h8" stroke="#fff" stroke-width="3" stroke-linecap="round"/><text x="84" y="43" class="t dark" font-size="20" font-weight="800">PT Automation</text><text x="1210" y="43" class="t muted small">admin</text><text x="1270" y="43" class="t muted small">系统设置</text><text x="1350" y="43" class="t muted small">退出</text>
+  <rect x="0" y="72" width="232" height="888" fill="#fff"/><rect x="231" y="72" width="1" height="888" fill="#e5e7eb"/>
+  <g class="t" font-size="15"><text x="56" y="144" fill="#374151">Dashboard</text><text x="56" y="204" fill="#374151">站点</text><text x="56" y="260" fill="#374151">种子</text><text x="56" y="316" fill="#374151">下载器</text><text x="56" y="372" fill="#374151">代理管理</text><text x="56" y="428" fill="#374151">任务</text><rect x="24" y="456" width="184" height="44" rx="12" fill="#eff6ff"/><text x="56" y="484" fill="#2563eb" font-weight="800">系统设置</text></g>
+  <g transform="translate(280 112)">
+    <text x="0" y="0" class="t dark h1">系统设置</text><text x="0" y="34" class="t muted" font-size="16">修改密码、查看系统信息、数据库和迁移状态</text>
+    <g transform="translate(0 78)" filter="url(#card)"><rect width="520" height="322" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">修改密码</text>
+      <text x="28" y="92" class="t muted small">旧密码</text><rect x="28" y="106" width="464" height="46" rx="12" fill="#fff" stroke="#d1d5db"/><text x="50" y="135" class="t muted small">••••••••</text>
+      <text x="28" y="180" class="t muted small">新密码</text><rect x="28" y="194" width="464" height="46" rx="12" fill="#fff" stroke="#d1d5db"/><text x="50" y="223" class="t muted small">至少 8 位</text>
+      <text x="28" y="268" class="t muted small">确认新密码</text><rect x="28" y="282" width="300" height="46" rx="12" fill="#fff" stroke="#d1d5db"/><rect x="348" y="282" width="144" height="46" rx="14" fill="#3f7cff"/><text x="420" y="311" text-anchor="middle" fill="#fff" class="t small" font-weight="800">保存密码</text>
+    </g>
+    <g transform="translate(560 78)" filter="url(#card)"><rect width="520" height="322" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">系统信息</text>
+      <text x="28" y="94" class="t muted small">系统版本</text><text x="200" y="94" class="t dark label">v0.1.0</text><line x1="28" y1="120" x2="492" y2="120" stroke="#e5e7eb"/>
+      <text x="28" y="158" class="t muted small">数据库路径</text><text x="200" y="158" class="t dark small">/app/data/app.db</text><line x1="28" y1="184" x2="492" y2="184" stroke="#e5e7eb"/>
+      <text x="28" y="222" class="t muted small">Schema 版本</text><text x="200" y="222" class="t dark label">2026060301</text><line x1="28" y1="248" x2="492" y2="248" stroke="#e5e7eb"/>
+      <text x="28" y="286" class="t muted small">最近迁移</text><rect x="200" y="264" width="74" height="30" rx="15" fill="#dcfce7"/><text x="237" y="284" text-anchor="middle" fill="#15803d" class="t" font-size="13" font-weight="800">成功</text><text x="292" y="286" class="t muted small">今天 09:20</text>
+    </g>
+    <g transform="translate(0 438)" filter="url(#card)"><rect width="520" height="274" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">基础参数</text>
+      <text x="28" y="94" class="t muted small">登录态过期时间</text><rect x="260" y="72" width="232" height="44" rx="12" fill="#fff" stroke="#d1d5db"/><text x="280" y="100" class="t dark small">7 天</text>
+      <text x="28" y="158" class="t muted small">任务日志保留</text><rect x="260" y="136" width="232" height="44" rx="12" fill="#fff" stroke="#d1d5db"/><text x="280" y="164" class="t dark small">60 天</text>
+      <rect x="348" y="210" width="144" height="42" rx="14" fill="#3f7cff"/><text x="420" y="237" text-anchor="middle" fill="#fff" class="t small" font-weight="800">保存设置</text>
+    </g>
+    <g transform="translate(560 438)" filter="url(#card)"><rect width="520" height="274" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t dark label">安全提示</text>
+      <rect x="28" y="76" width="464" height="58" rx="18" fill="#fff7ed"/><text x="52" y="112" fill="#b45309" class="t small" font-weight="800">默认密码未修改时展示风险提示</text>
+      <rect x="28" y="154" width="464" height="58" rx="18" fill="#f8fafc"/><text x="52" y="190" class="t muted small">系统信息不展示密钥类环境变量，也不提供数据库下载。</text>
+    </g>
+    <g transform="translate(0 750)" filter="url(#card)"><rect width="1080" height="88" rx="24" fill="#fff"/><text x="28" y="38" class="t dark label">移动端</text><text x="28" y="66" class="t muted small">单列卡片排列，修改密码、系统信息、基础参数和安全提示依次展示。</text></g>
+  </g>
+</svg>

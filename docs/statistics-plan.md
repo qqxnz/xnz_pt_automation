@@ -58,7 +58,7 @@ type TrafficPoint = {
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/statistics.svg`。
+设计稿文件：`designs/statistics.svg`。
 
 桌面端使用筛选区 + 多图表网格。移动端图表单列排列。
 
@@ -77,7 +77,7 @@ type TrafficPoint = {
 
 ## 8. TODO
 
-- [ ] 生成 `designs/statistics.svg`。
+- [x] 生成 `designs/statistics.svg`。
 - [ ] 确认图表库 ECharts 是否第一版引入。
 - [ ] 确认默认时间范围，推荐 7 天。
 

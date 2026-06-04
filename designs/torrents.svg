@@ -1,0 +1,46 @@
+<svg width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="card" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#111827" flood-opacity="0.08"/></filter>
+    <style>.t{font-family:Inter,Arial,sans-serif}.dark{fill:#111827}.muted{fill:#6b7280}.small{font-size:14px}.label{font-size:16px;font-weight:700}.h1{font-size:30px;font-weight:800}</style>
+  </defs>
+  <rect width="1440" height="960" fill="#f6f8fb"/>
+  <rect width="1440" height="72" fill="#fff"/><rect y="71" width="1440" height="1" fill="#e5e7eb"/>
+  <rect x="32" y="18" width="36" height="36" rx="10" fill="#3f7cff"/><path d="M44 42h12M44 32h20M56 22h8" stroke="#fff" stroke-width="3" stroke-linecap="round"/><text x="84" y="43" class="t dark" font-size="20" font-weight="800">PT Automation</text><text x="1210" y="43" class="t muted small">admin</text><text x="1270" y="43" class="t muted small">系统设置</text><text x="1350" y="43" class="t muted small">退出</text>
+  <rect x="0" y="72" width="232" height="888" fill="#fff"/><rect x="231" y="72" width="1" height="888" fill="#e5e7eb"/>
+  <g class="t" font-size="15"><text x="56" y="144" fill="#374151">Dashboard</text><text x="56" y="204" fill="#374151">站点</text><rect x="24" y="232" width="184" height="44" rx="12" fill="#eff6ff"/><text x="56" y="260" fill="#2563eb" font-weight="800">种子</text><text x="56" y="316" fill="#374151">下载器</text><text x="56" y="372" fill="#374151">代理管理</text><text x="56" y="428" fill="#374151">任务</text><text x="56" y="484" fill="#374151">系统设置</text></g>
+  <g transform="translate(280 112)">
+    <text x="0" y="0" class="t dark h1">种子</text><text x="0" y="34" class="t muted" font-size="16">查看已抓取种子、免费状态、推送状态和下载器任务</text>
+    <rect x="908" y="-28" width="172" height="46" rx="14" fill="#3f7cff"/><text x="994" y="1" text-anchor="middle" fill="#fff" class="t" font-size="16" font-weight="800">批量推送</text>
+    <g transform="translate(0 76)" filter="url(#card)"><rect width="196" height="96" rx="20" fill="#fff"/><text x="22" y="36" class="t muted small" font-weight="800">全部种子</text><text x="22" y="72" class="t dark" font-size="30" font-weight="800">186</text></g>
+    <g transform="translate(222 76)" filter="url(#card)"><rect width="196" height="96" rx="20" fill="#fff"/><text x="22" y="36" class="t muted small" font-weight="800">免费中</text><text x="22" y="72" fill="#10b981" class="t" font-size="30" font-weight="800">94</text></g>
+    <g transform="translate(444 76)" filter="url(#card)"><rect width="196" height="96" rx="20" fill="#fff"/><text x="22" y="36" class="t muted small" font-weight="800">即将过期</text><text x="22" y="72" fill="#f59e0b" class="t" font-size="30" font-weight="800">12</text></g>
+    <g transform="translate(666 76)" filter="url(#card)"><rect width="196" height="96" rx="20" fill="#fff"/><text x="22" y="36" class="t muted small" font-weight="800">待推送</text><text x="22" y="72" fill="#3f7cff" class="t" font-size="30" font-weight="800">31</text></g>
+    <g transform="translate(888 76)" filter="url(#card)"><rect width="192" height="96" rx="20" fill="#fff"/><text x="22" y="36" class="t muted small" font-weight="800">推送失败</text><text x="22" y="72" fill="#ef4444" class="t" font-size="30" font-weight="800">3</text></g>
+    <g transform="translate(0 208)" filter="url(#card)"><rect width="1080" height="112" rx="24" fill="#fff"/>
+      <rect x="24" y="24" width="268" height="48" rx="14" fill="#f9fafb" stroke="#e5e7eb"/><text x="44" y="54" class="t muted small">搜索标题 / 站点</text>
+      <rect x="312" y="24" width="142" height="48" rx="14" fill="#f9fafb" stroke="#e5e7eb"/><text x="332" y="54" class="t dark small">站点：全部</text>
+      <rect x="474" y="24" width="158" height="48" rx="14" fill="#f9fafb" stroke="#e5e7eb"/><text x="494" y="54" class="t dark small">下载器：全部</text>
+      <rect x="652" y="24" width="152" height="48" rx="14" fill="#f9fafb" stroke="#e5e7eb"/><text x="672" y="54" class="t dark small">优惠：全部</text>
+      <rect x="824" y="24" width="146" height="48" rx="14" fill="#f9fafb" stroke="#e5e7eb"/><text x="844" y="54" class="t dark small">推送：全部</text>
+      <rect x="992" y="24" width="64" height="48" rx="14" fill="#eef6ff"/><text x="1024" y="54" text-anchor="middle" fill="#2563eb" class="t small" font-weight="800">刷新</text>
+      <text x="24" y="94" class="t muted small">已选 3 个待推送种子，批量操作只对待推送记录生效。</text>
+    </g>
+    <g transform="translate(0 356)" filter="url(#card)"><rect width="1080" height="448" rx="28" fill="#fff"/>
+      <text x="28" y="44" class="t muted small" font-weight="800">标题</text><text x="380" y="44" class="t muted small" font-weight="800">站点</text><text x="480" y="44" class="t muted small" font-weight="800">大小</text><text x="580" y="44" class="t muted small" font-weight="800">优惠</text><text x="704" y="44" class="t muted small" font-weight="800">剩余</text><text x="818" y="44" class="t muted small" font-weight="800">推送</text><text x="930" y="44" class="t muted small" font-weight="800">操作</text><line x1="28" y1="64" x2="1052" y2="64" stroke="#e5e7eb"/>
+      <text x="28" y="112" class="t dark label">Ubuntu 26.04 BluRay Remux</text><text x="380" y="112" class="t dark small">MTeam</text><text x="480" y="112" class="t dark small">42.8 GB</text><rect x="580" y="90" width="72" height="30" rx="15" fill="#dcfce7"/><text x="616" y="110" text-anchor="middle" fill="#15803d" class="t" font-size="13" font-weight="800">FREE</text><text x="704" y="112" fill="#f59e0b" class="t small" font-weight="800">1h 42m</text><rect x="818" y="90" width="74" height="30" rx="15" fill="#eef2ff"/><text x="855" y="110" text-anchor="middle" fill="#4338ca" class="t" font-size="13" font-weight="800">待推送</text><text x="930" y="112" fill="#2563eb" class="t small" font-weight="800">推送</text><text x="990" y="112" fill="#6b7280" class="t small" font-weight="800">详情</text>
+      <line x1="28" y1="144" x2="1052" y2="144" stroke="#e5e7eb"/>
+      <text x="28" y="192" class="t dark label">Documentary Complete Pack</text><text x="380" y="192" class="t dark small">HDHome</text><text x="480" y="192" class="t dark small">128 GB</text><rect x="580" y="170" width="104" height="30" rx="15" fill="#dbeafe"/><text x="632" y="190" text-anchor="middle" fill="#1d4ed8" class="t" font-size="13" font-weight="800">2X FREE</text><text x="704" y="192" fill="#10b981" class="t small" font-weight="800">2d 4h</text><rect x="818" y="170" width="74" height="30" rx="15" fill="#dcfce7"/><text x="855" y="190" text-anchor="middle" fill="#15803d" class="t" font-size="13" font-weight="800">已推送</text><text x="930" y="192" fill="#2563eb" class="t small" font-weight="800">查看 QB</text>
+      <line x1="28" y1="224" x2="1052" y2="224" stroke="#e5e7eb"/>
+      <text x="28" y="272" class="t dark label">Classic Movie 1998 1080p</text><text x="380" y="272" class="t dark small">PTP</text><text x="480" y="272" class="t dark small">18.2 GB</text><rect x="580" y="250" width="86" height="30" rx="15" fill="#f3f4f6"/><text x="623" y="270" text-anchor="middle" fill="#374151" class="t" font-size="13" font-weight="800">NORMAL</text><text x="704" y="272" class="t muted small">-</text><rect x="818" y="250" width="88" height="30" rx="15" fill="#fef2f2"/><text x="862" y="270" text-anchor="middle" fill="#b91c1c" class="t" font-size="13" font-weight="800">推送失败</text><text x="930" y="272" fill="#2563eb" class="t small" font-weight="800">原因</text><text x="990" y="272" fill="#2563eb" class="t small" font-weight="800">重试</text>
+      <rect x="28" y="342" width="1024" height="70" rx="18" fill="#f8fafc"/><text x="54" y="383" class="t muted" font-size="15">下载链接默认隐藏；删除下载器任务前需要确认是否删除文件。</text>
+    </g>
+  </g>
+  <g transform="translate(1038 646)" filter="url(#card)">
+    <rect width="298" height="248" rx="26" fill="#fff"/>
+    <text x="22" y="42" class="t dark label">移动端卡片</text>
+    <rect x="22" y="66" width="254" height="144" rx="18" fill="#f8fafc"/>
+    <text x="42" y="98" class="t dark" font-size="15" font-weight="800">Ubuntu 26.04 BluRay</text><rect x="42" y="114" width="58" height="26" rx="13" fill="#dcfce7"/><text x="71" y="132" text-anchor="middle" fill="#15803d" class="t" font-size="12" font-weight="800">FREE</text>
+    <text x="42" y="164" class="t muted small">MTeam · 42.8 GB · 剩余 1h 42m</text>
+    <text x="42" y="194" fill="#2563eb" class="t small" font-weight="800">推送</text><text x="96" y="194" fill="#6b7280" class="t small" font-weight="800">详情</text>
+  </g>
+</svg>

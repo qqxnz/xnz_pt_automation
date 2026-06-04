@@ -125,7 +125,7 @@ autoPush=true 时推送到任务绑定下载器
 
 ## 6. 设计稿
 
-设计稿文件：待生成 `designs/tasks.svg`。
+设计稿文件：`designs/tasks.svg`。
 
 桌面端任务表格 + 新增/编辑弹窗 + 日志抽屉。移动端任务卡片 + 表单全屏弹层 + 日志全屏弹层。
 
@@ -146,7 +146,7 @@ autoPush=true 时推送到任务绑定下载器
 
 ## 8. TODO
 
-- [ ] 生成 `designs/tasks.svg`。
+- [x] 生成 `designs/tasks.svg`。
 - [ ] 确认任务默认间隔，推荐 30 分钟。
 - [ ] 确认手动执行限频时间。
 - [ ] 确认 autoPush=false 时是否允许在种子模块批量补推。
