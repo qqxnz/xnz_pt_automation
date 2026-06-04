@@ -1,43 +1,41 @@
 import { apiRequest } from './client'
 
 export type ConnectivityStatus = 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-export type AccessMethod = 'ACCESS_KEY' | 'COOKIE'
+export type Credential = 'API_KEY' | 'COOKIE'
 
 export type SiteListItem = {
   id: string
-  name: string
+  displayName: string
+  domain: string
   baseUrl: string
   enabled: boolean
   connectivityStatus: ConnectivityStatus
-  currentAccessMethod?: AccessMethod
+  currentCredential?: Credential
+  userLevel?: string
+  ratio?: number
+  ratioInfinite?: boolean
+  uploaded?: number
+  downloaded?: number
+  trafficSyncedAt?: string
   proxyId?: string
   proxyName?: string
   lastConnectedAt?: string
   lastConnectError?: string
-  hasAccessKey: boolean
+  hasApiKey: boolean
   hasCookie: boolean
 }
 
 export type SiteDetail = SiteListItem & {
-  parserType: 'NEXUSPHP'
-  freeTorrentUrl: string
-  profileUrl?: string
   userAgent?: string
-  checkIntervalMinutes: number
 }
 
 export type SiteFormPayload = {
-  name: string
-  baseUrl: string
+  domain: string
   enabled: boolean
-  accessKey?: string
+  apiKey?: string
   cookie?: string
   userAgent?: string
-  parserType: 'NEXUSPHP'
-  freeTorrentUrl: string
-  profileUrl?: string
   proxyId?: string
-  checkIntervalMinutes: number
 }
 
 export type SiteFilter = {
@@ -69,11 +67,33 @@ export type ProxyOption = {
 export type TestSiteConnectivityResponse = {
   ok: boolean
   status: ConnectivityStatus
-  accessMethod?: AccessMethod
-  usedProxy: boolean
-  proxyId?: string
-  proxyName?: string
+  credential?: Credential
+  userLevel?: string
+  ratio?: number
+  ratioInfinite?: boolean
+  uploaded?: number
+  downloaded?: number
   errorMessage?: string
+}
+
+export type BrowseTorrentItem = {
+  id: string
+  title: string
+  subtitle?: string
+  createdAt?: string
+  size?: number
+  seeders?: number
+  leechers?: number
+  tags: string[]
+}
+
+export type BrowseTorrentsResponse = {
+  ok: boolean
+  displayName: string
+  items: BrowseTorrentItem[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 function toQuery(filters: SiteFilter) {
@@ -115,12 +135,11 @@ export function testSiteConnectivity(id: string) {
   return apiRequest<TestSiteConnectivityResponse>(`/api/sites/${id}/test-connectivity`, { method: 'POST' })
 }
 
-export function syncSiteTorrents(id: string) {
-  return apiRequest<{ ok: boolean; message: string }>(`/api/sites/${id}/sync-torrents`, { method: 'POST' })
-}
-
-export function syncSiteTraffic(id: string) {
-  return apiRequest<{ ok: boolean; message: string }>(`/api/sites/${id}/sync-traffic`, { method: 'POST' })
+export function browseSiteTorrents(id: string, payload: { keyword?: string; category?: string; page?: number; pageSize?: number }) {
+  return apiRequest<BrowseTorrentsResponse>(`/api/sites/${id}/browse-torrents`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
 }
 
 export function getProxies() {

@@ -126,14 +126,13 @@ xnz_pt_automation
 - 新增、编辑、删除站点
 - 启用、禁用站点
 - 配置站点 Cookie
-- 配置站点密钥
+- 配置站点 API Key
 - 配置 User-Agent，新增站点时默认填入当前浏览器 User-Agent，也允许用户自定义
 - 配置站点代理，默认不使用代理，需要代理时从代理管理模块中选择一个已启用代理
-- 配置种子页面地址
-- 测试密钥是否有效
-- 测试 Cookie 是否有效
+- 站点名称由域名映射表决定，未知域名显示域名本身
+- 测试 API Key 或 Cookie 是否有效
 - 显示站点连通状态
-- 测试种子解析是否正常
+- 浏览种子列表并测试种子解析是否正常
 - 测试上传下载统计解析是否正常
 
 站点数据示例：
@@ -141,20 +140,22 @@ xnz_pt_automation
 ```ts
 type Site = {
   id: string
-  name: string
-  baseUrl: string
+  domain: string
   enabled: boolean
-  accessKey?: string
+  apiKey?: string
   cookie?: string
   userAgent?: string
-  parserType: string
-  freeTorrentUrl: string
-  profileUrl?: string
   proxyId?: string
   connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+  currentCredential?: 'API_KEY' | 'COOKIE'
+  userLevel?: string
+  ratio?: number
+  ratioInfinite?: boolean
+  uploaded?: number
+  downloaded?: number
+  trafficSyncedAt?: Date
   lastConnectedAt?: Date
   lastConnectError?: string
-  checkIntervalMinutes: number
   createdAt: Date
   updatedAt: Date
 }
@@ -162,20 +163,20 @@ type Site = {
 
 ### 5.2 站点访问策略
 
-站点访问同时支持密钥和 Cookie。
+站点访问同时支持 API Key 和 Cookie。第一版不兼容旧字段和旧数据结构。
 
 访问优先级：
 
 ```text
-优先使用站点密钥访问
+优先使用 API Key 访问
   |
-密钥访问成功
+API Key 访问成功
   |
-继续使用密钥
+继续使用 API Key
 
-优先使用站点密钥访问
+优先使用 API Key 访问
   |
-密钥访问失败
+API Key 访问失败
   |
 如果配置了 Cookie，则自动降级使用 Cookie
   |
@@ -190,12 +191,12 @@ Cookie 失败则标记站点不可用
 UNKNOWN      未检测
 ONLINE       可连通
 OFFLINE      网络不可达或代理失败
-AUTH_FAILED  密钥和 Cookie 都不可用
+AUTH_FAILED  API Key 和 Cookie 都不可用
 ```
 
 连通性检测需要记录：
 
-- 当前使用的访问方式
+- 当前使用的凭证
 - 最近检测时间
 - 最近成功时间
 - 最近失败原因
@@ -204,13 +205,13 @@ AUTH_FAILED  密钥和 Cookie 都不可用
 访问方式示例：
 
 ```ts
-type SiteAccessMethod = 'ACCESS_KEY' | 'COOKIE'
+type SiteCredential = 'API_KEY' | 'COOKIE'
 
 type SiteConnectivityCheckResult = {
   siteId: string
   ok: boolean
   status: 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  accessMethod?: SiteAccessMethod
+  credential?: SiteCredential
   usedProxy: boolean
   errorMessage?: string
   checkedAt: Date
@@ -271,7 +272,7 @@ type ProxyConfig = {
   |
 根据站点保存的 User-Agent 和可选 proxyId 创建 HTTP Client
   |
-按密钥优先、Cookie 兜底的策略获取访问凭证
+按 API Key 优先、Cookie 兜底的策略获取访问凭证
   |
 请求种子页面
   |
@@ -284,7 +285,7 @@ type ProxyConfig = {
 写入数据库
 ```
 
-如果密钥访问失败但 Cookie 成功，需要记录本次任务使用了 Cookie 兜底。如果密钥和 Cookie 都失败，需要将站点状态更新为 `AUTH_FAILED`，并跳过该站点后续抓取。
+如果 API Key 访问失败但 Cookie 成功，需要记录本次任务使用了 Cookie 兜底。如果 API Key 和 Cookie 都失败，需要将站点状态更新为 `AUTH_FAILED`，并跳过该站点后续抓取。
 
 种子数据示例：
 
@@ -520,12 +521,8 @@ POST   /api/sites
 GET    /api/sites/:id
 PUT    /api/sites/:id
 DELETE /api/sites/:id
-POST   /api/sites/:id/test-access-key
-POST   /api/sites/:id/test-cookie
 POST   /api/sites/:id/test-connectivity
-POST   /api/sites/:id/test-parser
-POST   /api/sites/:id/sync-torrents
-POST   /api/sites/:id/sync-traffic
+POST   /api/sites/:id/browse-torrents
 ```
 
 站点连通性接口需要返回当前最终可用的访问方式。
@@ -534,7 +531,7 @@ POST   /api/sites/:id/sync-traffic
 type TestSiteConnectivityResponse = {
   ok: boolean
   status: 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  accessMethod?: 'ACCESS_KEY' | 'COOKIE'
+  credential?: 'API_KEY' | 'COOKIE'
   usedProxy: boolean
   proxyId?: string
   proxyName?: string
@@ -674,26 +671,28 @@ type ChangePasswordRequest = {
 
 展示字段：
 
-- 站点名称
+- 站点显示名
+- 站点域名
 - 启用状态
 - 连通状态
-- 当前可用访问方式
-- 代理
-- 最近成功连接时间
-- 最近失败原因
+- 用户等级
+- 分享率
+- 上传量
+- 下载量
+- 当前可用凭证
 - 操作
 
 支持操作：
 
-- 配置站点密钥
+- 配置站点域名
+- 配置站点 API Key
 - 配置站点 Cookie
 - 配置站点 User-Agent，默认来自当前浏览器，也可自定义
 - 配置站点代理，默认不使用，需要时从代理管理模块选择
-- 测试密钥
-- 测试 Cookie
-- 测试站点连通性
-- 手动同步种子
-- 手动同步上传下载统计
+- 测试站点连通性并刷新用户统计
+- 浏览种子列表
+- 编辑站点
+- 删除站点
 
 ### 12.5 种子页
 
@@ -820,7 +819,7 @@ type User = {
 }
 ```
 
-`sites` 表需要保存站点密钥、Cookie、User-Agent、可选 `proxyId`、最近连通状态等字段。密钥、Cookie 和代理密码必须加密存储；User-Agent 不属于敏感字段，但不应在日志中完整输出请求头。
+`sites` 表需要保存站点域名、API Key、Cookie、User-Agent、可选 `proxyId`、最近连通状态、当前凭证和用户统计字段。API Key、Cookie 和代理密码必须加密存储；User-Agent 不属于敏感字段，但不应在日志中完整输出请求头。
 
 `site_connectivity_logs` 用于记录每次连通性检测结果，便于前端展示站点是否可用以及失败原因。
 
@@ -1083,7 +1082,7 @@ app.listen(3000)
 需要保护的敏感数据：
 
 - PT Cookie
-- PT 站点密钥
+- PT 站点 API Key
 - 下载器用户名和密码
 - passkey
 - torrent 下载链接
@@ -1118,7 +1117,7 @@ app.listen(3000)
 - 修改密码
 - 下载器配置和连接测试
 - 站点
-- 站点密钥和 Cookie 双凭证访问
+- 站点 API Key 和 Cookie 双凭证访问
 - 站点连通状态检测
 - 代理配置和站点级可选代理选择
 - NexusPHP 种子抓取
@@ -1190,7 +1189,7 @@ app.listen(3000)
 8. 实现下载器抽象接口和 QB API Client
 9. 实现代理配置和 HTTP Client 工厂
 10. 实现站点 CRUD
-11. 实现站点密钥优先、Cookie 兜底的访问策略
+11. 实现站点 API Key 优先、Cookie 兜底的访问策略
 12. 实现站点连通性检测和状态记录
 13. 实现 NexusPHP 站点适配器
 14. 实现任务配置和任务调度

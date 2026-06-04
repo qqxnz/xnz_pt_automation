@@ -602,7 +602,7 @@ a {
 
 .site-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.2fr) 58px 98px 100px 128px 96px minmax(142px, 1fr);
+  grid-template-columns: minmax(150px, 1.3fr) 92px minmax(92px, 0.8fr) 74px 94px 94px 84px minmax(210px, 1.2fr);
   gap: 12px;
   align-items: center;
   border-top: 1px solid #e5e7eb;
@@ -659,6 +659,10 @@ a {
   transform: translateX(20px);
 }
 
+.inline-switch {
+  flex: 0 0 auto;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -698,6 +702,19 @@ a {
   background: #eff6ff;
 }
 
+.ratio-value {
+  color: #111827;
+  font-weight: 850;
+}
+
+.ratio-value.good {
+  color: #059669;
+}
+
+.ratio-value.warning {
+  color: #d97706;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -711,6 +728,16 @@ a {
   background: transparent;
   font-weight: 850;
   cursor: pointer;
+}
+
+.row-actions .switch {
+  width: 46px;
+  height: 24px;
+  background: #d1d5db;
+}
+
+.row-actions .switch.on {
+  background: #3f7cff;
 }
 
 .row-actions .danger-text {
@@ -792,6 +819,10 @@ a {
   padding: 8px 32px 28px;
 }
 
+.compact-form-grid {
+  grid-template-columns: minmax(240px, 0.8fr) minmax(340px, 1.2fr) minmax(240px, 0.8fr);
+}
+
 .form-grid section {
   display: grid;
   gap: 16px;
@@ -850,6 +881,121 @@ a {
   border-top: 1px solid #e5e7eb;
   position: sticky;
   bottom: 0;
+}
+
+.browse-dialog {
+  width: min(1480px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 24px 56px rgb(17 24 39 / 22%);
+}
+
+.browse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 20px;
+  color: #fff;
+  background: #8b5cf6;
+}
+
+.browse-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.browse-head button {
+  border: 0;
+  color: #fff;
+  background: transparent;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.browse-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(180px, 0.6fr);
+  gap: 24px;
+  padding: 26px 26px 12px;
+}
+
+.browse-toolbar input,
+.browse-toolbar select {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: #f9fafb;
+}
+
+.browse-meta {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 26px 18px;
+  color: #8b5cf6;
+}
+
+.browse-table {
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  border-top: 1px solid #e5e7eb;
+}
+
+.browse-row {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 180px 110px 80px 80px;
+  gap: 24px;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 26px;
+  color: #4b5563;
+}
+
+.browse-row-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  color: #374151;
+  background: #f9fafb;
+  font-weight: 850;
+}
+
+.browse-row strong,
+.browse-row small {
+  display: block;
+}
+
+.browse-row small {
+  overflow: hidden;
+  margin-top: 6px;
+  color: #8a8f98;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.torrent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.torrent-tags span {
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: #fff;
+  background: #22c55e;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.browse-empty {
+  padding: 48px 26px;
+  color: #6b7280;
 }
 
 .jobs-panel {
@@ -1050,6 +1196,36 @@ a {
     color: #6b7280;
   }
 
+  .site-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 2px 0;
+  }
+
+  .site-stat-grid div {
+    min-width: 0;
+    border-radius: 14px;
+    padding: 12px;
+    background: #fff;
+  }
+
+  .site-stat-grid dt {
+    margin: 0 0 6px;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .site-stat-grid dd {
+    overflow: hidden;
+    margin: 0;
+    color: #111827;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }
@@ -1142,6 +1318,7 @@ a {
   .quick-actions,
   .module-flow,
   .sites-toolbar,
+  .browse-toolbar,
   .form-foot,
   .ua-row {
     grid-template-columns: 1fr;
@@ -1165,6 +1342,31 @@ a {
   .site-form {
     max-height: 100vh;
     border-radius: 0;
+  }
+
+  .browse-dialog {
+    width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .browse-toolbar {
+    padding: 18px;
+  }
+
+  .browse-meta {
+    padding: 0 18px 14px;
+  }
+
+  .browse-table {
+    max-height: calc(100vh - 236px);
+  }
+
+  .browse-row {
+    min-width: 780px;
+    grid-template-columns: minmax(320px, 1fr) 150px 100px 70px 70px;
+    gap: 18px;
+    padding: 13px 18px;
   }
 
   .form-head,

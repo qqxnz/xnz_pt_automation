@@ -52,21 +52,22 @@ export type ProxyRecord = {
 
 export type SiteRecord = {
   id: string
-  name: string
-  baseUrl: string
+  domain: string
   enabled: boolean
-  accessKey?: string
+  apiKey?: string
   cookie?: string
   userAgent?: string
-  parserType: 'NEXUSPHP'
-  freeTorrentUrl: string
-  profileUrl?: string
   proxyId?: string
   connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  currentAccessMethod?: 'ACCESS_KEY' | 'COOKIE'
+  currentCredential?: 'API_KEY' | 'COOKIE'
+  userLevel?: string
+  ratio?: number
+  ratioInfinite?: boolean
+  uploaded?: number
+  downloaded?: number
+  trafficSyncedAt?: string
   lastConnectedAt?: string
   lastConnectError?: string
-  checkIntervalMinutes: number
   createdAt: string
   updatedAt: string
 }
@@ -104,7 +105,7 @@ function normalizeState(state: Partial<AppState>): AppState {
     users: state.users ?? [],
     operationLogs: state.operationLogs ?? [],
     taskLogs: state.taskLogs ?? [],
-    sites: state.sites ?? [],
+    sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
     proxies: state.proxies ?? []
   }
 }

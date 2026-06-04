@@ -5,75 +5,426 @@ import { readState, type SiteRecord, writeState } from '../storage.js'
 
 export const sitesRouter = Router()
 
-type SitePayload = {
-  name?: string
-  baseUrl?: string
-  enabled?: boolean
-  accessKey?: string
-  cookie?: string
-  userAgent?: string
-  parserType?: 'NEXUSPHP'
-  freeTorrentUrl?: string
-  profileUrl?: string
-  proxyId?: string
-  checkIntervalMinutes?: number
+type SiteStrategy = 'MTEAM_API' | 'NEXUSPHP'
+type Credential = 'API_KEY' | 'COOKIE'
+
+type SiteDefinition = {
+  displayName: string
+  domains: string[]
+  strategy: SiteStrategy
+  profilePath: string
+  torrentPath: string
 }
 
-function normalizeUrl(value: string) {
-  return new URL(value).toString().replace(/\/$/, '')
+type SitePayload = {
+  domain?: string
+  enabled?: boolean
+  apiKey?: string
+  cookie?: string
+  userAgent?: string
+  proxyId?: string
+}
+
+type TrafficStats = {
+  userLevel?: string
+  ratio?: number
+  ratioInfinite?: boolean
+  uploaded?: number
+  downloaded?: number
+}
+
+type TorrentListItem = {
+  id: string
+  title: string
+  subtitle?: string
+  createdAt?: string
+  size?: number
+  seeders?: number
+  leechers?: number
+  tags: string[]
+}
+
+const SITE_DEFINITIONS: SiteDefinition[] = [
+  {
+    displayName: '馒头',
+    domains: ['m-team.cc', 'pt.m-team.cc', 'api.m-team.cc'],
+    strategy: 'MTEAM_API',
+    profilePath: '/api/member/profile',
+    torrentPath: '/api/torrent/search'
+  },
+  {
+    displayName: '憨憨',
+    domains: ['hhanclub.net', 'www.hhanclub.net'],
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '家园',
+    domains: ['hdhome.org', 'www.hdhome.org'],
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  }
+]
+
+function normalizeDomain(value: string) {
+  const trimmed = value.trim()
+  const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
+  return url.hostname.toLowerCase().replace(/^www\./, '')
+}
+
+function getSiteDefinition(domain: string) {
+  return SITE_DEFINITIONS.find((definition) => definition.domains.some((item) => normalizeDomain(item) === domain))
+}
+
+function siteDisplayName(site: SiteRecord) {
+  return getSiteDefinition(site.domain)?.displayName ?? site.domain
+}
+
+function siteBaseUrl(site: SiteRecord) {
+  return `https://${site.domain}`
+}
+
+function resolveSiteUrl(site: SiteRecord, value: string) {
+  return new URL(value, `${siteBaseUrl(site)}/`).toString()
 }
 
 function listItem(site: SiteRecord, proxyName?: string) {
   return {
     id: site.id,
-    name: site.name,
-    baseUrl: site.baseUrl,
+    displayName: siteDisplayName(site),
+    domain: site.domain,
+    baseUrl: siteBaseUrl(site),
     enabled: site.enabled,
     connectivityStatus: site.connectivityStatus,
-    currentAccessMethod: site.currentAccessMethod,
+    currentCredential: site.currentCredential,
+    userLevel: site.userLevel,
+    ratio: site.ratio,
+    ratioInfinite: site.ratioInfinite,
+    uploaded: site.uploaded,
+    downloaded: site.downloaded,
+    trafficSyncedAt: site.trafficSyncedAt,
     proxyId: site.proxyId,
     proxyName,
     lastConnectedAt: site.lastConnectedAt,
     lastConnectError: site.lastConnectError,
-    hasAccessKey: Boolean(site.accessKey),
+    hasApiKey: Boolean(site.apiKey),
     hasCookie: Boolean(site.cookie)
   }
 }
 
 function detailItem(site: SiteRecord) {
   return {
-    id: site.id,
-    name: site.name,
-    baseUrl: site.baseUrl,
-    enabled: site.enabled,
-    parserType: site.parserType,
-    freeTorrentUrl: site.freeTorrentUrl,
-    profileUrl: site.profileUrl,
-    userAgent: site.userAgent,
-    proxyId: site.proxyId,
-    checkIntervalMinutes: site.checkIntervalMinutes,
-    connectivityStatus: site.connectivityStatus,
-    currentAccessMethod: site.currentAccessMethod,
-    lastConnectedAt: site.lastConnectedAt,
-    lastConnectError: site.lastConnectError,
-    hasAccessKey: Boolean(site.accessKey),
-    hasCookie: Boolean(site.cookie)
+    ...listItem(site),
+    userAgent: site.userAgent
   }
 }
 
 function validatePayload(payload: SitePayload, existing?: SiteRecord) {
-  if (!payload.name?.trim()) return '站点名称不能为空'
-  if (!payload.baseUrl?.trim()) return '站点地址不能为空'
+  if (!payload.domain?.trim()) return '站点域名不能为空'
   try {
-    normalizeUrl(payload.baseUrl)
+    normalizeDomain(payload.domain)
   } catch {
-    return '站点地址必须是合法 URL'
+    return '站点域名必须是合法域名或 URL'
   }
-  const hasAccessKey = Boolean(payload.accessKey?.trim() || existing?.accessKey)
+  const hasApiKey = Boolean(payload.apiKey?.trim() || existing?.apiKey)
   const hasCookie = Boolean(payload.cookie?.trim() || existing?.cookie)
-  if (!hasAccessKey && !hasCookie) return '站点密钥和 Cookie 至少填写一个'
-  if ((payload.checkIntervalMinutes ?? 30) < 5) return '检查间隔不能少于 5 分钟'
+  if (!hasApiKey && !hasCookie) return 'API Key 和 Cookie 至少填写一个'
   return undefined
+}
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
+}
+
+function readHtmlAttribute(tag: string, attribute: string) {
+  const match = tag.match(new RegExp(`${attribute}\\s*=\\s*(['"])(.*?)\\1`, 'i'))
+  return match?.[2] ? decodeHtml(match[2]).trim() : undefined
+}
+
+function textFromHtml(value: string) {
+  return decodeHtml(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<img\b[^>]*>/gi, (tag) => ` ${readHtmlAttribute(tag, 'title') || readHtmlAttribute(tag, 'alt') || ''} `)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractCells(html: string) {
+  const cells: string[] = []
+  for (const match of html.matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)) {
+    const text = textFromHtml(match[1])
+    if (text) cells.push(text)
+  }
+  return cells
+}
+
+function toNumber(value: unknown) {
+  const numberValue = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, ''))
+  return Number.isFinite(numberValue) ? numberValue : undefined
+}
+
+function parseSizeToBytes(value: string) {
+  const match = value.match(/([\d,.]+)\s*(TiB|TB|GiB|GB|MiB|MB|KiB|KB|B)\b/i)
+  if (!match) return undefined
+  const amount = toNumber(match[1])
+  if (amount === undefined) return undefined
+  const unit = match[2].toUpperCase()
+  const powerByUnit: Record<string, number> = {
+    B: 0,
+    KB: 1,
+    KIB: 1,
+    MB: 2,
+    MIB: 2,
+    GB: 3,
+    GIB: 3,
+    TB: 4,
+    TIB: 4
+  }
+  return amount * 1024 ** powerByUnit[unit]
+}
+
+function parseSizeByLabel(text: string, labels: string[]) {
+  for (const label of labels) {
+    const match = text.match(new RegExp(`${label}\\s*[:：]?\\s*([\\d,.]+\\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B))`, 'i'))
+    if (match) return parseSizeToBytes(match[1])
+  }
+  return undefined
+}
+
+function parseRatioByLabel(text: string) {
+  const match = text.match(/分享率\s*[:：]?\s*(∞|inf|infinity|[\d,.]+)/i)
+  if (!match) return {}
+  if (['∞', 'inf', 'infinity'].includes(match[1].toLowerCase())) return { ratioInfinite: true }
+  const ratio = toNumber(match[1])
+  return ratio !== undefined ? { ratio, ratioInfinite: false } : {}
+}
+
+function parseUserLevel(cells: string[], text: string) {
+  const labels = ['用户等级', '用戶等級', '會員等級', '会员等级', '等级', '等級', '级别', '級別']
+  for (let index = 0; index < cells.length; index += 1) {
+    if (labels.some((label) => cells[index].includes(label))) {
+      const sameCell = cells[index].match(/(?:用户等级|用戶等級|會員等級|会员等级|等级|等級|级别|級別)\s*[:：]\s*(.+)$/)
+      if (sameCell?.[1]) return sameCell[1].trim()
+      const nextCell = cells[index + 1]
+      if (nextCell && !labels.some((label) => nextCell.includes(label))) return nextCell.trim()
+    }
+  }
+
+  return text.match(/(?:用户等级|用戶等級|會員等級|会员等级|等级|等級|级别|級別)\s*[:：]?\s*([^\s]+)/)?.[1]?.trim()
+}
+
+function parseTrafficStats(html: string): TrafficStats {
+  const text = textFromHtml(html)
+  const cells = extractCells(html)
+  return {
+    userLevel: parseUserLevel(cells, text),
+    ...parseRatioByLabel(text),
+    uploaded: parseSizeByLabel(text, ['上传量', '上傳量', '上传', '上傳']),
+    downloaded: parseSizeByLabel(text, ['下载量', '下載量', '下载', '下載'])
+  }
+}
+
+function looksLikeAuthPage(html: string) {
+  const text = textFromHtml(html).toLowerCase()
+  return /login|logout|password|passkey|登录|登入|登錄|密码|密碼|用户名|用戶名/.test(text)
+}
+
+async function fetchWithCookie(site: SiteRecord, path: string) {
+  if (!site.cookie?.trim()) throw new Error('Cookie 未配置或不可用')
+  const response = await fetch(resolveSiteUrl(site, path), {
+    headers: {
+      Cookie: site.cookie,
+      'User-Agent': site.userAgent || 'Mozilla/5.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    },
+    redirect: 'follow'
+  })
+  if (!response.ok) throw new Error(`Cookie 访问失败：HTTP ${response.status}`)
+  return response.text()
+}
+
+async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
+  if (!site.apiKey?.trim()) throw new Error('API Key 未配置或不可用')
+  const response = await fetch('https://api.m-team.cc/api/member/profile', {
+    method: 'POST',
+    headers: {
+      'x-api-key': site.apiKey,
+      'User-Agent': site.userAgent || 'Mozilla/5.0',
+      Accept: 'application/json'
+    }
+  })
+  if (!response.ok) throw new Error(`API Key 访问失败：HTTP ${response.status}`)
+  const result = (await response.json()) as {
+    code?: string | number
+    message?: string
+    data?: {
+      role?: string | number
+      memberCount?: {
+        uploaded?: string | number
+        downloaded?: string | number
+        shareRate?: string | number
+      }
+    }
+  }
+  if (String(result.code) !== '0' || !result.data) throw new Error(result.message || 'API Key 访问失败')
+  return {
+    userLevel: result.data.role === undefined ? undefined : String(result.data.role),
+    ratio: toNumber(result.data.memberCount?.shareRate),
+    ratioInfinite: false,
+    uploaded: toNumber(result.data.memberCount?.uploaded),
+    downloaded: toNumber(result.data.memberCount?.downloaded)
+  }
+}
+
+async function fetchTrafficByCredential(site: SiteRecord, credential: Credential) {
+  const definition = getSiteDefinition(site.domain)
+  if (credential === 'API_KEY') {
+    if (definition?.strategy !== 'MTEAM_API') throw new Error('该站点不支持 API Key 获取用户信息')
+    return fetchMTeamProfile(site)
+  }
+  return parseTrafficStats(await fetchWithCookie(site, definition?.profilePath ?? '/userdetails.php'))
+}
+
+async function testSite(site: SiteRecord) {
+  const attempts: Credential[] = site.apiKey ? ['API_KEY'] : []
+  if (site.cookie) attempts.push('COOKIE')
+  const errors: string[] = []
+
+  for (const credential of attempts) {
+    try {
+      const stats = await fetchTrafficByCredential(site, credential)
+      if (stats.uploaded === undefined || stats.downloaded === undefined || (stats.ratio === undefined && !stats.ratioInfinite)) {
+        throw new Error('未找到上传量、下载量或分享率')
+      }
+      return { credential, stats }
+    } catch (error) {
+      errors.push(`${credential}: ${error instanceof Error ? error.message : '访问失败'}`)
+    }
+  }
+
+  throw new Error(errors.join('；') || 'API Key 和 Cookie 都不可用')
+}
+
+function parseNexusTorrentRows(html: string): TorrentListItem[] {
+  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((match) => match[1])
+  const items: TorrentListItem[] = []
+  for (const row of rows) {
+    const detailsMatch = row.match(/href=["'][^"']*(?:details|download)\.php\?id=(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i)
+    if (!detailsMatch) continue
+    const title = textFromHtml(detailsMatch[2])
+    if (!title || title.length < 3) continue
+    const text = textFromHtml(row)
+    const sizes = [...text.matchAll(/([\d,.]+)\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B)\b/gi)]
+    const numbers = [...text.matchAll(/\b(\d+)\b/g)].map((match) => Number(match[1]))
+    items.push({
+      id: detailsMatch[1],
+      title,
+      subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
+      size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
+      seeders: numbers.at(-2),
+      leechers: numbers.at(-1),
+      tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
+    })
+    if (items.length >= 50) break
+  }
+  return items
+}
+
+async function browseMTeamTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
+  if (!site.apiKey?.trim()) throw new Error('M-Team 浏览需要 API Key')
+  const response = await fetch('https://api.m-team.cc/api/torrent/search', {
+    method: 'POST',
+    headers: {
+      'x-api-key': site.apiKey,
+      'User-Agent': site.userAgent || 'Mozilla/5.0',
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ pageNumber: page, pageSize, keyword })
+  })
+  if (!response.ok) throw new Error(`M-Team 种子列表请求失败：HTTP ${response.status}`)
+  const result = (await response.json()) as {
+    code?: string | number
+    message?: string
+    data?: {
+      total?: string | number
+      data?: Array<{
+        id?: string | number
+        name?: string
+        smallDescr?: string
+        createdDate?: string
+        size?: string | number
+        status?: {
+          seeders?: string | number
+          leechers?: string | number
+          discount?: string
+        }
+      }>
+    }
+  }
+  if (String(result.code) !== '0' || !result.data) throw new Error(result.message || 'M-Team 种子列表请求失败')
+  return {
+    total: toNumber(result.data.total) ?? 0,
+    items: (result.data.data ?? []).map((item) => ({
+      id: String(item.id ?? ''),
+      title: item.name ?? '-',
+      subtitle: item.smallDescr,
+      createdAt: item.createdDate,
+      size: toNumber(item.size),
+      seeders: toNumber(item.status?.seeders),
+      leechers: toNumber(item.status?.leechers),
+      tags: item.status?.discount ? [item.status.discount] : []
+    }))
+  }
+}
+
+async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPath = '/torrents.php') {
+  const path = `${torrentPath}${keyword ? `?search=${encodeURIComponent(keyword)}` : ''}`
+  const html = await fetchWithCookie(site, path)
+  const items = parseNexusTorrentRows(html)
+  if (!items.length && looksLikeAuthPage(html)) throw new Error('Cookie 访问失败：需要重新登录')
+  return { total: items.length, items }
+}
+
+async function browseTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
+  const definition = getSiteDefinition(site.domain)
+  const errors: string[] = []
+
+  if (site.apiKey && definition?.strategy === 'MTEAM_API') {
+    try {
+      return { credential: 'API_KEY' as Credential, ...(await browseMTeamTorrents(site, keyword, page, pageSize)) }
+    } catch (error) {
+      errors.push(`API_KEY: ${error instanceof Error ? error.message : '访问失败'}`)
+    }
+  }
+
+  if (definition?.strategy === 'MTEAM_API') {
+    if (site.cookie) errors.push('COOKIE: M-Team 种子列表需要可用 API Key')
+    throw new Error(errors.join('；') || 'M-Team 种子列表需要 API Key')
+  }
+
+  if (site.cookie) {
+    try {
+      const torrentPath = definition?.strategy === 'NEXUSPHP' ? definition.torrentPath : '/torrents.php'
+      return { credential: 'COOKIE' as Credential, ...(await browseNexusTorrents(site, keyword, torrentPath)) }
+    } catch (error) {
+      errors.push(`COOKIE: ${error instanceof Error ? error.message : '访问失败'}`)
+    }
+  }
+
+  throw new Error(errors.join('；') || 'API Key 和 Cookie 都不可用')
 }
 
 sitesRouter.get('/', requireAuth, async (req, res) => {
@@ -87,7 +438,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   const proxyById = new Map(state.proxies.map((proxy) => [proxy.id, proxy.name]))
 
   const filtered = state.sites.filter((site) => {
-    if (keyword && !`${site.name} ${site.baseUrl}`.toLowerCase().includes(keyword)) return false
+    if (keyword && !`${siteDisplayName(site)} ${site.domain}`.toLowerCase().includes(keyword)) return false
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
     if (proxyUsage === 'NONE' && site.proxyId) return false
     if (proxyUsage === 'ENABLED' && !site.proxyId) return false
@@ -129,18 +480,13 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
   const now = new Date().toISOString()
   const site: SiteRecord = {
     id: randomUUID(),
-    name: payload.name!.trim(),
-    baseUrl: normalizeUrl(payload.baseUrl!),
+    domain: normalizeDomain(payload.domain!),
     enabled: payload.enabled ?? true,
-    accessKey: payload.accessKey?.trim() || undefined,
+    apiKey: payload.apiKey?.trim() || undefined,
     cookie: payload.cookie?.trim() || undefined,
     userAgent: payload.userAgent?.trim() || undefined,
-    parserType: 'NEXUSPHP',
-    freeTorrentUrl: payload.freeTorrentUrl?.trim() || '/torrents.php?spstate=2',
-    profileUrl: payload.profileUrl?.trim() || undefined,
     proxyId: payload.proxyId || undefined,
     connectivityStatus: 'UNKNOWN',
-    checkIntervalMinutes: payload.checkIntervalMinutes ?? 30,
     createdAt: now,
     updatedAt: now
   }
@@ -164,17 +510,12 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
 
   const updated: SiteRecord = {
     ...existing,
-    name: payload.name!.trim(),
-    baseUrl: normalizeUrl(payload.baseUrl!),
+    domain: normalizeDomain(payload.domain!),
     enabled: payload.enabled ?? existing.enabled,
-    accessKey: payload.accessKey?.trim() || existing.accessKey,
+    apiKey: payload.apiKey?.trim() || existing.apiKey,
     cookie: payload.cookie?.trim() || existing.cookie,
     userAgent: payload.userAgent?.trim() || undefined,
-    parserType: 'NEXUSPHP',
-    freeTorrentUrl: payload.freeTorrentUrl?.trim() || existing.freeTorrentUrl,
-    profileUrl: payload.profileUrl?.trim() || undefined,
     proxyId: payload.proxyId || undefined,
-    checkIntervalMinutes: payload.checkIntervalMinutes ?? existing.checkIntervalMinutes,
     updatedAt: new Date().toISOString()
   }
   state.sites[index] = updated
@@ -196,41 +537,43 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
   const site = state.sites.find((item) => item.id === req.params.id)
   if (!site) return res.status(404).json({ message: '站点不存在' })
 
-  const proxy = site.proxyId ? state.proxies.find((item) => item.id === site.proxyId) : undefined
-  if (site.proxyId && !proxy) {
-    site.connectivityStatus = 'OFFLINE'
-    site.lastConnectError = '已选择的代理不存在或已删除'
-  } else if (proxy && !proxy.enabled) {
-    site.connectivityStatus = 'OFFLINE'
-    site.lastConnectError = '已选择的代理已禁用'
-  } else if (site.accessKey || site.cookie) {
+  try {
+    const result = await testSite(site)
     site.connectivityStatus = 'ONLINE'
-    site.currentAccessMethod = site.accessKey ? 'ACCESS_KEY' : 'COOKIE'
-    site.lastConnectedAt = new Date().toISOString()
+    site.currentCredential = result.credential
+    site.userLevel = result.stats.userLevel
+    site.ratio = result.stats.ratio
+    site.ratioInfinite = result.stats.ratioInfinite
+    site.uploaded = result.stats.uploaded
+    site.downloaded = result.stats.downloaded
+    site.trafficSyncedAt = new Date().toISOString()
+    site.lastConnectedAt = site.trafficSyncedAt
     site.lastConnectError = undefined
-  } else {
+    site.updatedAt = site.trafficSyncedAt
+    await writeState(state)
+    return res.json({ ok: true, status: site.connectivityStatus, credential: site.currentCredential, ...result.stats })
+  } catch (error) {
     site.connectivityStatus = 'AUTH_FAILED'
-    site.currentAccessMethod = undefined
-    site.lastConnectError = '密钥和 Cookie 都不可用'
+    site.currentCredential = undefined
+    site.lastConnectError = error instanceof Error ? error.message : '站点测试失败'
+    site.updatedAt = new Date().toISOString()
+    await writeState(state)
+    return res.status(400).json({ ok: false, status: site.connectivityStatus, errorMessage: site.lastConnectError })
   }
-
-  site.updatedAt = new Date().toISOString()
-  await writeState(state)
-  return res.json({
-    ok: site.connectivityStatus === 'ONLINE',
-    status: site.connectivityStatus,
-    accessMethod: site.currentAccessMethod,
-    usedProxy: Boolean(proxy),
-    proxyId: proxy?.id,
-    proxyName: proxy?.name,
-    errorMessage: site.lastConnectError
-  })
 })
 
-sitesRouter.post('/:id/sync-torrents', requireAuth, (_req, res) => {
-  res.status(202).json({ ok: true, message: '已触发同步种子任务' })
-})
+sitesRouter.post('/:id/browse-torrents', requireAuth, async (req, res) => {
+  const state = await readState()
+  const site = state.sites.find((item) => item.id === req.params.id)
+  if (!site) return res.status(404).json({ message: '站点不存在' })
+  const keyword = String(req.body?.keyword ?? '').trim()
+  const page = Math.max(Number(req.body?.page ?? 1), 1)
+  const pageSize = Math.min(Math.max(Number(req.body?.pageSize ?? 20), 1), 100)
 
-sitesRouter.post('/:id/sync-traffic', requireAuth, (_req, res) => {
-  res.status(202).json({ ok: true, message: '已触发同步流量统计任务' })
+  try {
+    const result = await browseTorrents(site, keyword, page, pageSize)
+    return res.json({ ok: true, displayName: siteDisplayName(site), page, pageSize, ...result })
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error instanceof Error ? error.message : '种子列表获取失败' })
+  }
 })

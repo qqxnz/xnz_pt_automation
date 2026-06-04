@@ -1,175 +1,154 @@
 # 站点模块方案
 
-## 1. 文档依据
+## 1. 模块目标
 
-本方案基于以下本地文档整理：
+站点模块负责维护 PT 站点域名、API Key、Cookie、User-Agent、可选代理，并完成站点测试、用户统计获取和种子列表浏览。
 
-- `README.md`
-- `docs/pt-automation-technical-design.md`
-- `docs/ui-design-login-sites.md`
-- `designs/design-spec.md`
+第一版不兼容旧字段和旧数据结构：不再使用站点名称、解析类型、个人信息地址、种子地址、检查间隔。
 
-## 2. 模块目标
+## 2. 站点映射表
 
-站点模块负责 PT 站点配置、凭证维护、User-Agent、可选代理、启停控制和连通性检测。
+后端维护站点映射表 `SITE_DEFINITIONS`：
 
-交付结果：
+```text
+m-team.cc      馒头   MTEAM_API
+hhanclub.net   憨憨   NEXUSPHP
+hdhome.org     家园   NEXUSPHP
+```
 
-- `/sites` 站点页面
-- 站点列表和筛选
-- 新增站点
-- 编辑站点
-- 删除站点
-- 启用和禁用站点
-- 测试站点连通性
-- 同步种子和同步流量统计入口
-- 桌面表格和移动卡片布局
+规则：
 
-## 3. 功能方案
+- 用户只填写站点域名，显示名称由映射表决定。
+- 支持同站多个域名，域名归一化后匹配映射表。
+- 未知域名允许保存，显示域名本身。
+- M-Team 使用 API 特殊策略；普通站点默认使用 Cookie 抓取 `/userdetails.php` 和 `/torrents.php`。
 
-站点路径为 `/sites`。
+## 3. 表单
 
-列表功能：
+字段：
 
-- 站点统计卡片。
-- 关键词搜索。
-- 连通状态筛选。
-- 代理使用状态筛选。
-- 启用状态筛选。
-- 桌面表格展示。
-- 移动卡片展示。
+```ts
+type SiteForm = {
+  domain: string
+  enabled: boolean
+  apiKey?: string
+  cookie?: string
+  userAgent?: string
+  proxyId?: string
+}
+```
+
+校验：
+
+- 站点域名必填，支持 `pt.m-team.cc` 或完整 URL。
+- API Key 和 Cookie 至少填写一个。
+- User-Agent 新增时默认使用当前浏览器。
+- 代理默认不使用，只能选择已启用代理。
+
+## 4. 列表
 
 列表字段：
 
 ```text
-站点名称
-启用状态
+站点
 连通状态
+用户等级
+分享率
+上传量
+下载量
 当前凭证
-代理
-最近成功连接
-最近失败原因
 操作
+```
+
+当前凭证：
+
+```text
+API_KEY
+COOKIE
+NONE
 ```
 
 操作：
 
-- 新增站点。
-- 编辑站点。
-- 删除站点，删除前二次确认。
-- 启用或禁用站点。
-- 测试连通性。
-- 同步种子。
-- 同步流量统计。
-
-## 4. 新增和编辑
-
-设计稿文件：`designs/sites-form.svg`
-
-桌面端使用弹窗，移动端使用全屏弹层。新增和编辑共用同一个表单。
-
-表单结构：
-
 ```text
-基础信息
-  站点名称
-  站点地址
-  启用状态
-  解析类型
-
-访问凭证
-  站点密钥
-  Cookie
-  User-Agent，默认使用当前浏览器，可自定义
-
-抓取配置
-  种子地址
-  个人信息地址
-  检查间隔
-
-代理配置
-  使用代理
-
-底部操作
-  取消
-  保存并测试
-  保存
+测试
+浏览
+编辑
+删除
 ```
 
-表单类型：
+## 5. 测试和用户统计
+
+测试接口：
+
+```text
+POST /api/sites/:id/test-connectivity
+```
+
+测试行为：
+
+- API Key 优先。
+- API Key 不可用时回退 Cookie。
+- 成功后更新 `currentCredential`、连通状态、用户等级、分享率、上传量、下载量。
+- 两种凭证都失败时标记认证失败，并保留错误原因。
+
+M-Team：
+
+- API：`POST https://api.m-team.cc/api/member/profile`
+- Header：`x-api-key`
+- 上传量：`data.memberCount.uploaded`
+- 下载量：`data.memberCount.downloaded`
+- 分享率：`data.memberCount.shareRate`
+- 用户等级：按最终确认显示 API 原始 `data.role` 值。
+
+普通 NexusPHP 站点：
+
+- 使用 Cookie 访问 `/userdetails.php`。
+- 从 HTML 文本和图片 `title/alt` 中解析用户等级。
+- 从页面文本解析分享率、上传量、下载量。
+
+## 6. 浏览种子
+
+接口：
+
+```text
+POST /api/sites/:id/browse-torrents
+```
+
+请求：
 
 ```ts
-type SiteForm = {
-  name: string
-  baseUrl: string
-  enabled: boolean
-  accessKey?: string
-  cookie?: string
-  userAgent?: string
-  parserType: 'NEXUSPHP'
-  freeTorrentUrl: string
-  profileUrl?: string
-  proxyId?: string
-  checkIntervalMinutes: number
+type BrowseTorrentsRequest = {
+  keyword?: string
+  category?: string
+  page?: number
+  pageSize?: number
 }
 ```
 
-校验规则：
+响应：
 
-- 站点名称必填。
-- 站点地址必填且必须是 URL。
-- 站点密钥和 Cookie 至少填写一个。
-- 检查间隔最小 5 分钟。
-- 编辑时敏感字段默认展示为脱敏占位，不返回明文。
-- User-Agent 新增时默认填入当前浏览器 `navigator.userAgent`，允许用户修改；保存时以后端收到的最终字符串为准。
-- 代理默认不使用，即 `proxyId` 为空；选择代理时必须来自代理管理模块的已启用代理列表。
-
-保存规则：
-
-- 点击保存：校验表单，调用新增或编辑接口，成功后关闭弹窗并刷新列表。
-- 点击保存并测试：先保存配置，再调用连通性测试接口，并展示最终访问方式。
-- 新增成功但测试失败时保留站点配置，并展示错误原因。
-- 编辑敏感字段留空时表示不修改原值。
-- 清空敏感字段需要明确操作，不能因为输入框留空而误删原值。
-- 点击“恢复当前浏览器 User-Agent”时重新读取当前浏览器 `navigator.userAgent` 并覆盖表单 User-Agent 字段。
-
-保存并测试结果：
-
-```text
-连接成功，当前使用密钥访问
-连接成功，密钥失败，已使用 Cookie 访问
-连接失败，代理不可用
-连接失败，已选择的代理不存在或已禁用
-认证失败，密钥和 Cookie 都不可用
+```ts
+type BrowseTorrentItem = {
+  id: string
+  title: string
+  subtitle?: string
+  createdAt?: string
+  size?: number
+  seeders?: number
+  leechers?: number
+  tags: string[]
+}
 ```
 
-## 5. 状态和接口
+浏览弹窗：
 
-状态展示：
+- 标题为 `浏览 - 站点显示名`。
+- 展示关键词、资源分类、搜索按钮、结果数量和每页数量。
+- 表格列为标题、时间、大小、做种、下载。
+- 第一版不实现详情或下载动作。
 
-```text
-ONLINE       在线       绿色
-OFFLINE      离线       红色
-AUTH_FAILED  认证失败   橙色
-UNKNOWN      未检测     灰色
-```
-
-当前凭证展示：
-
-```text
-ACCESS_KEY  密钥
-COOKIE      Cookie
-NONE        无可用凭证
-```
-
-代理展示：
-
-```text
-未选择代理       不使用代理
-已选择代理       展示代理名称，例如 HK SOCKS5
-```
-
-接口：
+## 7. 接口
 
 ```text
 GET    /api/sites?keyword=&connectivityStatus=&proxyUsage=&enabled=&page=&pageSize=
@@ -178,177 +157,17 @@ GET    /api/sites/:id
 PUT    /api/sites/:id
 DELETE /api/sites/:id
 POST   /api/sites/:id/test-connectivity
-POST   /api/sites/:id/sync-torrents
-POST   /api/sites/:id/sync-traffic
+POST   /api/sites/:id/browse-torrents
 ```
 
-列表项：
+## 8. 执行清单
 
-```ts
-type SiteListItem = {
-  id: string
-  name: string
-  baseUrl: string
-  enabled: boolean
-  connectivityStatus: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  currentAccessMethod?: 'ACCESS_KEY' | 'COOKIE'
-  proxyId?: string
-  proxyName?: string
-  lastConnectedAt?: string
-  lastConnectError?: string
-}
-```
-
-连通性测试返回：
-
-```ts
-type TestSiteConnectivityResponse = {
-  ok: boolean
-  status: 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  accessMethod?: 'ACCESS_KEY' | 'COOKIE'
-  usedProxy: boolean
-  proxyId?: string
-  proxyName?: string
-  errorMessage?: string
-}
-```
-
-## 6. 设计稿
-
-设计稿文件：
-
-- `designs/sites.svg`
-- `designs/sites-form.svg`
-
-桌面端：
-
-- 顶部展示站点标题和新增站点按钮。
-- 使用统计卡片展示全部、在线、认证失败、离线、未知状态。
-- 使用筛选区承载关键词、状态、代理使用状态、启用状态和刷新按钮。
-- 使用表格展示站点列表。
-
-移动端：
-
-- 顶部展示页面标题和新增入口。
-- 筛选项垂直或两列排列。
-- 使用卡片展示站点信息。
-- 快捷操作展示测试、编辑、更多。
-
-## 7. 执行清单
-
-- 创建 `/sites` 路由。
-- 创建 `SitesPage.vue`。
-- 创建站点 API 客户端。
-- 实现站点列表查询。
-- 实现关键词筛选。
-- 实现连通状态筛选。
-- 实现代理使用状态筛选。
-- 实现启用状态筛选。
-- 实现顶部统计卡片。
-- 桌面端使用表格展示站点。
-- 移动端使用卡片展示站点。
-- 实现新增站点入口。
-- 实现编辑站点入口。
-- 实现新增和编辑共用表单。
-- 实现 `SiteForm` 表单组件。
-- 实现敏感字段脱敏占位。
-- 实现站点名称必填校验。
-- 实现站点地址 URL 校验。
-- 实现密钥和 Cookie 至少一个的校验。
-- 实现代理下拉只展示代理管理模块中的已启用代理。
-- 实现检查间隔最小值校验。
-- 实现保存。
-- 实现保存并测试。
-- 实现启用和禁用站点。
-- 实现删除二次确认。
-- 实现测试连通性按钮和结果提示。
-- 实现同步种子按钮。
-- 实现同步流量统计按钮。
-- 实现失败原因完整查看。
-- 实现无站点空状态。
-- 实现全部离线提示。
-- 实现认证失败提示。
-- 后端实现站点 CRUD。
-- 后端实现敏感字段加密存储。
-- 后端实现密钥优先、Cookie 兜底连通性测试。
-- 后端记录连通性日志。
-
-## 8. TODO
-
-- [ ] 确认第一版支持的 `parserType` 是否只有 `NEXUSPHP`。
-- [ ] 确认 `accessKey` 的具体含义是否等同于 passkey。
-- [ ] 确认编辑时清空密钥或 Cookie 的交互方式。
-- [ ] 确认 `profileUrl` 是否第一版必填。
-- [ ] 确认代理列表接口是否在站点模块前完成。
-- [ ] 确认“同步种子”和“同步流量统计”第一版是否只触发任务，不展示任务详情。
-
-## 9. 验收标准
-
-- 可新增站点，保存后列表刷新。
-- 可编辑站点，敏感字段不明文回显。
-- 可删除站点，删除前有二次确认。
-- 可启用和禁用站点。
-- 连通性测试能展示最终状态和访问方式。
-- 密钥和 Cookie 至少一个为空校验生效。
-- 不选择代理时保存为不使用代理。
-- 已选择代理被禁用或删除时，连通性测试展示明确错误。
-- 最近失败原因过长时可查看完整内容。
-- 无站点时展示空状态和新增入口。
-- 移动端不出现横向宽表格。
-
-## 10. 开发补充规范
-
-页面入口和跳转：
-
-- `/sites` 使用后台主布局。
-- URL 查询参数需要支持 `keyword`、`connectivityStatus`、`proxyUsage`、`enabled`，便于从首页风险提示跳转。
-- 从首页“新增站点”进入时可使用 `?action=create` 打开新增弹窗。
-
-前端状态：
-
-```ts
-type SitesState = {
-  items: SiteListItem[]
-  total: number
-  loading: boolean
-  filters: SiteFilter
-  formVisible: boolean
-  editingSiteId?: string
-}
-```
-
-筛选类型：
-
-```ts
-type SiteFilter = {
-  keyword?: string
-  connectivityStatus?: 'ALL' | 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
-  proxyUsage?: 'ALL' | 'NONE' | 'ENABLED'
-  enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
-  page: number
-  pageSize: number
-}
-```
-
-空状态和异常状态：
-
-- 无站点时展示新增站点主按钮。
-- 筛选无结果时展示“没有符合条件的站点”，并提供清空筛选。
-- 全部离线时展示网络、代理、Cookie 检查提示。
-- 认证失败站点行突出显示“编辑凭证”快捷操作。
-
-后端处理：
-
-- 新增和编辑时对 `baseUrl`、`freeTorrentUrl`、`profileUrl` 做 URL 规范化。
-- `accessKey`、`cookie`、代理密码等敏感字段写入前加密；`userAgent` 按普通配置保存。
-- 列表接口只返回是否已配置敏感字段，不返回明文。
-- 连通性测试必须按密钥优先、Cookie 兜底执行。
-- 连通性测试必须使用站点保存的 User-Agent 和可选 `proxyId`。
-- 每次测试写入 `site_connectivity_logs`。
-- 删除站点前如果存在关联 torrent，需要确认是软删除站点还是阻止删除；第一版建议阻止删除并提示先处理关联数据。
-
-安全和日志：
-
-- 日志不记录 Cookie、密钥、passkey、完整下载链接。
-- 测试失败原因需要脱敏后存储和展示。
-- 手动同步种子和同步流量需要限频，避免频繁访问 PT 站点。
+- 替换站点数据模型为新字段。
+- 移除旧表单字段和旧接口入参。
+- 实现站点映射表和域名归一化。
+- 实现 API Key 优先、Cookie 回退的测试流程。
+- 实现 M-Team API 用户统计和种子浏览。
+- 实现 NexusPHP Cookie 用户统计和种子浏览。
+- 实现浏览弹窗。
+- 更新设计稿和 UI 文档。
+- 通过后端、前端类型检查和完整构建。
