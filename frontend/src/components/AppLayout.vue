@@ -10,14 +10,14 @@
     </header>
 
     <aside class="sidebar">
-      <router-link class="nav-item" to="/dashboard">Dashboard</router-link>
+      <router-link class="nav-item" to="/dashboard">首页</router-link>
       <router-link class="nav-item" to="/sites">站点</router-link>
-      <router-link class="nav-item" to="/torrents">种子</router-link>
       <router-link class="nav-item" to="/downloaders">下载器</router-link>
-      <router-link class="nav-item" to="/proxies">代理管理</router-link>
       <router-link class="nav-item" to="/tasks">任务</router-link>
+      <router-link class="nav-item" to="/torrents">种子</router-link>
+      <router-link class="nav-item" to="/proxies">代理</router-link>
       <router-link class="nav-item" to="/logs">日志</router-link>
-      <router-link class="nav-item" to="/settings">系统设置</router-link>
+      <router-link class="nav-item" to="/settings">系统</router-link>
     </aside>
 
     <main class="content"><slot /></main>

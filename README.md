@@ -35,6 +35,8 @@ designs/
 | [designs/dashboard.svg](designs/dashboard.svg) | Dashboard 设计稿。 |
 | [designs/sites.svg](designs/sites.svg) | 站点页设计稿。 |
 | [designs/sites-form.svg](designs/sites-form.svg) | 站点新增与编辑弹窗设计稿。 |
+| [designs/downloaders.svg](designs/downloaders.svg) | 下载器页设计稿。 |
+| [designs/downloaders-form.svg](designs/downloaders-form.svg) | 下载器新增与编辑弹窗设计稿。 |
 
 ## 当前进度
 
@@ -44,7 +46,7 @@ designs/
 | 首页 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/dashboard.svg`，`docs/dashboard-plan.md`。 |
 | 站点 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/sites.svg`、`designs/sites-form.svg`，`docs/sites-plan.md`。 |
 | 种子 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/torrents.svg`，`docs/torrents-plan.md`。 |
-| 下载器 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/downloaders.svg`，`docs/downloaders-plan.md`。 |
+| 下载器 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/downloaders.svg`、`designs/downloaders-form.svg`，`docs/downloaders-plan.md`。 |
 | 代理管理 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/proxies.svg`，`docs/proxies-plan.md`。 |
 | 数据统计 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/statistics.svg`，`docs/statistics-plan.md`。 |
 | 任务 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |

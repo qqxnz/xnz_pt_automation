@@ -1,0 +1,111 @@
+<svg width="1040" height="760" viewBox="0 0 1040 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#111827" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .t{font-family:Inter,Arial,sans-serif}
+      .dark{fill:#111827}
+      .muted{fill:#6b7280}
+      .label{font-size:14px;font-weight:800}
+      .hint{font-size:13px}
+    </style>
+  </defs>
+  <rect width="1040" height="760" fill="#f6f8fb"/>
+  <g filter="url(#shadow)" transform="translate(58 42)">
+    <rect width="924" height="664" rx="24" fill="#fff"/>
+    <rect width="924" height="82" rx="24" fill="#f8fbff"/>
+    <text x="32" y="38" class="t dark" font-size="26" font-weight="800">新增 / 编辑下载器</text>
+    <text x="32" y="62" class="t muted" font-size="14">配置 qBittorrent Web UI 连接信息，保存后可立即测试连接。</text>
+    <text x="872" y="52" class="t muted" font-size="28">x</text>
+
+    <g transform="translate(32 118)">
+      <text x="0" y="0" class="t dark" font-size="18" font-weight="800">基础信息</text>
+      <text x="0" y="42" class="t muted label">下载器名称</text>
+      <rect x="0" y="54" width="384" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="84" class="t dark" font-size="15">NAS QB</text>
+      <text x="0" y="132" class="t muted label">类型</text>
+      <rect x="0" y="144" width="384" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="174" class="t dark" font-size="15">qBittorrent</text>
+      <path d="M350 164l8 8 8-8" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="0" y="216" width="20" height="20" rx="5" fill="#3f7cff"/>
+      <path d="M5 226l4 4 7-9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="34" y="232" class="t dark" font-size="15" font-weight="800">启用下载器</text>
+    </g>
+
+    <g transform="translate(468 118)">
+      <text x="0" y="0" class="t dark" font-size="18" font-weight="800">连接信息</text>
+      <text x="0" y="42" class="t muted label">服务地址</text>
+      <rect x="0" y="54" width="384" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="84" class="t dark" font-size="15">http://nas:8080</text>
+      <text x="0" y="132" class="t muted label">用户名</text>
+      <rect x="0" y="144" width="180" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="174" class="t dark" font-size="15">admin</text>
+      <text x="204" y="132" class="t muted label">密码</text>
+      <rect x="204" y="144" width="180" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="222" y="174" class="t muted" font-size="15">已保存，留空不修改</text>
+      <text x="0" y="222" class="t muted label">密码处理</text>
+      <rect x="0" y="234" width="120" height="38" rx="13" fill="#eef6ff" stroke="#bfdbfe"/>
+      <text x="60" y="258" text-anchor="middle" fill="#2563eb" class="t" font-size="14" font-weight="800">保持原密码</text>
+      <rect x="132" y="234" width="106" height="38" rx="13" fill="#fff" stroke="#dbe4f0"/>
+      <text x="185" y="258" text-anchor="middle" class="t dark" font-size="14" font-weight="800">更新密码</text>
+      <rect x="250" y="234" width="106" height="38" rx="13" fill="#fff" stroke="#dbe4f0"/>
+      <text x="303" y="258" text-anchor="middle" class="t dark" font-size="14" font-weight="800">清空密码</text>
+    </g>
+
+    <g transform="translate(32 384)">
+      <text x="0" y="0" class="t dark" font-size="18" font-weight="800">默认推送设置</text>
+      <text x="0" y="42" class="t muted label">默认保存路径</text>
+      <rect x="0" y="54" width="384" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="84" class="t dark" font-size="15">/downloads/pt</text>
+      <text x="0" y="132" class="t muted label">默认分类</text>
+      <rect x="0" y="144" width="180" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="18" y="174" class="t dark" font-size="15">PT</text>
+      <text x="204" y="132" class="t muted label">默认标签</text>
+      <rect x="204" y="144" width="180" height="48" rx="14" fill="#f9fafb" stroke="#dbe4f0"/>
+      <text x="222" y="174" class="t dark" font-size="15">free, auto</text>
+      <rect x="0" y="216" width="20" height="20" rx="5" fill="#fff" stroke="#dbe4f0"/>
+      <text x="34" y="232" class="t dark" font-size="15" font-weight="800">添加后暂停</text>
+      <rect x="170" y="216" width="20" height="20" rx="5" fill="#3f7cff"/>
+      <path d="M175 226l4 4 7-9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="204" y="232" class="t dark" font-size="15" font-weight="800">保存后测试连接</text>
+    </g>
+
+    <g transform="translate(468 420)">
+      <rect width="384" height="146" rx="18" fill="#f0fdf4" stroke="#bbf7d0"/>
+      <text x="22" y="36" fill="#15803d" class="t" font-size="18" font-weight="800">连接测试成功</text>
+      <text x="22" y="68" class="t dark" font-size="15">版本：qBittorrent v5.0.4</text>
+      <text x="22" y="96" class="t dark" font-size="15">当前速度：上传 12.8 MB/s · 下载 48.2 MB/s</text>
+      <text x="22" y="124" class="t muted hint">修改地址、用户名或密码后，测试结果会标记为待重新测试。</text>
+    </g>
+
+    <rect x="0" y="586" width="924" height="1" fill="#e5e7eb"/>
+    <text x="32" y="626" class="t muted" font-size="14">校验：名称必填且唯一；服务地址必须包含 http(s)；密码不回显；清空密码需二次确认。</text>
+    <rect x="504" y="606" width="86" height="44" rx="14" fill="#fff" stroke="#dbe4f0"/>
+    <text x="547" y="634" text-anchor="middle" class="t dark" font-size="15" font-weight="800">取消</text>
+    <rect x="606" y="606" width="104" height="44" rx="14" fill="#fff" stroke="#dbe4f0"/>
+    <text x="658" y="634" text-anchor="middle" fill="#2563eb" class="t" font-size="15" font-weight="800">测试连接</text>
+    <rect x="726" y="606" width="118" height="44" rx="14" fill="#eef6ff"/>
+    <text x="785" y="634" text-anchor="middle" fill="#2563eb" class="t" font-size="15" font-weight="800">保存并测试</text>
+    <rect x="860" y="606" width="42" height="44" rx="14" fill="#3f7cff"/>
+    <text x="881" y="634" text-anchor="middle" fill="#fff" class="t" font-size="15" font-weight="800">保存</text>
+  </g>
+
+  <g filter="url(#shadow)" transform="translate(722 76)">
+    <rect width="206" height="350" rx="28" fill="#111827"/>
+    <rect x="12" y="16" width="182" height="318" rx="22" fill="#fff"/>
+    <text x="28" y="54" class="t dark" font-size="16" font-weight="800">编辑下载器</text>
+    <rect x="28" y="76" width="150" height="38" rx="12" fill="#f9fafb" stroke="#dbe4f0"/>
+    <text x="40" y="100" class="t dark" font-size="12">NAS QB</text>
+    <rect x="28" y="126" width="150" height="38" rx="12" fill="#f9fafb" stroke="#dbe4f0"/>
+    <text x="40" y="150" class="t dark" font-size="12">http://nas:8080</text>
+    <rect x="28" y="176" width="150" height="38" rx="12" fill="#f9fafb" stroke="#dbe4f0"/>
+    <text x="40" y="200" class="t muted" font-size="12">已保存，留空不修改</text>
+    <rect x="28" y="226" width="150" height="44" rx="14" fill="#f0fdf4"/>
+    <text x="42" y="252" fill="#15803d" class="t" font-size="12" font-weight="800">连接测试成功</text>
+    <rect x="28" y="288" width="70" height="32" rx="12" fill="#fff" stroke="#dbe4f0"/>
+    <text x="63" y="309" text-anchor="middle" class="t dark" font-size="12" font-weight="800">取消</text>
+    <rect x="108" y="288" width="70" height="32" rx="12" fill="#3f7cff"/>
+    <text x="143" y="309" text-anchor="middle" fill="#fff" class="t" font-size="12" font-weight="800">保存</text>
+  </g>
+</svg>

@@ -1150,7 +1150,7 @@ app.listen(3000)
 | 首页 | `docs/dashboard-plan.md` | `designs/dashboard.svg` |
 | 站点 | `docs/sites-plan.md` | `designs/sites.svg`、`designs/sites-form.svg` |
 | 种子 | `docs/torrents-plan.md` | `designs/torrents.svg` |
-| 下载器 | `docs/downloaders-plan.md` | `designs/downloaders.svg` |
+| 下载器 | `docs/downloaders-plan.md` | `designs/downloaders.svg`、`designs/downloaders-form.svg` |
 | 代理管理 | `docs/proxies-plan.md` | `designs/proxies.svg` |
 | 数据统计 | `docs/statistics-plan.md` | `designs/statistics.svg` |
 | 任务 | `docs/tasks-plan.md` | `designs/tasks.svg` |
