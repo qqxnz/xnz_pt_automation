@@ -3,7 +3,7 @@
     <div class="dashboard-head">
       <div>
         <h1>日志</h1>
-        <p>查看系统操作记录和定时任务运行记录。</p>
+        <p>查看系统操作记录和任务运行记录。</p>
       </div>
       <div class="head-actions">
         <span v-if="lastUpdatedAt">最近更新：{{ lastUpdatedAt }}</span>
@@ -25,7 +25,7 @@
             操作日志
           </button>
           <button type="button" :class="{ active: activeType === 'task' }" @click="switchType('task')">
-            定时任务日志
+            任务日志
           </button>
         </div>
         <span>{{ total }} 条记录</span>
@@ -45,7 +45,7 @@
         </article>
       </div>
       <div v-else class="empty-tip">
-        {{ activeType === 'operation' ? '暂无操作日志。' : '暂无定时任务日志。' }}
+        {{ activeType === 'operation' ? '暂无操作日志。' : '暂无任务日志。' }}
       </div>
 
       <div class="pager">
@@ -59,10 +59,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import { getLogs, type LogType, type OperationLog, type TaskLog } from '../api/logs'
 
-const activeType = ref<LogType>('operation')
+const route = useRoute()
+const activeType = ref<LogType>(route.query.type === 'task' ? 'task' : 'operation')
 const operationLogs = ref<OperationLog[]>([])
 const taskLogs = ref<TaskLog[]>([])
 const loading = ref(false)
@@ -110,13 +112,33 @@ function secondaryText(item: OperationLog | TaskLog) {
   if (item.type === 'TASK') {
     return [
       item.taskId ? `任务 ID：${item.taskId}` : '系统任务',
+      item.runMode ? `来源：${runModeText(item.runMode)}` : '',
       item.startedAt ? `开始：${formatTime(item.startedAt)}` : '',
-      item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : ''
+      item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : '',
+      taskResultText(item)
     ]
       .filter(Boolean)
       .join(' / ')
   }
   return [item.actorName ? `操作者：${item.actorName}` : '操作者：未知', item.ip ? `IP：${item.ip}` : ''].filter(Boolean).join(' / ')
+}
+
+function runModeText(mode: NonNullable<TaskLog['runMode']>) {
+  const map = {
+    AUTO: '自动执行',
+    MANUAL_RUN: '手动运行'
+  }
+  return map[mode]
+}
+
+function taskResultText(item: TaskLog) {
+  const parts = [
+    item.fetchedCount === undefined ? '' : `抓取：${item.fetchedCount}`,
+    item.matchedCount === undefined ? '' : `命中：${item.matchedCount}`,
+    item.pushedCount === undefined ? '' : `推送成功：${item.pushedCount}`,
+    item.pushFailedCount === undefined ? '' : `推送失败：${item.pushFailedCount}`
+  ].filter(Boolean)
+  return parts.join('，')
 }
 
 async function loadLogs() {

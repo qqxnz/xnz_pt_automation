@@ -29,6 +29,7 @@ designs/
 | [docs/proxies-plan.md](docs/proxies-plan.md) | 代理管理模块方案、执行清单和 TODO。 |
 | [docs/statistics-plan.md](docs/statistics-plan.md) | 数据统计模块方案、执行清单和 TODO。 |
 | [docs/tasks-plan.md](docs/tasks-plan.md) | 任务模块方案、执行清单和 TODO。 |
+| [docs/logs-plan.md](docs/logs-plan.md) | 日志模块方案、执行清单和 TODO。 |
 | [docs/settings-plan.md](docs/settings-plan.md) | 系统设置模块方案、执行清单和 TODO。 |
 | [designs/design-spec.md](designs/design-spec.md) | 设计规范、设计稿产出规则和文件命名约定。 |
 | [designs/login.svg](designs/login.svg) | 登录页设计稿。 |
@@ -50,6 +51,7 @@ designs/
 | 代理管理 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/proxies.svg`，`docs/proxies-plan.md`。 |
 | 数据统计 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/statistics.svg`，`docs/statistics-plan.md`。 |
 | 任务 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |
+| 日志 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/logs.svg`，`docs/logs-plan.md`。 |
 | 系统设置 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/settings.svg`，`docs/settings-plan.md`。 |
 
 ## 开发前限制规则

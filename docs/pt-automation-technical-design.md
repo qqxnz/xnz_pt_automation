@@ -63,7 +63,7 @@ Express Application
   |
 任务模块选择站点、下载器、间隔、免费规则并创建任务
   |
-任务定时抓取站点种子并按规则推送到下载器
+任务打开自动执行开关后按间隔抓取站点种子，或由用户点击运行立即执行一次，并按规则推送到下载器
   |
 种子模块查看抓取记录、当前是否免费、推送到哪个下载器和下载器任务状态
 ```
@@ -292,6 +292,7 @@ type ProxyConfig = {
 ```ts
 type FreeTorrent = {
   siteId: string
+  siteName: string
   torrentId: string
   title: string
   size: number
@@ -303,8 +304,46 @@ type FreeTorrent = {
   leechers?: number
   snatches?: number
   publishAt?: Date
+  sourceTaskId?: string
+  sourceTaskName?: string
+  sourceRunMode?: 'AUTO' | 'MANUAL_RUN'
+  targetDownloaderId?: string
+  targetDownloaderName?: string
 }
 ```
+
+入库后的种子记录需要保留来源任务和目标下载器快照，便于任务或下载器被删除后仍能查看历史：
+
+```ts
+type TorrentRecord = {
+  id: string
+  siteId: string
+  siteName: string
+  torrentId?: string
+  title: string
+  size: number
+  discountType: 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
+  isFreeNow: boolean
+  currentState: 'NEW' | 'FREE_NOW' | 'EXPIRING_SOON' | 'EXPIRED' | 'PUSHED' | 'PUSH_FAILED' | 'DOWNLOADER_DELETED'
+  downloadUrlEncrypted?: string
+  downloadUrlHash?: string
+  detailUrl?: string
+  sourceTaskId?: string
+  sourceTaskNameSnapshot?: string
+  sourceRunMode: 'AUTO' | 'MANUAL_RUN'
+  targetDownloaderId?: string
+  targetDownloaderNameSnapshot?: string
+  pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
+  torrentHash?: string
+  downloaderState?: string
+  errorMessage?: string
+  firstSeenAt: Date
+  lastSeenAt: Date
+  pushedAt?: Date
+}
+```
+
+`downloadUrl` 不在列表接口明文返回。后端可加密保存完整链接，并额外保存 `downloadUrlHash` 用于去重或排查。
 
 ### 6.2 去重规则
 
@@ -461,7 +500,8 @@ type QbTorrentSnapshot = {
 任务名称
 站点
 下载器
-执行间隔
+执行间隔，默认 30 分钟，最小 30 分钟
+自动执行开关
 是否只抓免费
 是否自动推送
 优惠类型范围
@@ -469,10 +509,12 @@ type QbTorrentSnapshot = {
 保存路径、分类、标签覆盖
 ```
 
-用户任务运行流程：
+自动执行开关替代旧的任务启用/暂停调度语义。打开开关时从当前时间开始计时，设置 `nextRunAt = now + intervalMinutes`；关闭开关时停止自动计时并清空 `nextRunAt`。
+
+用户任务真实运行流程：
 
 ```text
-任务触发
+任务触发：AUTO 或 MANUAL_RUN
   |
 读取绑定站点和下载器
   |
@@ -482,10 +524,16 @@ type QbTorrentSnapshot = {
   |
 写入或更新种子记录
   |
+记录来源任务 id、任务名称快照、sourceRunMode、目标下载器 id、下载器名称快照
+  |
 autoPush=true 时推送到绑定下载器
   |
 记录目标下载器、torrent hash、推送状态和任务日志
+  |
+如果自动执行开关打开，设置 nextRunAt = finishedAt + intervalMinutes
 ```
+
+测试流程只抓取并过滤种子，然后返回弹窗核对结果；不写入种子记录、不推送下载器、不写任务日志，只写操作日志。
 
 系统维护作业由系统内置，用于支撑任务运行：
 
@@ -505,8 +553,12 @@ sync-downloader-status
 - 同一个任务未结束时，不允许重复启动
 - 任务失败需要记录错误日志
 - 手动执行任务也需要走同一套任务锁
+- 点击【运行】不检查 nextRunAt 是否到期，立即执行一次真实任务，并重新开始计时
+- 点击【测试】只返回抓取核对结果，不记录、不推送
 - 站点或下载器被禁用时跳过运行并记录明确错误
-- 避免高频访问 PT 站点
+- 新建任务默认间隔为 30 分钟；接口未传间隔时按 30 分钟保存
+- 任务执行间隔最小值为 30 分钟，避免高频访问 PT 站点
+- 任务的新建、编辑、开启、关闭、测试、运行和删除记录到操作日志
 
 ## 11. 后端 API 设计
 
@@ -576,11 +628,45 @@ POST   /api/tasks
 GET    /api/tasks/:id
 PUT    /api/tasks/:id
 DELETE /api/tasks/:id
+POST   /api/tasks/:id/auto-run
+POST   /api/tasks/:id/test
 POST   /api/tasks/:id/run
 GET    /api/tasks/:id/logs
 ```
 
-### 11.6 代理接口
+### 11.6 日志接口
+
+```text
+GET /api/logs?type=operation&page=&pageSize=&keyword=&status=&startAt=&endAt=
+GET /api/logs?type=task&page=&pageSize=&keyword=&status=&taskId=&runMode=&startAt=&endAt=
+```
+
+任务日志结构：
+
+```ts
+type TaskLog = {
+  id: string
+  type: 'TASK'
+  taskId?: string
+  taskName: string
+  runMode: 'AUTO' | 'MANUAL_RUN'
+  message: string
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+  startedAt?: string
+  finishedAt?: string
+  fetchedCount?: number
+  matchedCount?: number
+  pushedCount?: number
+  pushFailedCount?: number
+  summary?: string
+  errorMessage?: string
+  createdAt: string
+}
+```
+
+任务的新建、编辑、打开自动执行、关闭自动执行、测试、运行和删除进入操作日志；AUTO 和 MANUAL_RUN 的真实任务执行结果进入任务日志；TEST 不进入任务日志。
+
+### 11.7 代理接口
 
 ```text
 GET    /api/proxies
@@ -591,7 +677,7 @@ DELETE /api/proxies/:id
 POST   /api/proxies/:id/test
 ```
 
-### 11.7 认证与账户接口
+### 11.8 认证与账户接口
 
 系统采用单用户模式，默认初始化用户为：
 
@@ -696,17 +782,23 @@ type ChangePasswordRequest = {
 展示字段：
 
 - 站点
-- 标题
+- 种子名称
 - 大小
 - 优惠类型
 - 当前是否免费
+- 当前状态
 - 免费结束时间
 - 剩余免费时间
 - 做种数
 - 下载数
 - 推送状态
+- 种链接状态
 - 目标下载器
 - 下载器任务状态
+- 下载器任务 Hash
+- 来源任务
+- 任务名称
+- 来源运行模式
 - 操作
 
 支持操作：
@@ -715,12 +807,28 @@ type ChangePasswordRequest = {
 - 批量推送
 - 删除下载器任务
 - 查看失败原因
+- 查看详情，展示种子记录、来源任务、脱敏链接信息和推送历史
 - 按站点筛选
 - 按下载器筛选
+- 按来源任务筛选
 - 按状态筛选
 - 按关键词搜索
 
-### 12.6 代理管理页
+### 12.6 日志页
+
+展示字段：
+
+- 操作日志：操作时间、操作类型、操作说明、操作者、IP、状态
+- 任务日志：执行时间、任务名称、运行来源、执行状态、抓取数量、命中数量、推送成功数量、推送失败数量、执行摘要、报错信息
+
+支持操作：
+
+- 切换操作日志和任务日志
+- 按关键词、状态和时间范围筛选
+- 任务日志按任务和运行来源筛选
+- 分页查看日志
+
+### 12.7 代理管理页
 
 展示字段：
 
@@ -739,7 +847,7 @@ type ChangePasswordRequest = {
 - 删除代理
 - 测试代理连通性
 
-### 12.7 统计页
+### 12.8 统计页
 
 展示：
 
@@ -751,7 +859,7 @@ type ChangePasswordRequest = {
 - 种子推送数量趋势
 - 自动删除数量统计
 
-### 12.8 系统设置页
+### 12.9 系统设置页
 
 功能：
 
@@ -1120,7 +1228,7 @@ app.listen(3000)
 - NexusPHP 种子抓取
 - 种子列表
 - 手动推送到下载器
-- 定时抓取种子
+- 自动执行抓取种子
 - 免费过期自动删除
 - 站点上传下载统计
 - 任务日志

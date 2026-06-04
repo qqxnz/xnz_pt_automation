@@ -5,6 +5,8 @@ import DownloadersPage from '../pages/DownloadersPage.vue'
 import LogsPage from '../pages/LogsPage.vue'
 import ModulePage from '../pages/ModulePage.vue'
 import SitesPage from '../pages/SitesPage.vue'
+import TasksPage from '../pages/TasksPage.vue'
+import TorrentsPage from '../pages/TorrentsPage.vue'
 import { useAuthStore } from '../stores/auth'
 
 export const router = createRouter({
@@ -15,8 +17,8 @@ export const router = createRouter({
     { path: '/dashboard', component: DashboardPage, meta: { requiresAuth: true } },
     { path: '/sites', name: 'sites', component: SitesPage, meta: { requiresAuth: true } },
     { path: '/downloaders', name: 'downloaders', component: DownloadersPage, meta: { requiresAuth: true } },
-    { path: '/tasks', name: 'tasks', component: ModulePage, meta: { requiresAuth: true } },
-    { path: '/torrents', name: 'torrents', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/tasks', name: 'tasks', component: TasksPage, meta: { requiresAuth: true } },
+    { path: '/torrents', name: 'torrents', component: TorrentsPage, meta: { requiresAuth: true } },
     { path: '/proxies', name: 'proxies', component: ModulePage, meta: { requiresAuth: true } },
     { path: '/logs', name: 'logs', component: LogsPage, meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: ModulePage, meta: { requiresAuth: true } },

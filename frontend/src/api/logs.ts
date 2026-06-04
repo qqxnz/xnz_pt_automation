@@ -18,10 +18,17 @@ export type TaskLog = {
   type: 'TASK'
   taskId?: string
   taskName: string
+  runMode?: 'AUTO' | 'MANUAL_RUN'
   message: string
   status: 'SUCCESS' | 'FAILED' | 'RUNNING'
   startedAt?: string
   finishedAt?: string
+  fetchedCount?: number
+  matchedCount?: number
+  pushedCount?: number
+  pushFailedCount?: number
+  summary?: string
+  errorMessage?: string
   createdAt: string
 }
 

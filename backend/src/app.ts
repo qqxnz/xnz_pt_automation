@@ -9,6 +9,8 @@ import { logsRouter } from './routes/logs.js'
 import { proxiesRouter } from './routes/proxies.js'
 import { sitesRouter } from './routes/sites.js'
 import { statsRouter } from './routes/stats.js'
+import { tasksRouter } from './routes/tasks.js'
+import { torrentsRouter } from './routes/torrents.js'
 import { requestLogger } from './utils/logger.js'
 
 export const app = express()
@@ -27,6 +29,8 @@ app.use('/api/logs', logsRouter)
 app.use('/api/sites', sitesRouter)
 app.use('/api/proxies', proxiesRouter)
 app.use('/api/downloaders', downloadersRouter)
+app.use('/api/tasks', tasksRouter)
+app.use('/api/torrents', torrentsRouter)
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const frontendDist = path.resolve(backendDir, '..', 'frontend', 'dist')

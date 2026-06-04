@@ -53,7 +53,7 @@ export async function recordOperationLog(payload: OperationLogPayload) {
 
 export async function recordTaskLog(payload: TaskLogPayload) {
   const log = await appendTaskLog(payload).catch((error) => {
-    logger.error('task', '定时任务日志写入失败', {
+    logger.error('task', '任务日志写入失败', {
       taskId: payload.taskId,
       taskName: payload.taskName,
       status: payload.status,

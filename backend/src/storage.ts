@@ -30,11 +30,76 @@ export type TaskLogRecord = {
   type: 'TASK'
   taskId?: string
   taskName: string
+  runMode?: 'AUTO' | 'MANUAL_RUN'
   message: string
   status: 'SUCCESS' | 'FAILED' | 'RUNNING'
   startedAt?: string
   finishedAt?: string
+  fetchedCount?: number
+  matchedCount?: number
+  pushedCount?: number
+  pushFailedCount?: number
+  summary?: string
+  errorMessage?: string
   createdAt: string
+}
+
+export type TaskRecord = {
+  id: string
+  name: string
+  siteId: string
+  downloaderId: string
+  autoRunEnabled: boolean
+  autoRunStartedAt?: string
+  nextRunAt?: string
+  intervalMinutes: number
+  freeOnly: boolean
+  autoPush: boolean
+  discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  expiringSoonMinutes?: number
+  savePathOverride?: string
+  categoryOverride?: string
+  tagsOverride?: string[]
+  running: boolean
+  lastRunMode?: 'AUTO' | 'MANUAL_RUN'
+  lastStartedAt?: string
+  lastFinishedAt?: string
+  lastStatus?: 'SUCCESS' | 'FAILED'
+  lastSummary?: string
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type TorrentRecord = {
+  id: string
+  siteId: string
+  siteName: string
+  torrentId?: string
+  title: string
+  size: number
+  discountType: 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
+  isFreeNow: boolean
+  currentState: 'NEW' | 'FREE_NOW' | 'EXPIRING_SOON' | 'EXPIRED' | 'PUSHED' | 'PUSH_FAILED' | 'DOWNLOADER_DELETED'
+  freeEndAt?: string
+  seeders?: number
+  leechers?: number
+  pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
+  linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+  detailUrl?: string
+  downloaderId?: string
+  downloaderName?: string
+  downloaderType?: 'QBITTORRENT'
+  downloaderState?: string
+  torrentHash?: string
+  sourceTaskId?: string
+  sourceTaskName?: string
+  sourceRunMode: 'AUTO' | 'MANUAL_RUN'
+  errorMessage?: string
+  firstSeenAt: string
+  lastSeenAt: string
+  pushedAt?: string
+  downloadUrlHash?: string
 }
 
 export type ProxyRecord = {
@@ -96,6 +161,8 @@ type AppState = {
   sites: SiteRecord[]
   proxies: ProxyRecord[]
   downloaders: DownloaderRecord[]
+  tasks: TaskRecord[]
+  torrents: TorrentRecord[]
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -115,7 +182,9 @@ async function initialState(): Promise<AppState> {
     taskLogs: [],
     sites: [],
     proxies: [],
-    downloaders: []
+    downloaders: [],
+    tasks: [],
+    torrents: []
   }
 }
 
@@ -126,7 +195,9 @@ function normalizeState(state: Partial<AppState>): AppState {
     taskLogs: state.taskLogs ?? [],
     sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
     proxies: state.proxies ?? [],
-    downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string')
+    downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
+    tasks: (state.tasks ?? []).filter((task) => typeof task.name === 'string'),
+    torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string')
   }
 }
 
