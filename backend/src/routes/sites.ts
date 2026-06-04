@@ -34,7 +34,7 @@ type TrafficStats = {
   downloaded?: number
 }
 
-type TorrentListItem = {
+export type TorrentListItem = {
   id: string
   title: string
   subtitle?: string
@@ -131,15 +131,15 @@ function getSiteAdapter(domain: string) {
   return getSiteDefinition(domain) ?? DEFAULT_NEXUSPHP_DEFINITION
 }
 
-function siteDisplayName(site: SiteRecord) {
+export function siteDisplayName(site: SiteRecord) {
   return getSiteDefinition(site.domain)?.displayName ?? site.domain
 }
 
-function siteBaseUrl(site: SiteRecord) {
+export function siteBaseUrl(site: SiteRecord) {
   return `https://${getSiteDefinition(site.domain)?.canonicalDomain ?? site.domain}`
 }
 
-function resolveSiteUrl(site: SiteRecord, value: string) {
+export function resolveSiteUrl(site: SiteRecord, value: string) {
   return new URL(value, `${siteBaseUrl(site)}/`).toString()
 }
 
@@ -543,7 +543,7 @@ async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPat
   return { total: items.length, items }
 }
 
-async function browseTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
+export async function browseTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
   const definition = getSiteDefinition(site.domain)
   const errors: string[] = []
 

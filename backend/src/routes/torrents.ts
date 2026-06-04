@@ -1,9 +1,68 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState, writeState } from '../storage.js'
+import type { TorrentRecord } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 
 export const torrentsRouter = Router()
+
+class TorrentPushError extends Error {}
+
+function safeTorrent(torrent: TorrentRecord) {
+  const { downloadUrl: _downloadUrl, ...safe } = torrent
+  if (safe.pushStatus === 'PUSHED' && !torrent.downloadUrl) {
+    return {
+      ...safe,
+      pushStatus: 'PUSH_FAILED',
+      currentState: 'PUSH_FAILED',
+      downloaderState: undefined,
+      torrentHash: undefined,
+      errorMessage: safe.errorMessage ?? '缺少真实下载链接，无法确认已推送到下载器'
+    }
+  }
+  return safe
+}
+
+async function qbFetch(host: string, path: string, options: RequestInit = {}, timeoutMs = 15000) {
+  const response = await fetch(new URL(path, `${host}/`), {
+    ...options,
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: {
+      Accept: 'application/json,text/plain,*/*',
+      ...(options.headers ?? {})
+    }
+  })
+  return response
+}
+
+async function loginQb(downloader: { host: string; username?: string; password?: string }) {
+  if (!downloader.username && !downloader.password) return undefined
+  const body = new URLSearchParams({ username: downloader.username ?? '', password: downloader.password ?? '' })
+  const response = await qbFetch(downloader.host, '/api/v2/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  })
+  const text = await response.text()
+  if (!response.ok || text.trim().toLowerCase() !== 'ok.') throw new TorrentPushError('下载器认证失败')
+  return response.headers.get('set-cookie')?.split(';')[0]
+}
+
+async function addUrlToQb(downloader: { host: string; username?: string; password?: string }, downloadUrl?: string) {
+  if (!downloadUrl) throw new TorrentPushError('缺少真实种子下载链接')
+  const cookie = await loginQb(downloader)
+  const body = new URLSearchParams({ urls: downloadUrl })
+  const response = await qbFetch(downloader.host, '/api/v2/torrents/add', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(cookie ? { Cookie: cookie } : {})
+    },
+    body
+  })
+  if (response.status === 403) throw new TorrentPushError('下载器认证失败')
+  if (!response.ok) throw new TorrentPushError(`下载器添加任务失败：HTTP ${response.status}`)
+}
 
 function operationActor(res: { locals: { user?: { id?: string; username?: string } } }, req: { ip?: string; get(name: string): string | undefined }) {
   return {
@@ -16,13 +75,14 @@ function operationActor(res: { locals: { user?: { id?: string; username?: string
 
 function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
   const now = Date.now()
+  const safeItems = items.map(safeTorrent)
   return {
-    total: items.length,
-    auto: items.filter((item) => item.sourceRunMode === 'AUTO').length,
-    manual: items.filter((item) => item.sourceRunMode === 'MANUAL_RUN').length,
-    pending: items.filter((item) => item.pushStatus === 'NEW').length,
-    failed: items.filter((item) => item.pushStatus === 'PUSH_FAILED').length,
-    expiringSoon: items.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() - now <= 2 * 60 * 60_000).length
+    total: safeItems.length,
+    auto: safeItems.filter((item) => item.sourceRunMode === 'AUTO').length,
+    manual: safeItems.filter((item) => item.sourceRunMode === 'MANUAL_RUN').length,
+    pending: safeItems.filter((item) => item.pushStatus === 'NEW').length,
+    failed: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED').length,
+    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() - now <= 2 * 60 * 60_000).length
   }
 }
 
@@ -46,14 +106,14 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
     return true
   })
   const start = (page - 1) * pageSize
-  res.json({ items: filtered.slice(start, start + pageSize), total: filtered.length, page, pageSize, stats: stats(state.torrents) })
+  res.json({ items: filtered.slice(start, start + pageSize).map(safeTorrent), total: filtered.length, page, pageSize, stats: stats(state.torrents) })
 })
 
 torrentsRouter.get('/:id', requireAuth, async (req, res) => {
   const state = await readState()
   const torrent = state.torrents.find((item) => item.id === String(req.params.id))
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
-  res.json(torrent)
+  res.json(safeTorrent(torrent))
 })
 
 torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
@@ -63,7 +123,26 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   const downloader = state.downloaders.find((item) => item.id === (String((req.body as { downloaderId?: string }).downloaderId ?? '') || torrent.downloaderId))
   if (!downloader) return res.status(400).json({ message: '请选择下载器' })
   if (!downloader.enabled) return res.status(400).json({ message: '下载器已禁用' })
-  if (torrent.linkStatus !== 'SAVED') return res.status(400).json({ message: '种链接缺失，无法推送' })
+  if (torrent.linkStatus !== 'SAVED' || !torrent.downloadUrl) {
+    torrent.pushStatus = 'PUSH_FAILED'
+    torrent.currentState = 'PUSH_FAILED'
+    torrent.errorMessage = '缺少真实种子下载链接'
+    torrent.torrentHash = undefined
+    torrent.downloaderState = undefined
+    await writeState(state)
+    return res.status(400).json({ message: torrent.errorMessage })
+  }
+  try {
+    await addUrlToQb(downloader, torrent.downloadUrl)
+  } catch (error) {
+    torrent.pushStatus = 'PUSH_FAILED'
+    torrent.currentState = 'PUSH_FAILED'
+    torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
+    torrent.torrentHash = undefined
+    torrent.downloaderState = undefined
+    await writeState(state)
+    return res.status(400).json({ message: torrent.errorMessage })
+  }
   const now = new Date().toISOString()
   torrent.downloaderId = downloader.id
   torrent.downloaderName = downloader.name
@@ -73,7 +152,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   torrent.currentState = 'PUSHED'
   torrent.pushedAt = now
   torrent.errorMessage = undefined
-  torrent.torrentHash = torrent.torrentHash ?? torrent.downloadUrlHash
+  torrent.torrentHash = undefined
   await writeState(state)
   await recordOperationLog({
     action: '推送种子',
@@ -81,7 +160,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     status: 'SUCCESS',
     ...operationActor(res, req)
   })
-  res.json(torrent)
+  res.json(safeTorrent(torrent))
 })
 
 torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
@@ -89,23 +168,36 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
   const state = await readState()
   let successCount = 0
   const failed: Array<{ id: string; message: string }> = []
-  ids.forEach((id) => {
+  for (const id of ids) {
     const torrent = state.torrents.find((item) => item.id === id)
     if (!torrent) {
       failed.push({ id, message: '种子不存在' })
-      return
+      continue
     }
     const downloader = state.downloaders.find((item) => item.id === torrent.downloaderId)
-    if (!downloader?.enabled || torrent.linkStatus !== 'SAVED') {
-      failed.push({ id, message: !downloader?.enabled ? '下载器不可用' : '种链接缺失' })
-      return
+    if (!downloader?.enabled || torrent.linkStatus !== 'SAVED' || !torrent.downloadUrl) {
+      torrent.pushStatus = 'PUSH_FAILED'
+      torrent.currentState = 'PUSH_FAILED'
+      torrent.errorMessage = !downloader?.enabled ? '下载器不可用' : '缺少真实种子下载链接'
+      failed.push({ id, message: torrent.errorMessage })
+      continue
+    }
+    try {
+      await addUrlToQb(downloader, torrent.downloadUrl)
+    } catch (error) {
+      torrent.pushStatus = 'PUSH_FAILED'
+      torrent.currentState = 'PUSH_FAILED'
+      torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
+      failed.push({ id, message: torrent.errorMessage })
+      continue
     }
     torrent.pushStatus = 'PUSHED'
     torrent.currentState = 'PUSHED'
     torrent.downloaderState = 'added'
     torrent.pushedAt = new Date().toISOString()
+    torrent.errorMessage = undefined
     successCount += 1
-  })
+  }
   await writeState(state)
   await recordOperationLog({
     action: '批量推送种子',
@@ -130,5 +222,5 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
     status: 'SUCCESS',
     ...operationActor(res, req)
   })
-  res.json(torrent)
+  res.json(safeTorrent(torrent))
 })

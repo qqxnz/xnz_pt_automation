@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, type TaskRecord, type TorrentRecord, writeState } from '../storage.js'
+import { readState, type SiteRecord, type TaskRecord, type TorrentRecord, writeState } from '../storage.js'
 import { recordOperationLog, recordTaskLog } from '../utils/logger.js'
+import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
 
 export const tasksRouter = Router()
 
@@ -31,6 +32,8 @@ type CandidateTorrent = {
   seeders: number
   leechers: number
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+  detailUrl?: string
+  downloadUrl?: string
 }
 
 const DEFAULT_INTERVAL_MINUTES = 30
@@ -50,7 +53,7 @@ function operationActor(res: { locals: { user?: { id?: string; username?: string
 }
 
 function siteName(site?: { domain: string }) {
-  return site?.domain ?? '未知站点'
+  return site ? siteDisplayName(site as SiteRecord) : '未知站点'
 }
 
 function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof readState>>, existingId?: string) {
@@ -110,16 +113,37 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   }
 }
 
-function candidatesForTask(task: TaskRecord, siteLabel: string): CandidateTorrent[] {
-  const now = Date.now()
-  const base = siteLabel.replace(/^https?:\/\//, '').replace(/\/$/, '') || 'PT'
-  return [
-    { torrentId: `${task.id}-free-1`, title: `${base} Ubuntu 26.04 BluRay Remux`, size: 45_957_000_000, discountType: 'FREE', isFreeNow: true, freeEndAt: new Date(now + 90 * 60_000).toISOString(), seeders: 88, leechers: 12, linkStatus: 'SAVED' },
-    { torrentId: `${task.id}-2xfree-1`, title: `${base} Documentary Complete Pack`, size: 137_438_953_472, discountType: 'TWO_X_FREE', isFreeNow: true, freeEndAt: new Date(now + 34 * 60 * 60_000).toISOString(), seeders: 41, leechers: 6, linkStatus: 'SAVED' },
-    { torrentId: `${task.id}-halffree-1`, title: `${base} Classic Movie 1998 1080p`, size: 19_543_000_000, discountType: 'HALF_FREE', isFreeNow: true, freeEndAt: new Date(now + 7 * 60 * 60_000).toISOString(), seeders: 27, leechers: 3, linkStatus: 'SAVED' },
-    { torrentId: `${task.id}-normal-1`, title: `${base} TV Pack S01 2160p`, size: 68_719_476_736, discountType: 'NORMAL', isFreeNow: false, seeders: 53, leechers: 18, linkStatus: 'SAVED' },
-    { torrentId: `${task.id}-missing-link`, title: `${base} Archive Bonus Disc`, size: 8_589_934_592, discountType: 'FREE', isFreeNow: true, freeEndAt: new Date(now + 3 * 60 * 60_000).toISOString(), seeders: 9, leechers: 1, linkStatus: 'MISSING' }
-  ]
+function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['discountType'] {
+  const marker = `${item.tags.join(' ')} ${item.subtitle ?? ''}`.toLowerCase()
+  if (/(2x|2 x|two.?x|双倍|雙倍)/i.test(marker)) return 'TWO_X_FREE'
+  if (/(half|50%|50％|半价|半價)/i.test(marker)) return 'HALF_FREE'
+  if (/(free|免费|免費)/i.test(marker)) return 'FREE'
+  return 'NORMAL'
+}
+
+function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
+  if (!item.id || /m-team\.cc$/i.test(site.domain)) return undefined
+  return resolveSiteUrl(site, `/download.php?id=${encodeURIComponent(item.id)}`)
+}
+
+async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0]): Promise<CandidateTorrent[]> {
+  const result = await browseTorrents(site, '', 1, 50)
+  return result.items.map((item) => {
+    const discountType = discountTypeFromBrowseItem(item)
+    const downloadUrl = downloadUrlFromBrowseItem(site, item)
+    return {
+      torrentId: item.id,
+      title: item.title,
+      size: item.size ?? 0,
+      discountType,
+      isFreeNow: discountType !== 'NORMAL',
+      seeders: item.seeders ?? 0,
+      leechers: item.leechers ?? 0,
+      linkStatus: downloadUrl ? 'SAVED' : 'MISSING',
+      detailUrl: resolveSiteUrl(site, `/details.php?id=${encodeURIComponent(item.id)}`),
+      downloadUrl
+    }
+  })
 }
 
 function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
@@ -230,7 +254,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!task) return res.status(404).json({ message: '任务不存在' })
   const site = state.sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
-  const fetched = candidatesForTask(task, siteName(site))
+  const fetched = await candidatesForTask(site)
   const matched = matchedCandidates(task, fetched)
   await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个`)
   res.json({
@@ -263,16 +287,14 @@ tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
     if (!downloader) throw new Error('任务绑定下载器不存在')
     if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
-    const fetched = candidatesForTask(task, siteName(site))
+    const fetched = await candidatesForTask(site)
     const matched = matchedCandidates(task, fetched)
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
     matched.forEach((item) => {
       const existing = state.torrents.find((torrent) => torrent.siteId === site.id && torrent.torrentId === item.torrentId)
-      const pushed = task.autoPush && item.linkStatus === 'SAVED'
-      const failedPush = task.autoPush && item.linkStatus !== 'SAVED'
-      if (pushed) pushedCount += 1
+      const failedPush = task.autoPush
       if (failedPush) pushFailedCount += 1
       const record: TorrentRecord = {
         id: existing?.id ?? randomUUID(),
@@ -283,32 +305,33 @@ tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
         size: item.size,
         discountType: item.discountType,
         isFreeNow: item.isFreeNow,
-        currentState: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
+        currentState: failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
         freeEndAt: item.freeEndAt,
         seeders: item.seeders,
         leechers: item.leechers,
-        pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
+        pushStatus: failedPush ? 'PUSH_FAILED' : 'NEW',
         linkStatus: item.linkStatus,
-        detailUrl: `/sites/${site.id}`,
+        detailUrl: item.detailUrl,
         downloaderId: downloader.id,
         downloaderName: downloader.name,
         downloaderType: downloader.type,
-        downloaderState: pushed ? 'added' : undefined,
-        torrentHash: pushed ? torrentHash(task, item) : undefined,
+        downloaderState: undefined,
+        torrentHash: undefined,
         sourceTaskId: task.id,
         sourceTaskName: task.name,
         sourceRunMode: 'MANUAL_RUN',
-        errorMessage: failedPush ? '种链接缺失，无法推送' : undefined,
+        errorMessage: failedPush ? '没有真实种子下载链接，未推送到下载器' : undefined,
         firstSeenAt: existing?.firstSeenAt ?? now,
         lastSeenAt: now,
-        pushedAt: pushed ? now : existing?.pushedAt,
-        downloadUrlHash: torrentHash(task, item)
+        pushedAt: existing?.pushedAt,
+        downloadUrlHash: torrentHash(task, item),
+        downloadUrl: item.downloadUrl
       }
       if (existing) Object.assign(existing, record)
       else state.torrents.unshift(record)
     })
     const finishedAt = new Date().toISOString()
-    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个`
+    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     task.running = false
     task.lastFinishedAt = finishedAt
     task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'

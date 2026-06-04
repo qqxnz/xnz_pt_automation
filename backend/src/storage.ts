@@ -100,6 +100,7 @@ export type TorrentRecord = {
   lastSeenAt: string
   pushedAt?: string
   downloadUrlHash?: string
+  downloadUrl?: string
 }
 
 export type ProxyRecord = {
