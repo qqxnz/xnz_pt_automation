@@ -124,7 +124,7 @@
         <div class="test-result-list">
           <article v-for="item in testResult.items" :key="item.torrentId">
             <strong>{{ item.title }}</strong>
-            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · {{ item.linkStatus === 'SAVED' ? '链接已保存' : '链接缺失' }}</span>
+            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }}</span>
           </article>
           <div v-if="!testResult.items.length" class="empty-tip">没有命中当前任务规则的种子。</div>
         </div>

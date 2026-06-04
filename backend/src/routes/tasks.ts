@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState, type SiteRecord, type TaskRecord, type TorrentRecord, writeState } from '../storage.js'
 import { recordOperationLog, recordTaskLog } from '../utils/logger.js'
+import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
 import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
 
 export const tasksRouter = Router()
@@ -116,7 +117,6 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
 function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['discountType'] {
   const marker = `${item.tags.join(' ')} ${item.subtitle ?? ''}`.toLowerCase()
   if (/(2x|2 x|two.?x|双倍|雙倍)/i.test(marker)) return 'TWO_X_FREE'
-  if (/(half|50%|50％|半价|半價)/i.test(marker)) return 'HALF_FREE'
   if (/(free|免费|免費)/i.test(marker)) return 'FREE'
   return 'NORMAL'
 }
@@ -126,11 +126,11 @@ function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
   return resolveSiteUrl(site, `/download.php?id=${encodeURIComponent(item.id)}`)
 }
 
-async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0]): Promise<CandidateTorrent[]> {
+async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], options: { includeDownloadUrl: boolean }): Promise<CandidateTorrent[]> {
   const result = await browseTorrents(site, '', 1, 50)
   return result.items.map((item) => {
     const discountType = discountTypeFromBrowseItem(item)
-    const downloadUrl = downloadUrlFromBrowseItem(site, item)
+    const downloadUrl = options.includeDownloadUrl ? downloadUrlFromBrowseItem(site, item) : undefined
     return {
       torrentId: item.id,
       title: item.title,
@@ -156,6 +156,11 @@ function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
 
 function torrentHash(task: TaskRecord, item: CandidateTorrent) {
   return createHash('sha1').update(`${task.id}:${item.torrentId}`).digest('hex')
+}
+
+function torrentFilename(title: string, fallback: string) {
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 180).trim()
+  return `${safeTitle || fallback}.torrent`
 }
 
 async function logOperation(req: Parameters<typeof operationActor>[1], res: Parameters<typeof operationActor>[0], action: string, message: string, status: 'SUCCESS' | 'FAILED' = 'SUCCESS') {
@@ -254,7 +259,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!task) return res.status(404).json({ message: '任务不存在' })
   const site = state.sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
-  const fetched = await candidatesForTask(site)
+  const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
   const matched = matchedCandidates(task, fetched)
   await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个`)
   res.json({
@@ -287,15 +292,29 @@ tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
     if (!downloader) throw new Error('任务绑定下载器不存在')
     if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
-    const fetched = await candidatesForTask(site)
+    const fetched = await candidatesForTask(site, { includeDownloadUrl: true })
     const matched = matchedCandidates(task, fetched)
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
-    matched.forEach((item) => {
+    for (const item of matched) {
       const existing = state.torrents.find((torrent) => torrent.siteId === site.id && torrent.torrentId === item.torrentId)
-      const failedPush = task.autoPush
-      if (failedPush) pushFailedCount += 1
+      let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
+      let pushError: string | undefined
+      if (task.autoPush) {
+        try {
+          pushed = await addTorrentUrlToQb(downloader, site, item.downloadUrl, torrentFilename(item.title, item.torrentId), {
+            savePath: task.savePathOverride || downloader.savePath,
+            category: task.categoryOverride,
+            tags: task.tagsOverride
+          })
+          pushedCount += 1
+        } catch (error) {
+          pushError = error instanceof Error ? error.message : '推送到下载器失败'
+          pushFailedCount += 1
+        }
+      }
+      const failedPush = Boolean(pushError)
       const record: TorrentRecord = {
         id: existing?.id ?? randomUUID(),
         siteId: site.id,
@@ -305,31 +324,31 @@ tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
         size: item.size,
         discountType: item.discountType,
         isFreeNow: item.isFreeNow,
-        currentState: failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
+        currentState: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
         freeEndAt: item.freeEndAt,
         seeders: item.seeders,
         leechers: item.leechers,
-        pushStatus: failedPush ? 'PUSH_FAILED' : 'NEW',
+        pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
         linkStatus: item.linkStatus,
         detailUrl: item.detailUrl,
         downloaderId: downloader.id,
         downloaderName: downloader.name,
         downloaderType: downloader.type,
-        downloaderState: undefined,
-        torrentHash: undefined,
+        downloaderState: pushed?.state ?? undefined,
+        torrentHash: pushed?.hash,
         sourceTaskId: task.id,
         sourceTaskName: task.name,
         sourceRunMode: 'MANUAL_RUN',
-        errorMessage: failedPush ? '没有真实种子下载链接，未推送到下载器' : undefined,
+        errorMessage: pushError,
         firstSeenAt: existing?.firstSeenAt ?? now,
         lastSeenAt: now,
-        pushedAt: existing?.pushedAt,
+        pushedAt: pushed ? now : existing?.pushedAt,
         downloadUrlHash: torrentHash(task, item),
         downloadUrl: item.downloadUrl
       }
       if (existing) Object.assign(existing, record)
       else state.torrents.unshift(record)
-    })
+    }
     const finishedAt = new Date().toISOString()
     const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     task.running = false
