@@ -955,6 +955,11 @@ a {
   background: #fff7ed;
 }
 
+.warning-chip {
+  color: #92400e;
+  background: #fef3c7;
+}
+
 .unknown-chip,
 .muted-chip {
   color: #374151;

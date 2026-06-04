@@ -57,12 +57,12 @@
             <span>{{ task.intervalMinutes }} 分钟</span>
             <span>{{ formatDate(task.nextRunAt) }}</span>
             <span>
-              <span class="chip" :class="task.lastStatus === 'FAILED' ? 'offline-chip' : task.lastStatus === 'SUCCESS' ? 'online-chip' : 'muted-chip'">{{ statusText(task.lastStatus) }}</span>
+              <span class="chip" :class="statusClass(task)">{{ statusText(task) }}</span>
               <small>{{ task.lastSummary || '-' }}</small>
             </span>
             <span class="row-actions">
               <button type="button" :disabled="task.running" @click="testExistingTask(task)">测试</button>
-              <button type="button" :disabled="task.running" @click="runExistingTask(task)">运行</button>
+              <button type="button" :disabled="task.running" @click="runExistingTask(task)">{{ task.running ? '运行中...' : '运行' }}</button>
               <button type="button" @click="openEdit(task)">编辑</button>
               <router-link :to="{ path: '/logs', query: { type: 'task' } }">日志</router-link>
               <button class="danger-text" type="button" @click="removeTask(task)">删除</button>
@@ -307,6 +307,8 @@ async function testExistingTask(task: TaskItem) {
 
 async function runExistingTask(task: TaskItem) {
   try {
+    task.running = true
+    task.lastSummary = '运行中'
     const result = await runTask(task.id)
     Snackbar.success(result.summary)
     await loadTasks()
@@ -347,10 +349,18 @@ function rangeText(task: TaskItem) {
   return task.freeOnly ? task.discountTypes.map(discountText).join(', ') : '全部种子'
 }
 
-function statusText(status?: TaskItem['lastStatus']) {
-  if (status === 'SUCCESS') return '成功'
-  if (status === 'FAILED') return '失败'
+function statusText(task: TaskItem) {
+  if (task.running) return task.lastRunMode === 'AUTO' ? '定时运行中' : '运行中'
+  if (task.lastStatus === 'SUCCESS') return '成功'
+  if (task.lastStatus === 'FAILED') return '失败'
   return '未运行'
+}
+
+function statusClass(task: TaskItem) {
+  if (task.running) return 'warning-chip'
+  if (task.lastStatus === 'FAILED') return 'offline-chip'
+  if (task.lastStatus === 'SUCCESS') return 'online-chip'
+  return 'muted-chip'
 }
 
 onMounted(async () => {

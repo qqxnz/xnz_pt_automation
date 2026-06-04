@@ -8,6 +8,9 @@ import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem }
 
 export const tasksRouter = Router()
 
+const runningTaskIds = new Set<string>()
+let schedulerTimer: NodeJS.Timeout | undefined
+
 type TaskPayload = {
   name?: string
   siteId?: string
@@ -39,6 +42,9 @@ type CandidateTorrent = {
 
 const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 30
+const TASK_SCHEDULER_INTERVAL_MS = 60_000
+
+type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
 function addMinutes(value: string | Date, minutes: number) {
   return new Date(new Date(value).getTime() + minutes * 60_000).toISOString()
@@ -163,6 +169,15 @@ function torrentFilename(title: string, fallback: string) {
   return `${safeTitle || fallback}.torrent`
 }
 
+type TaskRunResult = {
+  task: TaskRecord
+  fetchedCount: number
+  matchedCount: number
+  pushedCount: number
+  pushFailedCount: number
+  summary: string
+}
+
 async function logOperation(req: Parameters<typeof operationActor>[1], res: Parameters<typeof operationActor>[0], action: string, message: string, status: 'SUCCESS' | 'FAILED' = 'SUCCESS') {
   await recordOperationLog({
     action,
@@ -170,6 +185,172 @@ async function logOperation(req: Parameters<typeof operationActor>[1], res: Para
     status,
     ...operationActor(res, req)
   })
+}
+
+async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRunResult> {
+  if (runningTaskIds.has(taskId)) throw new Error('任务正在运行')
+  runningTaskIds.add(taskId)
+
+  const state = await readState()
+  const task = state.tasks.find((item) => item.id === taskId)
+  if (!task) {
+    runningTaskIds.delete(taskId)
+    throw new Error('任务不存在')
+  }
+  if (task.running) {
+    runningTaskIds.delete(taskId)
+    throw new Error('任务正在运行')
+  }
+
+  const site = state.sites.find((item) => item.id === task.siteId)
+  const downloader = state.downloaders.find((item) => item.id === task.downloaderId)
+  const startedAt = new Date().toISOString()
+  task.running = true
+  task.lastStartedAt = startedAt
+  task.lastRunMode = runMode
+  task.lastStatus = undefined
+  task.lastError = undefined
+  task.lastSummary = '运行中'
+  task.updatedAt = startedAt
+  await writeState(state)
+
+  try {
+    if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
+    if (!downloader) throw new Error('任务绑定下载器不存在')
+    if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
+    const fetched = await candidatesForTask(site, { includeDownloadUrl: true })
+    const matched = matchedCandidates(task, fetched)
+    const now = new Date().toISOString()
+    let pushedCount = 0
+    let pushFailedCount = 0
+    for (const item of matched) {
+      const existing = state.torrents.find((torrent) => torrent.siteId === site.id && torrent.torrentId === item.torrentId)
+      let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
+      let pushError: string | undefined
+      if (task.autoPush) {
+        try {
+          pushed = await addTorrentUrlToQb(downloader, site, item.downloadUrl, torrentFilename(item.title, item.torrentId), {
+            savePath: task.savePathOverride || downloader.savePath,
+            category: task.name,
+            tags: task.tagsOverride
+          })
+          pushedCount += 1
+        } catch (error) {
+          pushError = error instanceof Error ? error.message : '推送到下载器失败'
+          pushFailedCount += 1
+        }
+      }
+      const failedPush = Boolean(pushError)
+      const record: TorrentRecord = {
+        id: existing?.id ?? randomUUID(),
+        siteId: site.id,
+        siteName: siteName(site),
+        torrentId: item.torrentId,
+        title: item.title,
+        size: item.size,
+        discountType: item.discountType,
+        isFreeNow: item.isFreeNow,
+        currentState: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
+        freeEndAt: item.freeEndAt,
+        seeders: item.seeders,
+        leechers: item.leechers,
+        pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
+        linkStatus: item.linkStatus,
+        detailUrl: item.detailUrl,
+        downloaderId: downloader.id,
+        downloaderName: downloader.name,
+        downloaderType: downloader.type,
+        downloaderState: pushed?.state ?? undefined,
+        torrentHash: pushed?.hash,
+        sourceTaskId: task.id,
+        sourceTaskName: task.name,
+        sourceRunMode: runMode,
+        errorMessage: pushError,
+        firstSeenAt: existing?.firstSeenAt ?? now,
+        lastSeenAt: now,
+        pushedAt: pushed ? now : existing?.pushedAt,
+        downloadUrlHash: torrentHash(task, item),
+        downloadUrl: item.downloadUrl
+      }
+      if (existing) Object.assign(existing, record)
+      else state.torrents.unshift(record)
+    }
+    const finishedAt = new Date().toISOString()
+    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    task.running = false
+    task.lastFinishedAt = finishedAt
+    task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'
+    task.lastSummary = summary
+    task.lastError = pushFailedCount > 0 ? `${pushFailedCount} 个种子推送失败` : undefined
+    task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
+    task.updatedAt = finishedAt
+    await writeState(state)
+    await recordTaskLog({
+      taskId: task.id,
+      taskName: task.name,
+      runMode,
+      message: summary,
+      status: task.lastStatus,
+      startedAt,
+      finishedAt,
+      fetchedCount: fetched.length,
+      matchedCount: matched.length,
+      pushedCount,
+      pushFailedCount,
+      summary,
+      errorMessage: task.lastError
+    })
+    return { task, fetchedCount: fetched.length, matchedCount: matched.length, pushedCount, pushFailedCount, summary }
+  } catch (error) {
+    const finishedAt = new Date().toISOString()
+    const message = error instanceof Error ? error.message : '任务执行失败'
+    task.running = false
+    task.lastFinishedAt = finishedAt
+    task.lastStatus = 'FAILED'
+    task.lastError = message
+    task.lastSummary = message
+    task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
+    task.updatedAt = finishedAt
+    await writeState(state)
+    await recordTaskLog({
+      taskId: task.id,
+      taskName: task.name,
+      runMode,
+      message,
+      status: 'FAILED',
+      startedAt,
+      finishedAt,
+      fetchedCount: 0,
+      matchedCount: 0,
+      pushedCount: 0,
+      pushFailedCount: 0,
+      summary: message,
+      errorMessage: message
+    })
+    throw error
+  } finally {
+    runningTaskIds.delete(taskId)
+  }
+}
+
+export async function runDueTasks() {
+  const state = await readState()
+  const now = Date.now()
+  const dueTasks = state.tasks.filter((task) => task.autoRunEnabled && !task.running && task.nextRunAt && new Date(task.nextRunAt).getTime() <= now)
+  for (const task of dueTasks) {
+    runTaskById(task.id, 'AUTO').catch((error) => {
+      console.error(`[task-scheduler] ${task.name}:`, error instanceof Error ? error.message : error)
+    })
+  }
+}
+
+export function startTaskScheduler() {
+  if (schedulerTimer) return
+  schedulerTimer = setInterval(() => {
+    runDueTasks().catch((error) => {
+      console.error('[task-scheduler]', error instanceof Error ? error.message : error)
+    })
+  }, TASK_SCHEDULER_INTERVAL_MS)
 }
 
 tasksRouter.get('/', requireAuth, async (req, res) => {
@@ -275,135 +456,17 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
 })
 
 tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === String(req.params.id))
-  if (!task) return res.status(404).json({ message: '任务不存在' })
-  if (task.running) return res.status(409).json({ message: '任务正在运行' })
-  const site = state.sites.find((item) => item.id === task.siteId)
-  const downloader = state.downloaders.find((item) => item.id === task.downloaderId)
-  const startedAt = new Date().toISOString()
-  task.running = true
-  task.lastStartedAt = startedAt
-  task.lastRunMode = 'MANUAL_RUN'
-  task.updatedAt = startedAt
-  await writeState(state)
-
   try {
-    if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
-    if (!downloader) throw new Error('任务绑定下载器不存在')
-    if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
-    const fetched = await candidatesForTask(site, { includeDownloadUrl: true })
-    const matched = matchedCandidates(task, fetched)
-    const now = new Date().toISOString()
-    let pushedCount = 0
-    let pushFailedCount = 0
-    for (const item of matched) {
-      const existing = state.torrents.find((torrent) => torrent.siteId === site.id && torrent.torrentId === item.torrentId)
-      let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
-      let pushError: string | undefined
-      if (task.autoPush) {
-        try {
-          pushed = await addTorrentUrlToQb(downloader, site, item.downloadUrl, torrentFilename(item.title, item.torrentId), {
-            savePath: task.savePathOverride || downloader.savePath,
-            category: task.categoryOverride,
-            tags: task.tagsOverride
-          })
-          pushedCount += 1
-        } catch (error) {
-          pushError = error instanceof Error ? error.message : '推送到下载器失败'
-          pushFailedCount += 1
-        }
-      }
-      const failedPush = Boolean(pushError)
-      const record: TorrentRecord = {
-        id: existing?.id ?? randomUUID(),
-        siteId: site.id,
-        siteName: siteName(site),
-        torrentId: item.torrentId,
-        title: item.title,
-        size: item.size,
-        discountType: item.discountType,
-        isFreeNow: item.isFreeNow,
-        currentState: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : item.isFreeNow ? 'FREE_NOW' : 'NEW',
-        freeEndAt: item.freeEndAt,
-        seeders: item.seeders,
-        leechers: item.leechers,
-        pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
-        linkStatus: item.linkStatus,
-        detailUrl: item.detailUrl,
-        downloaderId: downloader.id,
-        downloaderName: downloader.name,
-        downloaderType: downloader.type,
-        downloaderState: pushed?.state ?? undefined,
-        torrentHash: pushed?.hash,
-        sourceTaskId: task.id,
-        sourceTaskName: task.name,
-        sourceRunMode: 'MANUAL_RUN',
-        errorMessage: pushError,
-        firstSeenAt: existing?.firstSeenAt ?? now,
-        lastSeenAt: now,
-        pushedAt: pushed ? now : existing?.pushedAt,
-        downloadUrlHash: torrentHash(task, item),
-        downloadUrl: item.downloadUrl
-      }
-      if (existing) Object.assign(existing, record)
-      else state.torrents.unshift(record)
-    }
-    const finishedAt = new Date().toISOString()
-    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
-    task.running = false
-    task.lastFinishedAt = finishedAt
-    task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'
-    task.lastSummary = summary
-    task.lastError = pushFailedCount > 0 ? `${pushFailedCount} 个种子推送失败` : undefined
-    task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
-    task.updatedAt = finishedAt
-    await writeState(state)
-    await recordTaskLog({
-      taskId: task.id,
-      taskName: task.name,
-      runMode: 'MANUAL_RUN',
-      message: summary,
-      status: task.lastStatus,
-      startedAt,
-      finishedAt,
-      fetchedCount: fetched.length,
-      matchedCount: matched.length,
-      pushedCount,
-      pushFailedCount,
-      summary,
-      errorMessage: task.lastError
-    })
-    await logOperation(req, res, '运行任务', `手动运行任务「${task.name}」：${summary}`, task.lastStatus)
-    res.json({ task: listItem(task, state), fetchedCount: fetched.length, matchedCount: matched.length, pushedCount, pushFailedCount, summary })
+    const result = await runTaskById(String(req.params.id), 'MANUAL_RUN')
+    const state = await readState()
+    await logOperation(req, res, '运行任务', `手动运行任务「${result.task.name}」：${result.summary}`, result.task.lastStatus)
+    res.json({ task: listItem(result.task, state), fetchedCount: result.fetchedCount, matchedCount: result.matchedCount, pushedCount: result.pushedCount, pushFailedCount: result.pushFailedCount, summary: result.summary })
   } catch (error) {
-    const finishedAt = new Date().toISOString()
     const message = error instanceof Error ? error.message : '任务执行失败'
-    task.running = false
-    task.lastFinishedAt = finishedAt
-    task.lastStatus = 'FAILED'
-    task.lastError = message
-    task.lastSummary = message
-    task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
-    task.updatedAt = finishedAt
-    await writeState(state)
-    await recordTaskLog({
-      taskId: task.id,
-      taskName: task.name,
-      runMode: 'MANUAL_RUN',
-      message,
-      status: 'FAILED',
-      startedAt,
-      finishedAt,
-      fetchedCount: 0,
-      matchedCount: 0,
-      pushedCount: 0,
-      pushFailedCount: 0,
-      summary: message,
-      errorMessage: message
-    })
-    await logOperation(req, res, '运行任务', `手动运行任务「${task.name}」失败：${message}`, 'FAILED')
-    res.status(400).json({ message, task: listItem(task, state) })
+    const state = await readState()
+    const task = state.tasks.find((item) => item.id === String(req.params.id))
+    await logOperation(req, res, '运行任务', `手动运行任务「${task?.name ?? '未知任务'}」失败：${message}`, 'FAILED')
+    res.status(message === '任务正在运行' ? 409 : task ? 400 : 404).json({ message, task: task ? listItem(task, state) : undefined })
   }
 })
 

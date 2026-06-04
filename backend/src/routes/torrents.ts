@@ -98,7 +98,9 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     return res.status(400).json({ message: torrent.errorMessage })
   }
   try {
-    const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id))
+    const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id), {
+      category: torrent.sourceTaskName
+    })
     torrent.torrentHash = pushed.hash
     torrent.downloaderState = pushed.state ?? 'added'
   } catch (error) {
@@ -150,7 +152,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       continue
     }
     try {
-      const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id))
+      const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id), {
+        category: torrent.sourceTaskName
+      })
       torrent.torrentHash = pushed.hash
       torrent.downloaderState = pushed.state ?? 'added'
     } catch (error) {
