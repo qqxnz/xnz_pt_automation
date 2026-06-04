@@ -14,14 +14,15 @@
 m-team.cc      馒头   MTEAM_API
 hhanclub.net   憨憨   NEXUSPHP
 hdhome.org     家园   NEXUSPHP
+hdkyl.in       麒麟   NEXUSPHP
 ```
 
 规则：
 
 - 用户只填写站点域名，显示名称由映射表决定。
 - 支持同站多个域名，域名归一化后匹配映射表。
-- 未知域名允许保存，显示域名本身。
-- M-Team 使用 API 特殊策略；普通站点默认使用 Cookie 抓取 `/userdetails.php` 和 `/torrents.php`。
+- 未知域名允许保存，显示域名本身，并默认按 NexusPHP 站点处理。
+- M-Team 使用 API 特殊策略；普通站点和未知站点默认使用 Cookie 抓取 `/userdetails.php` 和 `/torrents.php`。
 
 ## 3. 表单
 
@@ -99,7 +100,22 @@ M-Team：
 - 上传量：`data.memberCount.uploaded`
 - 下载量：`data.memberCount.downloaded`
 - 分享率：`data.memberCount.shareRate`
-- 用户等级：按最终确认显示 API 原始 `data.role` 值。
+- 用户等级：按 API `data.role` 代码映射为中文显示名。
+
+M-Team 等级映射：
+
+```text
+0 平民
+1 用户
+2 侠客
+3 骑士
+4 捕头
+5 知县
+6 通判
+7 知州
+8 总督
+9 大臣
+```
 
 普通 NexusPHP 站点：
 

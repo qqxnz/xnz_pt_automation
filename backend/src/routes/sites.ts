@@ -11,6 +11,7 @@ type Credential = 'API_KEY' | 'COOKIE'
 type SiteDefinition = {
   displayName: string
   domains: string[]
+  canonicalDomain?: string
   strategy: SiteStrategy
   profilePath: string
   torrentPath: string
@@ -65,8 +66,56 @@ const SITE_DEFINITIONS: SiteDefinition[] = [
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '麒麟',
+    domains: ['hdkyl.in', 'www.hdkyl.in'],
+    canonicalDomain: 'www.hdkyl.in',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
   }
 ]
+
+const DEFAULT_NEXUSPHP_DEFINITION: SiteDefinition = {
+  displayName: '',
+  domains: [],
+  strategy: 'NEXUSPHP',
+  profilePath: '/userdetails.php',
+  torrentPath: '/torrents.php'
+}
+
+const KNOWN_USER_LEVELS = [
+  '保种员',
+  '保種員',
+  '发布员',
+  '發布員',
+  '总督',
+  '總督',
+  'Power User',
+  'Elite User',
+  'Crazy User',
+  'Insane User',
+  'Veteran User',
+  'Extreme User',
+  'Ultimate User',
+  'mTorrent Master',
+  'Donor',
+  'User'
+]
+
+const MTEAM_ROLE_LEVELS: Record<string, string> = {
+  '0': '平民',
+  '1': '用户',
+  '2': '侠客',
+  '3': '骑士',
+  '4': '捕头',
+  '5': '知县',
+  '6': '通判',
+  '7': '知州',
+  '8': '总督',
+  '9': '大臣'
+}
 
 function normalizeDomain(value: string) {
   const trimmed = value.trim()
@@ -78,12 +127,16 @@ function getSiteDefinition(domain: string) {
   return SITE_DEFINITIONS.find((definition) => definition.domains.some((item) => normalizeDomain(item) === domain))
 }
 
+function getSiteAdapter(domain: string) {
+  return getSiteDefinition(domain) ?? DEFAULT_NEXUSPHP_DEFINITION
+}
+
 function siteDisplayName(site: SiteRecord) {
   return getSiteDefinition(site.domain)?.displayName ?? site.domain
 }
 
 function siteBaseUrl(site: SiteRecord) {
-  return `https://${site.domain}`
+  return `https://${getSiteDefinition(site.domain)?.canonicalDomain ?? site.domain}`
 }
 
 function resolveSiteUrl(site: SiteRecord, value: string) {
@@ -161,6 +214,18 @@ function textFromHtml(value: string) {
     .trim()
 }
 
+function extractHtmlAttributes(html: string, attributes: string[]) {
+  const values: string[] = []
+  for (const attribute of attributes) {
+    const pattern = new RegExp(`${attribute}\\s*=\\s*(['"])(.*?)\\1`, 'gi')
+    for (const match of html.matchAll(pattern)) {
+      const value = decodeHtml(match[2]).replace(/\s+/g, ' ').trim()
+      if (value) values.push(value)
+    }
+  }
+  return values
+}
+
 function extractCells(html: string) {
   const cells: string[] = []
   for (const match of html.matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)) {
@@ -204,32 +269,46 @@ function parseSizeByLabel(text: string, labels: string[]) {
 }
 
 function parseRatioByLabel(text: string) {
-  const match = text.match(/分享率\s*[:：]?\s*(∞|inf|infinity|[\d,.]+)/i)
+  const match = text.match(/(?:分享率|分享率\s*\[[^\]]+\])\s*[:：]?\s*(∞|inf|infinity|[\d,.]+)/i)
   if (!match) return {}
   if (['∞', 'inf', 'infinity'].includes(match[1].toLowerCase())) return { ratioInfinite: true }
   const ratio = toNumber(match[1])
   return ratio !== undefined ? { ratio, ratioInfinite: false } : {}
 }
 
-function parseUserLevel(cells: string[], text: string) {
+function normalizeUserLevel(value: string) {
+  const compactValue = value.replace(/\s+/g, ' ').trim()
+  return KNOWN_USER_LEVELS.find((level) => compactValue.toLowerCase() === level.toLowerCase()) || KNOWN_USER_LEVELS.find((level) => compactValue.includes(level))
+}
+
+function parseUserLevel(html: string, cells: string[], text: string) {
+  const attributeValues = extractHtmlAttributes(html, ['title', 'alt'])
+  for (const knownLevel of KNOWN_USER_LEVELS) {
+    if (attributeValues.some((value) => normalizeUserLevel(value) === knownLevel)) {
+      return knownLevel
+    }
+  }
+
   const labels = ['用户等级', '用戶等級', '會員等級', '会员等级', '等级', '等級', '级别', '級別']
   for (let index = 0; index < cells.length; index += 1) {
     if (labels.some((label) => cells[index].includes(label))) {
       const sameCell = cells[index].match(/(?:用户等级|用戶等級|會員等級|会员等级|等级|等級|级别|級別)\s*[:：]\s*(.+)$/)
-      if (sameCell?.[1]) return sameCell[1].trim()
+      if (sameCell?.[1]) return normalizeUserLevel(sameCell[1]) ?? sameCell[1].trim()
       const nextCell = cells[index + 1]
-      if (nextCell && !labels.some((label) => nextCell.includes(label))) return nextCell.trim()
+      if (nextCell && !labels.some((label) => nextCell.includes(label))) return normalizeUserLevel(nextCell) ?? nextCell.trim()
     }
   }
 
-  return text.match(/(?:用户等级|用戶等級|會員等級|会员等级|等级|等級|级别|級別)\s*[:：]?\s*([^\s]+)/)?.[1]?.trim()
+  const textLevel = text.match(/(?:用户等级|用戶等級|會員等級|会员等级|等级|等級|级别|級別)\s*[:：]?\s*([^\s]+)/)?.[1]?.trim()
+  if (textLevel) return normalizeUserLevel(textLevel) ?? textLevel
+  return undefined
 }
 
 function parseTrafficStats(html: string): TrafficStats {
   const text = textFromHtml(html)
   const cells = extractCells(html)
   return {
-    userLevel: parseUserLevel(cells, text),
+    userLevel: parseUserLevel(html, cells, text),
     ...parseRatioByLabel(text),
     uploaded: parseSizeByLabel(text, ['上传量', '上傳量', '上传', '上傳']),
     downloaded: parseSizeByLabel(text, ['下载量', '下載量', '下载', '下載'])
@@ -243,16 +322,43 @@ function looksLikeAuthPage(html: string) {
 
 async function fetchWithCookie(site: SiteRecord, path: string) {
   if (!site.cookie?.trim()) throw new Error('Cookie 未配置或不可用')
-  const response = await fetch(resolveSiteUrl(site, path), {
-    headers: {
-      Cookie: site.cookie,
-      'User-Agent': site.userAgent || 'Mozilla/5.0',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    },
-    redirect: 'follow'
-  })
-  if (!response.ok) throw new Error(`Cookie 访问失败：HTTP ${response.status}`)
-  return response.text()
+  const errors: string[] = []
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(resolveSiteUrl(site, path), {
+        headers: {
+          Cookie: site.cookie,
+          'User-Agent': site.userAgent || 'Mozilla/5.0',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+        },
+        redirect: 'follow'
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.text()
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'fetch failed')
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+    }
+  }
+  throw new Error(`Cookie 访问失败：${errors.at(-1) ?? 'fetch failed'}`)
+}
+
+function findOwnProfilePath(html: string, site: SiteRecord) {
+  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']*userdetails\.php\?id=\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const label = textFromHtml(match[2])
+    if (label && !/做种数|下載數|下载数|seeder|leecher/i.test(label)) {
+      return new URL(decodeHtml(match[1]), `${siteBaseUrl(site)}/`).toString()
+    }
+  }
+  return undefined
+}
+
+async function fetchNexusProfileHtml(site: SiteRecord, profilePath: string) {
+  const html = await fetchWithCookie(site, profilePath)
+  const ownProfilePath = findOwnProfilePath(html, site)
+  if (!ownProfilePath || resolveSiteUrl(site, profilePath) === ownProfilePath) return html
+  return fetchWithCookie(site, ownProfilePath)
 }
 
 async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
@@ -279,8 +385,9 @@ async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
     }
   }
   if (String(result.code) !== '0' || !result.data) throw new Error(result.message || 'API Key 访问失败')
+  const role = result.data.role === undefined ? undefined : String(result.data.role)
   return {
-    userLevel: result.data.role === undefined ? undefined : String(result.data.role),
+    userLevel: role === undefined ? undefined : MTEAM_ROLE_LEVELS[role] ?? role,
     ratio: toNumber(result.data.memberCount?.shareRate),
     ratioInfinite: false,
     uploaded: toNumber(result.data.memberCount?.uploaded),
@@ -289,12 +396,12 @@ async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
 }
 
 async function fetchTrafficByCredential(site: SiteRecord, credential: Credential) {
-  const definition = getSiteDefinition(site.domain)
+  const definition = getSiteAdapter(site.domain)
   if (credential === 'API_KEY') {
     if (definition?.strategy !== 'MTEAM_API') throw new Error('该站点不支持 API Key 获取用户信息')
     return fetchMTeamProfile(site)
   }
-  return parseTrafficStats(await fetchWithCookie(site, definition?.profilePath ?? '/userdetails.php'))
+  return parseTrafficStats(await fetchNexusProfileHtml(site, definition.profilePath))
 }
 
 async function testSite(site: SiteRecord) {
@@ -321,24 +428,62 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((match) => match[1])
   const items: TorrentListItem[] = []
   for (const row of rows) {
-    const detailsMatch = row.match(/href=["'][^"']*(?:details|download)\.php\?id=(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i)
+    const detailsMatch = row.match(/href=["']((?:https?:\/\/[^\/"']+\/)?details\.php\?id=(\d+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/i)
     if (!detailsMatch) continue
-    const title = textFromHtml(detailsMatch[2])
+    const title = textFromHtml(detailsMatch[3])
     if (!title || title.length < 3) continue
     const text = textFromHtml(row)
     const sizes = [...text.matchAll(/([\d,.]+)\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B)\b/gi)]
-    const numbers = [...text.matchAll(/\b(\d+)\b/g)].map((match) => Number(match[1]))
+    const seeders = readLinkedNumber(row, '#seeders')
+    const leechers = readLinkedNumber(row, '#leechers')
     items.push({
-      id: detailsMatch[1],
+      id: detailsMatch[2],
       title,
       subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
       size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
-      seeders: numbers.at(-2),
-      leechers: numbers.at(-1),
+      seeders,
+      leechers,
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
     })
     if (items.length >= 50) break
   }
+  return items.length && items.some((item) => item.size !== undefined || item.seeders !== undefined || item.leechers !== undefined) ? items : parseNexusTorrentLinks(html)
+}
+
+function readLinkedNumber(html: string, marker: string) {
+  const escapedMarker = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = html.match(new RegExp(`<a\\b[^>]*href=["'][^"']*${escapedMarker}[^"']*["'][^>]*>([\\s\\S]*?)<\\/a>`, 'i'))
+  return match ? toNumber(textFromHtml(match[1])) : undefined
+}
+
+function parseNexusTorrentLinks(html: string): TorrentListItem[] {
+  const linkMatches = [...html.matchAll(/<a\b[^>]*href=["']((?:https?:\/\/[^\/"']+\/)?details\.php\?id=(\d+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)].filter((match) => {
+    const title = textFromHtml(match[3])
+    return Boolean(title && !/^\d+$/.test(title) && !/^poster$/i.test(title) && title.length >= 3)
+  })
+  const items: TorrentListItem[] = []
+
+  for (let index = 0; index < linkMatches.length; index += 1) {
+    const match = linkMatches[index]
+    const title = textFromHtml(match[3])
+
+    const start = match.index ?? 0
+    const nextStart = linkMatches[index + 1]?.index ?? html.length
+    const segment = html.slice(start, nextStart)
+    const text = textFromHtml(segment)
+    const sizes = [...text.matchAll(/([\d,.]+)\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B)\b/gi)]
+    items.push({
+      id: match[2],
+      title,
+      subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
+      size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
+      seeders: readLinkedNumber(segment, '#seeders'),
+      leechers: readLinkedNumber(segment, '#leechers'),
+      tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((tagMatch) => tagMatch[1]))]
+    })
+    if (items.length >= 50) break
+  }
+
   return items
 }
 

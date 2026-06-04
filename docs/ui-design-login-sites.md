@@ -164,9 +164,10 @@ POST /api/auth/login
 m-team.cc      馒头
 hhanclub.net   憨憨
 hdhome.org     家园
+hdkyl.in       麒麟
 ```
 
-- 未知域名允许保存，显示域名本身。
+- 未知域名允许保存，显示域名本身，并默认按 NexusPHP 处理。
 - M-Team 使用 API Key 调用 M-Team API。
 - 普通站点使用 Cookie 访问 NexusPHP 页面。
 - API Key 优先，失败后回退 Cookie。
