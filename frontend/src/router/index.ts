@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginPage from '../pages/LoginPage.vue'
 import DashboardPage from '../pages/DashboardPage.vue'
+import DownloadersPage from '../pages/DownloadersPage.vue'
 import LogsPage from '../pages/LogsPage.vue'
 import ModulePage from '../pages/ModulePage.vue'
 import SitesPage from '../pages/SitesPage.vue'
@@ -13,7 +14,7 @@ export const router = createRouter({
     { path: '/login', component: LoginPage, meta: { guestOnly: true } },
     { path: '/dashboard', component: DashboardPage, meta: { requiresAuth: true } },
     { path: '/sites', name: 'sites', component: SitesPage, meta: { requiresAuth: true } },
-    { path: '/downloaders', name: 'downloaders', component: ModulePage, meta: { requiresAuth: true } },
+    { path: '/downloaders', name: 'downloaders', component: DownloadersPage, meta: { requiresAuth: true } },
     { path: '/tasks', name: 'tasks', component: ModulePage, meta: { requiresAuth: true } },
     { path: '/torrents', name: 'torrents', component: ModulePage, meta: { requiresAuth: true } },
     { path: '/proxies', name: 'proxies', component: ModulePage, meta: { requiresAuth: true } },

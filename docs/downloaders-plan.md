@@ -93,7 +93,6 @@
 连接状态
 最近同步时间
 默认保存路径
-添加后是否暂停
 ```
 
 当前任务字段：
@@ -138,7 +137,6 @@ type DownloaderForm = {
   password?: string
   passwordAction?: 'KEEP' | 'UPDATE' | 'CLEAR'
   savePath?: string
-  paused: boolean
   enabled: boolean
   testAfterSave: boolean
 }
@@ -155,7 +153,6 @@ type DownloaderForm = {
 | 密码 | 密码输入 | 空 | 不回显，显示占位 `已保存，留空不修改` | 新增时原样加密保存；编辑时默认不修改。 |
 | 密码处理 | 单选/按钮组 | 更新密码 | 保持原密码 | 编辑时提供保持原密码、更新密码、清空密码；清空需二次确认。 |
 | 默认保存路径 | 文本输入 | 空 | 已保存路径 | 可选；不填时由 QB 默认路径或任务覆盖值决定。 |
-| 添加后暂停 | 开关 | 关闭 | 已保存值 | 开启后推送种子时使用暂停状态添加。 |
 | 启用下载器 | 开关 | 开启 | 已保存值 | 关闭后任务模块不可选择，已有任务运行时跳过。 |
 | 保存后测试连接 | 复选框 | 开启 | 关闭 | 勾选后保存成功立即调用测试接口。 |
 
@@ -240,7 +237,6 @@ type CreateDownloaderRequest = {
   username?: string
   password?: string
   savePath?: string
-  paused: boolean
 }
 ```
 
@@ -255,7 +251,6 @@ type UpdateDownloaderRequest = {
   passwordAction: 'KEEP' | 'UPDATE' | 'CLEAR'
   password?: string
   savePath?: string
-  paused: boolean
 }
 ```
 
@@ -282,7 +277,6 @@ type DownloaderConfig = {
   username?: string
   hasPassword: boolean
   savePath?: string
-  paused: boolean
   status: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
   statusMessage?: string
   lastTestedAt?: string
@@ -407,6 +401,7 @@ GET  /api/v2/torrents/info
 - 移动端表单采用单列全屏弹层，底部固定保存按钮。
 - 敏感信息以“已保存，留空不修改”表达，不画真实密码。
 - 下载器配置不提供默认分类和默认标签；如需分类或标签，由任务推送配置单独决定。
+- 下载器配置不提供添加后暂停；如需暂停策略，由任务推送配置单独决定。
 
 ## 10. 执行清单
 
@@ -443,6 +438,7 @@ GET  /api/v2/torrents/info
 - [x] 生成 `designs/downloaders-form.svg`。
 - [x] 明确默认保存路径为可选，不填时使用 QB 默认路径或任务覆盖值。
 - [x] 明确下载器不提供默认分类和默认标签配置。
+- [x] 明确下载器不提供添加后暂停配置。
 - [x] 明确连接测试超时时间：默认 8 秒。
 - [x] 明确下载器速度刷新间隔：详情页每 3 秒刷新一次。
 - [ ] 确认后续下载器类型的适配接口是否需要在第一版暴露高级字段。
@@ -453,7 +449,7 @@ GET  /api/v2/torrents/info
 - 移动端可按卡片形式查看下载器、状态和任务，表单单列显示且按钮不遮挡字段。
 - 可新增一个 QB 下载器并保存。
 - 可新增一个 QB 下载器并执行保存并测试，成功后状态更新为在线。
-- 可编辑下载器名称、服务地址、用户名、默认保存路径、暂停和启用状态。
+- 可编辑下载器名称、服务地址、用户名、默认保存路径和启用状态。
 - 编辑时密码不明文回显，留空不会修改旧密码。
 - 编辑时可更新密码，也可二次确认后清空密码。
 - 表单能拦截空名称、非法服务地址和重复名称等错误。

@@ -72,12 +72,30 @@ export type SiteRecord = {
   updatedAt: string
 }
 
+export type DownloaderRecord = {
+  id: string
+  name: string
+  type: 'QBITTORRENT'
+  enabled: boolean
+  host: string
+  username?: string
+  password?: string
+  savePath?: string
+  status: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+  statusMessage?: string
+  lastTestedAt?: string
+  lastSyncedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 type AppState = {
   users: UserRecord[]
   operationLogs: OperationLogRecord[]
   taskLogs: TaskLogRecord[]
   sites: SiteRecord[]
   proxies: ProxyRecord[]
+  downloaders: DownloaderRecord[]
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -96,7 +114,8 @@ async function initialState(): Promise<AppState> {
     operationLogs: [],
     taskLogs: [],
     sites: [],
-    proxies: []
+    proxies: [],
+    downloaders: []
   }
 }
 
@@ -106,7 +125,8 @@ function normalizeState(state: Partial<AppState>): AppState {
     operationLogs: state.operationLogs ?? [],
     taskLogs: state.taskLogs ?? [],
     sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
-    proxies: state.proxies ?? []
+    proxies: state.proxies ?? [],
+    downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string')
   }
 }
 

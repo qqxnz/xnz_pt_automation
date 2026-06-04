@@ -4,6 +4,7 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { authRouter } from './routes/auth.js'
+import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
 import { proxiesRouter } from './routes/proxies.js'
 import { sitesRouter } from './routes/sites.js'
@@ -25,6 +26,7 @@ app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/sites', sitesRouter)
 app.use('/api/proxies', proxiesRouter)
+app.use('/api/downloaders', downloadersRouter)
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const frontendDist = path.resolve(backendDir, '..', 'frontend', 'dist')

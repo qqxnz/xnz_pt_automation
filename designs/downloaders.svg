@@ -19,7 +19,7 @@
       <text x="226" y="94" class="t muted small">下载速度</text><text x="226" y="132" fill="#3f7cff" class="t" font-size="30" font-weight="800">48.2 MB/s</text>
       <text x="430" y="94" class="t muted small">总上传</text><text x="430" y="132" class="t dark" font-size="30" font-weight="800">32.4 TB</text>
       <text x="588" y="94" class="t muted small">最近同步</text><text x="588" y="132" class="t dark label">10:20</text>
-      <rect x="28" y="158" width="664" height="32" rx="12" fill="#f8fafc"/><text x="48" y="179" class="t muted small">默认路径：/downloads/pt · 添加后不暂停</text>
+      <rect x="28" y="158" width="664" height="32" rx="12" fill="#f8fafc"/><text x="48" y="179" class="t muted small">默认路径：/downloads/pt · 启用中</text>
     </g>
     <g transform="translate(360 326)" filter="url(#card)"><rect width="720" height="442" rx="28" fill="#fff"/>
       <text x="28" y="44" class="t dark label">当前任务</text><text x="588" y="44" fill="#2563eb" class="t small" font-weight="800">刷新任务</text><line x1="28" y1="68" x2="692" y2="68" stroke="#e5e7eb"/>
@@ -28,7 +28,7 @@
       <line x1="28" y1="190" x2="692" y2="190" stroke="#e5e7eb"/>
       <text x="28" y="238" class="t dark label">Documentary Complete Pack</text><rect x="342" y="217" width="82" height="28" rx="14" fill="#dcfce7"/><text x="383" y="236" text-anchor="middle" fill="#15803d" class="t" font-size="12" font-weight="800">100%</text><text x="458" y="238" class="t dark small">uploading</text><text x="574" y="238" class="t dark small">2.18</text>
       <line x1="28" y1="270" x2="692" y2="270" stroke="#e5e7eb"/>
-      <text x="28" y="318" class="t dark label">Classic Movie 1998 1080p</text><rect x="342" y="297" width="82" height="28" rx="14" fill="#f3f4f6"/><text x="383" y="316" text-anchor="middle" fill="#374151" class="t" font-size="12" font-weight="800">paused</text><text x="458" y="318" class="t dark small">pausedUP</text><text x="574" y="318" class="t dark small">1.03</text>
+      <text x="28" y="318" class="t dark label">Classic Movie 1998 1080p</text><rect x="342" y="297" width="82" height="28" rx="14" fill="#f3f4f6"/><text x="383" y="316" text-anchor="middle" fill="#374151" class="t" font-size="12" font-weight="800">queued</text><text x="458" y="318" class="t dark small">queuedUP</text><text x="574" y="318" class="t dark small">1.03</text>
       <rect x="28" y="358" width="664" height="56" rx="18" fill="#f8fafc"/><text x="50" y="392" class="t muted small">密码不明文回显；连接错误区分认证失败、网络失败和地址无效。</text>
     </g>
   </g>

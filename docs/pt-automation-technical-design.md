@@ -332,7 +332,6 @@ type QbittorrentConfig = {
   username: string
   password: string
   savePath?: string
-  paused?: boolean
 }
 ```
 
