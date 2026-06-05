@@ -1,6 +1,7 @@
 import { apiRequest } from './client'
 
 export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE'
+export type SeederCondition = 'GT' | 'EQ' | 'LT'
 export type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
 export type TaskItem = {
@@ -17,6 +18,8 @@ export type TaskItem = {
   freeOnly: boolean
   autoPush: boolean
   discountTypes: DiscountType[]
+  seederCondition?: SeederCondition
+  seederCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -41,6 +44,8 @@ export type TaskPayload = {
   freeOnly: boolean
   autoPush: boolean
   discountTypes: DiscountType[]
+  seederCondition?: SeederCondition | ''
+  seederCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -66,6 +71,7 @@ export type TaskTestResult = {
   siteName: string
   fetchedCount: number
   matchedCount: number
+  skippedExistingCount?: number
   total: number
   items: Array<{
     torrentId: string
@@ -123,7 +129,7 @@ export function testTask(id: string) {
 }
 
 export function runTask(id: string) {
-  return apiRequest<{ task: TaskItem; fetchedCount: number; matchedCount: number; pushedCount: number; pushFailedCount: number; summary: string }>(`/api/tasks/${id}/run`, {
+  return apiRequest<{ task: TaskItem; fetchedCount: number; matchedCount: number; skippedExistingCount: number; pushedCount: number; pushFailedCount: number; summary: string }>(`/api/tasks/${id}/run`, {
     method: 'POST'
   })
 }

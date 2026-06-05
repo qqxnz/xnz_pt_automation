@@ -69,6 +69,48 @@
             </span>
           </div>
         </div>
+
+        <div class="mobile-task-list">
+          <article v-for="task in items" :key="task.id" class="site-card task-card">
+            <div>
+              <strong>{{ task.name }}</strong>
+              <span class="chip" :class="statusClass(task)">{{ statusText(task) }}</span>
+            </div>
+            <p>{{ task.siteName }} · {{ task.downloaderName }}</p>
+            <dl class="site-stat-grid">
+              <div>
+                <dt>自动执行</dt>
+                <dd>{{ task.autoRunEnabled ? '已开启' : '已关闭' }}</dd>
+              </div>
+              <div>
+                <dt>间隔</dt>
+                <dd>{{ task.intervalMinutes }} 分钟</dd>
+              </div>
+              <div>
+                <dt>下一次执行</dt>
+                <dd>{{ formatDate(task.nextRunAt) }}</dd>
+              </div>
+              <div>
+                <dt>规则</dt>
+                <dd>{{ rangeText(task) }}</dd>
+              </div>
+            </dl>
+            <p>最近结果：{{ task.lastSummary || '-' }}</p>
+            <div class="mobile-task-toggle">
+              <span>自动执行</span>
+              <button class="switch" :class="{ on: task.autoRunEnabled }" type="button" :disabled="task.running" @click="toggleAutoRun(task)">
+                <span></span>
+              </button>
+            </div>
+            <div class="row-actions">
+              <button type="button" :disabled="task.running" @click="testExistingTask(task)">测试</button>
+              <button type="button" :disabled="task.running" @click="runExistingTask(task)">{{ task.running ? '运行中...' : '运行' }}</button>
+              <button type="button" @click="openEdit(task)">编辑</button>
+              <router-link :to="{ path: '/logs', query: { type: 'task' } }">日志</router-link>
+              <button class="danger-text" type="button" @click="removeTask(task)">删除</button>
+            </div>
+          </article>
+        </div>
       </section>
     </section>
 
@@ -99,6 +141,15 @@
                 <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
               </label>
             </div>
+            <label>做种人数条件
+              <select v-model="form.seederCondition">
+                <option value="">不限制</option>
+                <option value="GT">大于</option>
+                <option value="EQ">等于</option>
+                <option value="LT">小于</option>
+              </select>
+            </label>
+            <label>做种人数<input v-model.number="form.seederCount" min="0" type="number" /></label>
             <label>即将过期阈值<input v-model.number="form.expiringSoonMinutes" min="1" type="number" /></label>
           </section>
         </div>
@@ -117,14 +168,14 @@
         <div class="form-head">
           <div>
             <h2>测试结果</h2>
-            <p>{{ testResult.taskName }} · 抓取 {{ testResult.fetchedCount }} 个，命中 {{ testResult.matchedCount }} 个</p>
+            <p>{{ testResult.taskName }} · 抓取 {{ testResult.fetchedCount }} 个，命中 {{ testResult.matchedCount }} 个，跳过已存在 {{ testResult.skippedExistingCount ?? 0 }} 个</p>
           </div>
           <button type="button" @click="testResult = undefined">×</button>
         </div>
         <div class="test-result-list">
           <article v-for="item in testResult.items" :key="item.torrentId">
             <strong>{{ item.title }}</strong>
-            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }}</span>
+            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · 做种 {{ item.seeders ?? 0 }}</span>
           </article>
           <div v-if="!testResult.items.length" class="empty-tip">没有命中当前任务规则的种子。</div>
         </div>
@@ -148,6 +199,7 @@ import {
   updateTask,
   updateTaskAutoRun,
   type DiscountType,
+  type SeederCondition,
   type TaskItem,
   type TaskPayload,
   type TaskStats,
@@ -176,6 +228,8 @@ const form = reactive<TaskPayload>({
   freeOnly: true,
   autoPush: true,
   discountTypes: ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+  seederCondition: '',
+  seederCount: 0,
   expiringSoonMinutes: 120
 })
 
@@ -184,6 +238,12 @@ const discountOptions: Array<{ value: DiscountType; label: string }> = [
   { value: 'TWO_X_FREE', label: '2X FREE' },
   { value: 'HALF_FREE', label: 'HALF FREE' }
 ]
+
+const seederConditionText: Record<SeederCondition, string> = {
+  GT: '大于',
+  EQ: '等于',
+  LT: '小于'
+}
 
 const statCards = computed(() => [
   { label: '全部任务', value: stats.value.total, className: '' },
@@ -203,6 +263,8 @@ function resetForm() {
     freeOnly: true,
     autoPush: true,
     discountTypes: ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+    seederCondition: '',
+    seederCount: 0,
     expiringSoonMinutes: 120,
     savePathOverride: undefined,
     categoryOverride: undefined,
@@ -226,6 +288,8 @@ function openEdit(task: TaskItem) {
     freeOnly: task.freeOnly,
     autoPush: task.autoPush,
     discountTypes: [...task.discountTypes],
+    seederCondition: task.seederCondition ?? '',
+    seederCount: task.seederCount ?? 0,
     expiringSoonMinutes: task.expiringSoonMinutes ?? 120,
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
@@ -240,6 +304,7 @@ function validateForm() {
   if (!form.downloaderId) return '请选择下载器'
   if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 30) return '执行间隔不能小于 30 分钟'
   if (!form.discountTypes.length) return '请至少选择一种免费类型'
+  if (form.seederCondition && (!Number.isInteger(form.seederCount) || (form.seederCount ?? 0) < 0)) return '做种人数必须是大于等于 0 的整数'
   return ''
 }
 
@@ -346,7 +411,9 @@ function discountText(value: string) {
 }
 
 function rangeText(task: TaskItem) {
-  return task.freeOnly ? task.discountTypes.map(discountText).join(', ') : '全部种子'
+  const parts = [task.freeOnly ? task.discountTypes.map(discountText).join(', ') : '全部种子']
+  if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
+  return parts.join(' · ')
 }
 
 function statusText(task: TaskItem) {

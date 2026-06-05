@@ -39,6 +39,7 @@ export type TorrentListItem = {
   subtitle?: string
   createdAt?: string
   size?: number
+  freeEndAt?: string
   seeders?: number
   leechers?: number
   tags: string[]
@@ -265,6 +266,24 @@ function parseSizeByLabel(text: string, labels: string[]) {
   return undefined
 }
 
+function toIsoDate(value?: string | number) {
+  if (value === undefined || value === '') return undefined
+  if (typeof value === 'number' || /^\d+$/.test(String(value))) {
+    const numberValue = Number(value)
+    const timestamp = numberValue < 10_000_000_000 ? numberValue * 1000 : numberValue
+    const date = new Date(timestamp)
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+  }
+  const normalized = String(value).trim().replace(/\//g, '-')
+  const date = new Date(normalized.includes('T') ? normalized : normalized.replace(' ', 'T'))
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+function parseFreeEndAt(text: string) {
+  const markerMatch = text.match(/(?:免费|免費|free|2x|2 x|two.?x|50%|half)[\s\S]{0,80}?(\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)/i)
+  return toIsoDate(markerMatch?.[1])
+}
+
 function parseRatioByLabel(text: string) {
   const match = text.match(/(?:分享率|分享率\s*\[[^\]]+\])\s*[:：]?\s*(∞|inf|infinity|[\d,.]+)/i)
   if (!match) return {}
@@ -438,6 +457,7 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
       title,
       subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
       size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
+      freeEndAt: parseFreeEndAt(text),
       seeders,
       leechers,
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
@@ -474,6 +494,7 @@ function parseNexusTorrentLinks(html: string): TorrentListItem[] {
       title,
       subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
       size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
+      freeEndAt: parseFreeEndAt(text),
       seeders: readLinkedNumber(segment, '#seeders'),
       leechers: readLinkedNumber(segment, '#leechers'),
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((tagMatch) => tagMatch[1]))]
@@ -512,6 +533,9 @@ async function browseMTeamTorrents(site: SiteRecord, keyword: string, page: numb
           seeders?: string | number
           leechers?: string | number
           discount?: string
+          discountEndTime?: string | number
+          freeEndTime?: string | number
+          discountEndDate?: string | number
         }
       }>
     }
@@ -525,6 +549,7 @@ async function browseMTeamTorrents(site: SiteRecord, keyword: string, page: numb
       subtitle: item.smallDescr,
       createdAt: item.createdDate,
       size: toNumber(item.size),
+      freeEndAt: toIsoDate(item.status?.discountEndTime ?? item.status?.freeEndTime ?? item.status?.discountEndDate),
       seeders: toNumber(item.status?.seeders),
       leechers: toNumber(item.status?.leechers),
       tags: item.status?.discount ? [item.status.discount] : []

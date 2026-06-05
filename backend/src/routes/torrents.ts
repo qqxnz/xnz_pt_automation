@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { readState, writeState } from '../storage.js'
 import type { TorrentRecord } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
-import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
+import { addTorrentUrlToQb, deleteTorrentFromQb } from '../utils/qbittorrent.js'
 
 export const torrentsRouter = Router()
 
@@ -20,6 +20,43 @@ function safeTorrent(torrent: TorrentRecord) {
     }
   }
   return safe
+}
+
+function refreshTorrentFreeState(torrent: TorrentRecord, expiringSoonMinutes = 120) {
+  if (!torrent.freeEndAt || torrent.pushStatus === 'DELETED') return false
+  const previous = {
+    isFreeNow: torrent.isFreeNow,
+    currentState: torrent.currentState
+  }
+  const freeEndTime = new Date(torrent.freeEndAt).getTime()
+  if (Number.isNaN(freeEndTime)) return false
+
+  const now = Date.now()
+  if (freeEndTime <= now) {
+    torrent.isFreeNow = false
+    torrent.currentState = 'EXPIRED'
+  } else {
+    torrent.isFreeNow = true
+    if (freeEndTime - now <= expiringSoonMinutes * 60_000) {
+      torrent.currentState = 'EXPIRING_SOON'
+    } else if (torrent.pushStatus === 'PUSHED') {
+      torrent.currentState = 'PUSHED'
+    } else if (torrent.pushStatus === 'PUSH_FAILED') {
+      torrent.currentState = 'PUSH_FAILED'
+    } else {
+      torrent.currentState = 'FREE_NOW'
+    }
+  }
+  return previous.isFreeNow !== torrent.isFreeNow || previous.currentState !== torrent.currentState
+}
+
+function refreshTorrentFreeStates(state: Awaited<ReturnType<typeof readState>>) {
+  let changed = false
+  for (const torrent of state.torrents) {
+    const task = state.tasks.find((item) => item.id === torrent.sourceTaskId)
+    changed = refreshTorrentFreeState(torrent, task?.expiringSoonMinutes ?? 120) || changed
+  }
+  return changed
 }
 
 function operationActor(res: { locals: { user?: { id?: string; username?: string } } }, req: { ip?: string; get(name: string): string | undefined }) {
@@ -45,12 +82,14 @@ function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
     manual: safeItems.filter((item) => item.sourceRunMode === 'MANUAL_RUN').length,
     pending: safeItems.filter((item) => item.pushStatus === 'NEW').length,
     failed: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED').length,
-    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() - now <= 2 * 60 * 60_000).length
+    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() > now && item.currentState === 'EXPIRING_SOON').length
   }
 }
 
 torrentsRouter.get('/', requireAuth, async (req, res) => {
   const state = await readState()
+  const changed = refreshTorrentFreeStates(state)
+  if (changed) await writeState(state)
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const siteId = String(req.query.siteId ?? '')
   const downloaderId = String(req.query.downloaderId ?? '')
@@ -74,6 +113,8 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
 
 torrentsRouter.get('/:id', requireAuth, async (req, res) => {
   const state = await readState()
+  const changed = refreshTorrentFreeStates(state)
+  if (changed) await writeState(state)
   const torrent = state.torrents.find((item) => item.id === String(req.params.id))
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
   res.json(safeTorrent(torrent))
@@ -185,13 +226,31 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
   const state = await readState()
   const torrent = state.torrents.find((item) => item.id === String(req.params.id))
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
+  const downloader = state.downloaders.find((item) => item.id === torrent.downloaderId)
+  if (!downloader) return res.status(400).json({ message: '种子绑定下载器不存在' })
+  if (!downloader.enabled) return res.status(400).json({ message: '下载器已禁用' })
+  if (!torrent.torrentHash) return res.status(400).json({ message: '缺少下载器任务 Hash，无法删除' })
+  let deleteResult: Awaited<ReturnType<typeof deleteTorrentFromQb>>
+  try {
+    deleteResult = await deleteTorrentFromQb(downloader, torrent.torrentHash, true)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '删除下载器任务失败'
+    await recordOperationLog({
+      action: '删除下载器任务',
+      message: `删除下载器任务「${torrent.title}」失败：${message}`,
+      status: 'FAILED',
+      ...operationActor(res, req)
+    })
+    return res.status(400).json({ message })
+  }
   torrent.pushStatus = 'DELETED'
   torrent.currentState = 'DOWNLOADER_DELETED'
   torrent.downloaderState = 'deleted'
+  torrent.errorMessage = undefined
   await writeState(state)
   await recordOperationLog({
     action: '删除下载器任务',
-    message: `删除下载器任务「${torrent.title}」`,
+    message: deleteResult.alreadyMissing ? `下载器任务「${torrent.title}」已不存在，已同步本地状态` : `删除下载器任务「${torrent.title}」`,
     status: 'SUCCESS',
     ...operationActor(res, req)
   })

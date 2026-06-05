@@ -137,3 +137,30 @@ export async function addTorrentUrlToQb(
   const torrentFile = await fetchTorrentFile(site, downloadUrl)
   return addTorrentFileToQb(downloader, torrentFile, filename, options)
 }
+
+export async function deleteTorrentFromQb(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>, hash: string, deleteFiles = true) {
+  if (!hash.trim()) throw new QbittorrentError('缺少下载器任务 Hash')
+  const cookie = await loginQb(downloader)
+  const before = await listQbTorrents(downloader, cookie)
+  if (!before.some((item) => item.hash?.toLowerCase() === hash.toLowerCase())) {
+    return { deleted: false, alreadyMissing: true }
+  }
+  const body = new URLSearchParams({ hashes: hash, deleteFiles: String(deleteFiles) })
+  const response = await qbFetch(downloader.host, '/api/v2/torrents/delete', {
+    method: 'POST',
+    headers: {
+      ...cookieHeader(cookie),
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body
+  })
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (!response.ok) throw new QbittorrentError(`下载器删除任务失败：HTTP ${response.status}`)
+
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  const after = await listQbTorrents(downloader, cookie)
+  if (after.some((item) => item.hash?.toLowerCase() === hash.toLowerCase())) {
+    throw new QbittorrentError('下载器删除任务未生效')
+  }
+  return { deleted: true, alreadyMissing: false }
+}

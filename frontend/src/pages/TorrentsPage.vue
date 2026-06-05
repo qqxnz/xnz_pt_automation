@@ -6,8 +6,8 @@
           <h1>种子</h1>
           <p>只展示自动执行和手动运行写入的种子；测试结果不会进入列表。</p>
         </div>
-        <button class="primary-button compact" type="button" :disabled="!selectedIds.length" @click="batchPush">
-          批量推送
+        <button class="primary-button compact" type="button" :disabled="!selectedIds.length || batchPushing" @click="batchPush">
+          {{ batchPushing ? '批量推送中...' : '批量推送' }}
         </button>
       </div>
 
@@ -51,7 +51,7 @@
             <span></span><span>种子</span><span>状态</span><span>来源</span><span>下载器</span><span>操作</span>
           </div>
           <div v-for="torrent in items" :key="torrent.id" class="torrent-row">
-            <input v-model="selectedIds" type="checkbox" :value="torrent.id" :disabled="torrent.pushStatus !== 'NEW'" />
+            <input v-model="selectedIds" type="checkbox" :value="torrent.id" :disabled="torrent.pushStatus !== 'NEW' || isTorrentBusy(torrent.id)" />
             <span>
               <strong>{{ torrent.title }}</strong>
               <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
@@ -69,11 +69,50 @@
               <small>{{ torrent.torrentHash ? `Hash ${torrent.torrentHash.slice(0, 8)}` : torrent.downloaderState || '-' }}</small>
             </span>
             <span class="row-actions">
-              <button type="button" :disabled="torrent.pushStatus === 'PUSHED'" @click="pushOne(torrent)">推送</button>
+              <button type="button" :disabled="!canPushTorrent(torrent)" @click="pushOne(torrent)">{{ isPushing(torrent.id) ? '推送中...' : '推送' }}</button>
               <button type="button" @click="showDetail(torrent)">详情</button>
-              <button v-if="torrent.pushStatus === 'PUSHED'" class="danger-text" type="button" @click="deleteFromDownloader(torrent)">删除任务</button>
+              <button v-if="canDeleteFromDownloader(torrent)" class="danger-text" type="button" :disabled="isTorrentBusy(torrent.id)" @click="deleteFromDownloader(torrent)">{{ isDeleting(torrent.id) ? '删除中...' : '删除任务' }}</button>
             </span>
           </div>
+        </div>
+
+        <div class="mobile-torrent-list">
+          <article v-for="torrent in items" :key="torrent.id" class="site-card torrent-card">
+            <div>
+              <label class="mobile-torrent-select">
+                <input v-model="selectedIds" type="checkbox" :value="torrent.id" :disabled="torrent.pushStatus !== 'NEW' || isTorrentBusy(torrent.id)" />
+                <strong>{{ torrent.title }}</strong>
+              </label>
+              <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
+            </div>
+            <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }}</p>
+            <dl class="site-stat-grid">
+              <div>
+                <dt>来源</dt>
+                <dd>{{ runModeText(torrent.sourceRunMode) }}</dd>
+              </div>
+              <div>
+                <dt>任务</dt>
+                <dd>{{ torrent.sourceTaskName || '-' }}</dd>
+              </div>
+              <div>
+                <dt>下载器</dt>
+                <dd>{{ torrent.downloaderName || '-' }}</dd>
+              </div>
+              <div>
+                <dt>链接</dt>
+                <dd>{{ linkText(torrent.linkStatus) }}</dd>
+              </div>
+            </dl>
+            <p>{{ torrent.errorMessage || freeText(torrent) }}</p>
+            <p v-if="torrent.torrentHash">Hash：{{ torrent.torrentHash.slice(0, 8) }}</p>
+            <p v-else-if="torrent.downloaderState">下载器状态：{{ torrent.downloaderState }}</p>
+            <div class="row-actions">
+              <button type="button" :disabled="!canPushTorrent(torrent)" @click="pushOne(torrent)">{{ isPushing(torrent.id) ? '推送中...' : '推送' }}</button>
+              <button type="button" @click="showDetail(torrent)">详情</button>
+              <button v-if="canDeleteFromDownloader(torrent)" class="danger-text" type="button" :disabled="isTorrentBusy(torrent.id)" @click="deleteFromDownloader(torrent)">{{ isDeleting(torrent.id) ? '删除中...' : '删除任务' }}</button>
+            </div>
+          </article>
         </div>
         <div class="pager">
           <button type="button" :disabled="filters.page <= 1 || loading" @click="changePage(filters.page - 1)">上一页</button>
@@ -95,6 +134,7 @@
         <div class="test-result-list">
           <article><strong>{{ detail.title }}</strong><span>{{ formatBytes(detail.size) }} · {{ discountText(detail.discountType) }}</span></article>
           <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
+          <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
           <article><strong>种链接状态</strong><span>{{ linkText(detail.linkStatus) }}</span></article>
           <article v-if="detail.errorMessage"><strong>失败原因</strong><span>{{ detail.errorMessage }}</span></article>
         </div>
@@ -122,6 +162,9 @@ const selectedIds = ref<string[]>([])
 const detail = ref<TorrentItem>()
 const total = ref(0)
 const loading = ref(false)
+const batchPushing = ref(false)
+const pushingIds = ref<string[]>([])
+const deletingIds = ref<string[]>([])
 const error = ref('')
 const stats = ref<TorrentStats>({ total: 0, auto: 0, manual: 0, pending: 0, failed: 0, expiringSoon: 0 })
 const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'pushStatus' | 'sourceRunMode' | 'page' | 'pageSize'>>>({
@@ -163,27 +206,50 @@ function changePage(page: number) {
 }
 
 async function pushOne(torrent: TorrentItem) {
+  if (!canPushTorrent(torrent)) return
+  pushingIds.value = [...pushingIds.value, torrent.id]
   try {
     await pushTorrent(torrent.id)
     Snackbar.success('种子已推送')
     await loadTorrents()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '推送失败')
+  } finally {
+    pushingIds.value = pushingIds.value.filter((id) => id !== torrent.id)
   }
 }
 
 async function batchPush() {
-  const result = await batchPushTorrents(selectedIds.value)
-  Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
-  selectedIds.value = []
-  await loadTorrents()
+  if (!selectedIds.value.length || batchPushing.value) return
+  batchPushing.value = true
+  const ids = [...selectedIds.value]
+  pushingIds.value = [...new Set([...pushingIds.value, ...ids])]
+  try {
+    const result = await batchPushTorrents(ids)
+    Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
+    selectedIds.value = []
+    await loadTorrents()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '批量推送失败')
+  } finally {
+    batchPushing.value = false
+    pushingIds.value = pushingIds.value.filter((id) => !ids.includes(id))
+  }
 }
 
 async function deleteFromDownloader(torrent: TorrentItem) {
-  if (!window.confirm(`确认删除下载器任务「${torrent.title}」？`)) return
-  await deleteTorrentFromDownloader(torrent.id)
-  Snackbar.success('下载器任务已删除')
-  await loadTorrents()
+  if (!canDeleteFromDownloader(torrent) || isTorrentBusy(torrent.id)) return
+  if (!window.confirm(`确认删除下载器任务「${torrent.title}」并同时删除已下载文件？`)) return
+  deletingIds.value = [...deletingIds.value, torrent.id]
+  try {
+    await deleteTorrentFromDownloader(torrent.id)
+    Snackbar.success('下载器任务已删除')
+    await loadTorrents()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    deletingIds.value = deletingIds.value.filter((id) => id !== torrent.id)
+  }
 }
 
 function showDetail(torrent: TorrentItem) {
@@ -226,8 +292,42 @@ function pushClass(value: TorrentItem['pushStatus']) {
   return 'pending-chip'
 }
 
+function stateText(value: TorrentItem['currentState']) {
+  const map = {
+    NEW: '新种子',
+    FREE_NOW: '免费中',
+    EXPIRING_SOON: '即将过期',
+    EXPIRED: '已过期',
+    PUSHED: '已推送',
+    PUSH_FAILED: '推送失败',
+    DOWNLOADER_DELETED: '下载器任务已删除'
+  }
+  return map[value]
+}
+
+function canDeleteFromDownloader(torrent: TorrentItem) {
+  return torrent.pushStatus === 'PUSHED' && Boolean(torrent.torrentHash)
+}
+
+function isPushing(id: string) {
+  return pushingIds.value.includes(id)
+}
+
+function isDeleting(id: string) {
+  return deletingIds.value.includes(id)
+}
+
+function isTorrentBusy(id: string) {
+  return isPushing(id) || isDeleting(id)
+}
+
+function canPushTorrent(torrent: TorrentItem) {
+  return torrent.pushStatus !== 'PUSHED' && !isTorrentBusy(torrent.id)
+}
+
 function freeText(torrent: TorrentItem) {
-  if (!torrent.freeEndAt) return torrent.isFreeNow ? '免费中' : '非免费'
+  if (torrent.currentState === 'EXPIRED') return '免费已过期'
+  if (!torrent.freeEndAt) return torrent.isFreeNow ? '免费中，未获取到过期时间' : '非免费'
   return `免费至 ${new Date(torrent.freeEndAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
 }
 

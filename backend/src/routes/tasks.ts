@@ -20,6 +20,8 @@ type TaskPayload = {
   freeOnly?: boolean
   autoPush?: boolean
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  seederCondition?: 'GT' | 'EQ' | 'LT' | ''
+  seederCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -73,6 +75,9 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   const interval = payload.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 30 分钟'
   if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE'].includes(type))) return '免费类型范围不合法'
+  if (payload.seederCondition && !['GT', 'EQ', 'LT'].includes(payload.seederCondition)) return '做种人数条件不合法'
+  const seederCount = payload.seederCount
+  if (payload.seederCondition && (!Number.isInteger(seederCount) || Number(seederCount) < 0)) return '做种人数必须是大于等于 0 的整数'
   return undefined
 }
 
@@ -92,6 +97,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   const autoRunEnabled = payload.autoRunEnabled ?? existing?.autoRunEnabled ?? false
   const wasAutoRunEnabled = existing?.autoRunEnabled ?? false
   const autoRunStartedAt = autoRunEnabled ? (wasAutoRunEnabled ? existing?.autoRunStartedAt ?? now : now) : undefined
+  const hasSeederCondition = Object.hasOwn(payload, 'seederCondition')
+  const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
   return {
     id: existing?.id ?? randomUUID(),
     name: payload.name!.trim(),
@@ -104,6 +111,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+    seederCondition,
+    seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
     expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
     savePathOverride: payload.savePathOverride?.trim() || undefined,
     categoryOverride: payload.categoryOverride?.trim() || undefined,
@@ -143,6 +152,7 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
       size: item.size ?? 0,
       discountType,
       isFreeNow: discountType !== 'NORMAL',
+      freeEndAt: item.freeEndAt,
       seeders: item.seeders ?? 0,
       leechers: item.leechers ?? 0,
       linkStatus: downloadUrl ? 'SAVED' : 'MISSING',
@@ -156,12 +166,27 @@ function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
   return items.filter((item) => {
     if (task.freeOnly && !item.isFreeNow) return false
     if (item.discountType !== 'NORMAL' && !task.discountTypes.includes(item.discountType)) return false
+    if (task.seederCondition) {
+      const target = task.seederCount ?? 0
+      if (task.seederCondition === 'GT' && item.seeders <= target) return false
+      if (task.seederCondition === 'EQ' && item.seeders !== target) return false
+      if (task.seederCondition === 'LT' && item.seeders >= target) return false
+    }
     return true
   })
 }
 
-function torrentHash(task: TaskRecord, item: CandidateTorrent) {
-  return createHash('sha1').update(`${task.id}:${item.torrentId}`).digest('hex')
+function torrentHash(site: SiteRecord, item: CandidateTorrent) {
+  return createHash('sha1').update(`${site.id}:${item.torrentId}`).digest('hex')
+}
+
+function knownTorrentKeys(torrents: TorrentRecord[]) {
+  return new Set(torrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
+}
+
+function newCandidatesForSite(site: SiteRecord, items: CandidateTorrent[], torrents: TorrentRecord[]) {
+  const existingKeys = knownTorrentKeys(torrents)
+  return items.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
 }
 
 function torrentFilename(title: string, fallback: string) {
@@ -173,6 +198,7 @@ type TaskRunResult = {
   task: TaskRecord
   fetchedCount: number
   matchedCount: number
+  skippedExistingCount: number
   pushedCount: number
   pushFailedCount: number
   summary: string
@@ -219,12 +245,13 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     if (!downloader) throw new Error('任务绑定下载器不存在')
     if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
     const fetched = await candidatesForTask(site, { includeDownloadUrl: true })
-    const matched = matchedCandidates(task, fetched)
+    const ruleMatched = matchedCandidates(task, fetched)
+    const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
+    const skippedExistingCount = ruleMatched.length - matched.length
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
     for (const item of matched) {
-      const existing = state.torrents.find((torrent) => torrent.siteId === site.id && torrent.torrentId === item.torrentId)
       let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
       let pushError: string | undefined
       if (task.autoPush) {
@@ -242,7 +269,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       }
       const failedPush = Boolean(pushError)
       const record: TorrentRecord = {
-        id: existing?.id ?? randomUUID(),
+        id: randomUUID(),
         siteId: site.id,
         siteName: siteName(site),
         torrentId: item.torrentId,
@@ -266,17 +293,16 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         sourceTaskName: task.name,
         sourceRunMode: runMode,
         errorMessage: pushError,
-        firstSeenAt: existing?.firstSeenAt ?? now,
+        firstSeenAt: now,
         lastSeenAt: now,
-        pushedAt: pushed ? now : existing?.pushedAt,
-        downloadUrlHash: torrentHash(task, item),
+        pushedAt: pushed ? now : undefined,
+        downloadUrlHash: torrentHash(site, item),
         downloadUrl: item.downloadUrl
       }
-      if (existing) Object.assign(existing, record)
-      else state.torrents.unshift(record)
+      state.torrents.unshift(record)
     }
     const finishedAt = new Date().toISOString()
-    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     task.running = false
     task.lastFinishedAt = finishedAt
     task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'
@@ -295,12 +321,13 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       finishedAt,
       fetchedCount: fetched.length,
       matchedCount: matched.length,
+      skippedExistingCount,
       pushedCount,
       pushFailedCount,
       summary,
       errorMessage: task.lastError
     })
-    return { task, fetchedCount: fetched.length, matchedCount: matched.length, pushedCount, pushFailedCount, summary }
+    return { task, fetchedCount: fetched.length, matchedCount: matched.length, skippedExistingCount, pushedCount, pushFailedCount, summary }
   } catch (error) {
     const finishedAt = new Date().toISOString()
     const message = error instanceof Error ? error.message : '任务执行失败'
@@ -322,6 +349,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       finishedAt,
       fetchedCount: 0,
       matchedCount: 0,
+      skippedExistingCount: 0,
       pushedCount: 0,
       pushFailedCount: 0,
       summary: message,
@@ -441,8 +469,10 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   const site = state.sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
   const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
-  const matched = matchedCandidates(task, fetched)
-  await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个`)
+  const ruleMatched = matchedCandidates(task, fetched)
+  const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
+  const skippedExistingCount = ruleMatched.length - matched.length
+  await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个`)
   res.json({
     taskId: task.id,
     taskName: task.name,
@@ -450,6 +480,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
     siteName: siteName(site),
     fetchedCount: fetched.length,
     matchedCount: matched.length,
+    skippedExistingCount,
     items: matched,
     total: matched.length
   })
@@ -460,7 +491,7 @@ tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
     const result = await runTaskById(String(req.params.id), 'MANUAL_RUN')
     const state = await readState()
     await logOperation(req, res, '运行任务', `手动运行任务「${result.task.name}」：${result.summary}`, result.task.lastStatus)
-    res.json({ task: listItem(result.task, state), fetchedCount: result.fetchedCount, matchedCount: result.matchedCount, pushedCount: result.pushedCount, pushFailedCount: result.pushFailedCount, summary: result.summary })
+    res.json({ task: listItem(result.task, state), fetchedCount: result.fetchedCount, matchedCount: result.matchedCount, skippedExistingCount: result.skippedExistingCount, pushedCount: result.pushedCount, pushFailedCount: result.pushFailedCount, summary: result.summary })
   } catch (error) {
     const message = error instanceof Error ? error.message : '任务执行失败'
     const state = await readState()

@@ -1,8 +1,16 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState } from '../storage.js'
+import { verifyPassword } from '../utils/password.js'
 
 export const statsRouter = Router()
+
+type DashboardRisk = {
+  type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
+  message: string
+  actionText: string
+  actionPath: string
+}
 
 statsRouter.get('/overview', requireAuth, async (_req, res) => {
   const state = await readState()
@@ -13,20 +21,27 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     authFailed: state.sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
     unknown: state.sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
   }
-  const risks = [
-    {
+  const risks: DashboardRisk[] = []
+  const admin = state.users.find((user) => user.username === 'admin')
+  const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
+
+  if (admin && await verifyPassword(defaultPassword, admin.passwordHash)) {
+    risks.push({
       type: 'DEFAULT_PASSWORD',
       message: '首次部署后建议尽快修改默认密码',
       actionText: '前往设置',
       actionPath: '/settings'
-    },
-    {
+    })
+  }
+
+  if (state.downloaders.length === 0) {
+    risks.push({
       type: 'DOWNLOADER_NOT_CONFIGURED',
       message: '下载器尚未配置，种子无法自动推送',
       actionText: '新增下载器',
       actionPath: '/downloaders'
-    }
-  ]
+    })
+  }
 
   if (siteStats.total > 0 && siteStats.authFailed > 0) {
     risks.unshift({

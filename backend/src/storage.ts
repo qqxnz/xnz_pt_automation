@@ -37,6 +37,7 @@ export type TaskLogRecord = {
   finishedAt?: string
   fetchedCount?: number
   matchedCount?: number
+  skippedExistingCount?: number
   pushedCount?: number
   pushFailedCount?: number
   summary?: string
@@ -56,6 +57,8 @@ export type TaskRecord = {
   freeOnly: boolean
   autoPush: boolean
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  seederCondition?: 'GT' | 'EQ' | 'LT'
+  seederCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
