@@ -62,6 +62,8 @@ export type TaskRecord = {
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT'
   seederCount?: number
+  sizeCondition?: 'GT' | 'EQ' | 'LT'
+  sizeMb?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -240,9 +242,12 @@ function normalizeState(state: Partial<AppState>): AppState {
       const discountTypes = task.discountTypes ?? defaultTaskDiscountTypes
       const normalizedDiscountTypes: TaskRecord['discountTypes'] =
         task.freeOnly === false && !discountTypes.includes('NORMAL') ? [...discountTypes, 'NORMAL'] : discountTypes
+      const sizeCondition = ['GT', 'EQ', 'LT'].includes(task.sizeCondition ?? '') ? task.sizeCondition : undefined
       return {
         ...task,
-        discountTypes: normalizedDiscountTypes
+        discountTypes: normalizedDiscountTypes,
+        sizeCondition,
+        sizeMb: sizeCondition && Number.isFinite(task.sizeMb) && Number(task.sizeMb) >= 0 ? Number(task.sizeMb) : undefined
       }
     })
 

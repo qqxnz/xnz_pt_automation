@@ -22,6 +22,8 @@ type TaskPayload = {
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT' | ''
   seederCount?: number
+  sizeCondition?: 'GT' | 'EQ' | 'LT' | ''
+  sizeMb?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -45,6 +47,7 @@ type CandidateTorrent = {
 const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 10
 const TASK_SCHEDULER_INTERVAL_MS = 60_000
+const MB_BYTES = 1024 * 1024
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
@@ -78,6 +81,9 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   if (payload.seederCondition && !['GT', 'EQ', 'LT'].includes(payload.seederCondition)) return '做种人数条件不合法'
   const seederCount = payload.seederCount
   if (payload.seederCondition && (!Number.isInteger(seederCount) || Number(seederCount) < 0)) return '做种人数必须是大于等于 0 的整数'
+  if (payload.sizeCondition && !['GT', 'EQ', 'LT'].includes(payload.sizeCondition)) return '种子大小条件不合法'
+  const sizeMb = Number(payload.sizeMb)
+  if (payload.sizeCondition && (!Number.isFinite(sizeMb) || sizeMb < 0)) return '种子大小必须是大于等于 0 的数字'
   return undefined
 }
 
@@ -99,6 +105,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   const autoRunStartedAt = autoRunEnabled ? (wasAutoRunEnabled ? existing?.autoRunStartedAt ?? now : now) : undefined
   const hasSeederCondition = Object.hasOwn(payload, 'seederCondition')
   const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
+  const hasSizeCondition = Object.hasOwn(payload, 'sizeCondition')
+  const sizeCondition = hasSizeCondition ? payload.sizeCondition || undefined : existing?.sizeCondition
   return {
     id: existing?.id ?? randomUUID(),
     name: payload.name!.trim(),
@@ -113,6 +121,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,
     seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
+    sizeCondition,
+    sizeMb: sizeCondition ? Number(payload.sizeMb ?? existing?.sizeMb ?? 0) : undefined,
     expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
     savePathOverride: payload.savePathOverride?.trim() || undefined,
     categoryOverride: payload.categoryOverride?.trim() || undefined,
@@ -176,6 +186,12 @@ function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
       if (task.seederCondition === 'GT' && item.seeders <= target) return false
       if (task.seederCondition === 'EQ' && item.seeders !== target) return false
       if (task.seederCondition === 'LT' && item.seeders >= target) return false
+    }
+    if (task.sizeCondition) {
+      const target = (task.sizeMb ?? 0) * MB_BYTES
+      if (task.sizeCondition === 'GT' && item.size <= target) return false
+      if (task.sizeCondition === 'EQ' && item.size !== target) return false
+      if (task.sizeCondition === 'LT' && item.size >= target) return false
     }
     return true
   })

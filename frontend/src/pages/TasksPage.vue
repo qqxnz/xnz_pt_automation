@@ -150,6 +150,15 @@
               </select>
             </label>
             <label>做种人数<input v-model.number="form.seederCount" min="0" type="number" /></label>
+            <label>种子大小条件
+              <select v-model="form.sizeCondition">
+                <option value="">不限制</option>
+                <option value="GT">大于</option>
+                <option value="EQ">等于</option>
+                <option value="LT">小于</option>
+              </select>
+            </label>
+            <label>种子大小（MB）<input v-model.number="form.sizeMb" min="0" step="0.01" type="number" /></label>
             <label>即将过期阈值<input v-model.number="form.expiringSoonMinutes" min="1" type="number" /></label>
           </section>
         </div>
@@ -200,6 +209,7 @@ import {
   updateTaskAutoRun,
   type DiscountType,
   type SeederCondition,
+  type SizeCondition,
   type TaskItem,
   type TaskPayload,
   type TaskStats,
@@ -230,6 +240,8 @@ const form = reactive<TaskPayload>({
   discountTypes: ['FREE', 'TWO_X_FREE'],
   seederCondition: '',
   seederCount: 0,
+  sizeCondition: '',
+  sizeMb: 0,
   expiringSoonMinutes: 120,
   savePathOverride: ''
 })
@@ -242,6 +254,12 @@ const discountOptions: Array<{ value: DiscountType; label: string }> = [
 ]
 
 const seederConditionText: Record<SeederCondition, string> = {
+  GT: '大于',
+  EQ: '等于',
+  LT: '小于'
+}
+
+const sizeConditionText: Record<SizeCondition, string> = {
   GT: '大于',
   EQ: '等于',
   LT: '小于'
@@ -267,6 +285,8 @@ function resetForm() {
     discountTypes: ['FREE', 'TWO_X_FREE'],
     seederCondition: '',
     seederCount: 0,
+    sizeCondition: '',
+    sizeMb: 0,
     expiringSoonMinutes: 120,
     savePathOverride: '',
     categoryOverride: undefined,
@@ -292,6 +312,8 @@ function openEdit(task: TaskItem) {
     discountTypes: [...task.discountTypes],
     seederCondition: task.seederCondition ?? '',
     seederCount: task.seederCount ?? 0,
+    sizeCondition: task.sizeCondition ?? '',
+    sizeMb: task.sizeMb ?? 0,
     expiringSoonMinutes: task.expiringSoonMinutes ?? 120,
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
@@ -307,6 +329,7 @@ function validateForm() {
   if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 10) return '执行间隔不能小于 10 分钟'
   if (!form.discountTypes.length) return '请至少选择一种优惠类型'
   if (form.seederCondition && (!Number.isInteger(form.seederCount) || (form.seederCount ?? 0) < 0)) return '做种人数必须是大于等于 0 的整数'
+  if (form.sizeCondition && (!Number.isFinite(Number(form.sizeMb)) || Number(form.sizeMb) < 0)) return '种子大小必须是大于等于 0 的数字'
   return ''
 }
 
@@ -415,6 +438,7 @@ function discountText(value: string) {
 function rangeText(task: TaskItem) {
   const parts = [task.discountTypes.map(discountText).join(', ')]
   if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
+  if (task.sizeCondition) parts.push(`大小${sizeConditionText[task.sizeCondition]} ${task.sizeMb ?? 0} MB`)
   return parts.join(' · ')
 }
 
