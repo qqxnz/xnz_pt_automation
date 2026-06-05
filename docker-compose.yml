@@ -1,8 +1,8 @@
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:latest
+    image: qqxnz/xnz-pt-automation:0.1.0
     container_name: xnz-pt-automation
-    restart: unless-stopped
+    restart: always
     ports:
       - "3180:3180"
     environment:

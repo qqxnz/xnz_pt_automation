@@ -23,9 +23,17 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
+ARG VERSION=0.1.0
+
 ENV NODE_ENV=production
 ENV PORT=3180
 ENV DATA_DIR=/data
+
+LABEL org.opencontainers.image.title="PT Automation"
+LABEL org.opencontainers.image.description="Personal and home NAS PT automation system with a Vue frontend and Express API."
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.source="https://github.com/qqxnz/xnz_pt_automation"
+LABEL org.opencontainers.image.url="https://hub.docker.com/r/qqxnz/xnz-pt-automation"
 
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json

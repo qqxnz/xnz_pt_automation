@@ -2,6 +2,69 @@
 
 面向个人或家庭 NAS 的 PT 自动化系统，用于按任务规则抓取 PT 站点种子、推送到下载器、检查免费时间过期并按规则删除，同时统计各 PT 站点上传量、下载量和分享率等数据。当前下载器类型优先支持 qBittorrent/QB，后续可扩展到其他种子下载工具。
 
+## Docker 部署
+
+当前镜像发布在 Docker Hub：
+
+```bash
+docker pull qqxnz/xnz-pt-automation:0.1.0
+```
+
+推荐使用 `docker compose` 启动：
+
+```yaml
+services:
+  xnz-pt-automation:
+    image: qqxnz/xnz-pt-automation:0.1.0
+    container_name: xnz-pt-automation
+    restart: unless-stopped
+    ports:
+      - "3180:3180"
+    environment:
+      PORT: "3180"
+      DATA_DIR: /data
+      DEFAULT_ADMIN_PASSWORD: "123456"
+    volumes:
+      - ./data:/data
+```
+
+启动后访问：
+
+```text
+http://localhost:3180
+```
+
+默认账号：
+
+```text
+用户名：admin
+密码：123456
+```
+
+也可以直接用 `docker run`：
+
+```bash
+docker run -d \
+  --name xnz-pt-automation \
+  --restart unless-stopped \
+  -p 3180:3180 \
+  -e DEFAULT_ADMIN_PASSWORD=123456 \
+  -v "$(pwd)/data:/data" \
+  qqxnz/xnz-pt-automation:0.1.0
+```
+
+### 镜像版本
+
+- `qqxnz/xnz-pt-automation:0.1.0`：当前稳定版本，推荐部署时使用固定版本。
+- `qqxnz/xnz-pt-automation:latest`：指向最新发布版本，适合测试或快速体验。
+
+升级到新版本时，先拉取新镜像，再重建容器：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
 ## 文档结构
 
 ```text
