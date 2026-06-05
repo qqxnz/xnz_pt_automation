@@ -19,7 +19,7 @@ type TaskPayload = {
   intervalMinutes?: number
   freeOnly?: boolean
   autoPush?: boolean
-  discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT' | ''
   seederCount?: number
   expiringSoonMinutes?: number
@@ -43,7 +43,7 @@ type CandidateTorrent = {
 }
 
 const DEFAULT_INTERVAL_MINUTES = 30
-const MIN_INTERVAL_MINUTES = 30
+const MIN_INTERVAL_MINUTES = 10
 const TASK_SCHEDULER_INTERVAL_MS = 60_000
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
@@ -73,8 +73,8 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   if (!payload.siteId || !state.sites.some((site) => site.id === payload.siteId)) return '请选择站点'
   if (!payload.downloaderId || !state.downloaders.some((downloader) => downloader.id === payload.downloaderId)) return '请选择下载器'
   const interval = payload.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
-  if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 30 分钟'
-  if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE'].includes(type))) return '免费类型范围不合法'
+  if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 10 分钟'
+  if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE', 'NORMAL'].includes(type))) return '优惠类型范围不合法'
   if (payload.seederCondition && !['GT', 'EQ', 'LT'].includes(payload.seederCondition)) return '做种人数条件不合法'
   const seederCount = payload.seederCount
   if (payload.seederCondition && (!Number.isInteger(seederCount) || Number(seederCount) < 0)) return '做种人数必须是大于等于 0 的整数'
@@ -110,7 +110,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     intervalMinutes,
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
-    discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+    discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,
     seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
     expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
@@ -132,6 +132,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
 function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['discountType'] {
   const marker = `${item.tags.join(' ')} ${item.subtitle ?? ''}`.toLowerCase()
   if (/(2x|2 x|two.?x|双倍|雙倍)/i.test(marker)) return 'TWO_X_FREE'
+  if (/(50\s*%|half.?free|half.?off|半价|半價)/i.test(marker)) return 'HALF_FREE'
   if (/(free|免费|免費)/i.test(marker)) return 'FREE'
   return 'NORMAL'
 }
@@ -164,8 +165,7 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
 
 function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
   return items.filter((item) => {
-    if (task.freeOnly && !item.isFreeNow) return false
-    if (item.discountType !== 'NORMAL' && !task.discountTypes.includes(item.discountType)) return false
+    if (!task.discountTypes.includes(item.discountType)) return false
     if (task.seederCondition) {
       const target = task.seederCount ?? 0
       if (task.seederCondition === 'GT' && item.seeders <= target) return false

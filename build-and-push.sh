@@ -4,7 +4,7 @@
 DOCKER_HUB_IMAGE="qqxnz/xnz-pt-automation"
 ALIYUN_REGISTRY="crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com"
 ALIYUN_IMAGE="${ALIYUN_REGISTRY}/qqxnz/xnz-pt-automation"
-VERSION="0.1.2"
+VERSION="0.1.3"
 
 # 颜色输出
 GREEN='\033[0;32m'

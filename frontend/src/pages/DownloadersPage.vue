@@ -151,7 +151,7 @@
         <div class="form-head">
           <div>
             <h2>{{ editingDownloaderId ? `编辑下载器 - ${form.name || ''}` : '新增下载器' }}</h2>
-            <p>密码不会回显；保存并测试会先保存配置，再连接 qBittorrent。</p>
+            <p>密码留空不修改；输入新密码后保存即更新。</p>
           </div>
           <button type="button" @click="closeForm">×</button>
         </div>
@@ -173,14 +173,18 @@
             <h3>连接信息</h3>
             <label>服务地址<input v-model.trim="form.host" required placeholder="http://nas:8080" /></label>
             <label>用户名<input v-model.trim="form.username" placeholder="可选" /></label>
-            <label>密码<input v-model="form.password" type="password" :placeholder="passwordPlaceholder" /></label>
-            <label v-if="editingDownloaderId">
-              密码处理
-              <select v-model="form.passwordAction">
-                <option value="KEEP">保持原密码</option>
-                <option value="UPDATE">更新密码</option>
-                <option value="CLEAR">清空密码</option>
-              </select>
+            <label>
+              密码
+              <div class="password-input">
+                <input
+                  v-model="form.password"
+                  :type="downloaderPasswordVisible ? 'text' : 'password'"
+                  :placeholder="passwordPlaceholder"
+                />
+                <button type="button" :disabled="saving || testingDraft" @click="downloaderPasswordVisible = !downloaderPasswordVisible">
+                  {{ downloaderPasswordVisible ? '隐藏' : '显示' }}
+                </button>
+              </div>
             </label>
           </section>
 
@@ -197,7 +201,7 @@
         </div>
 
         <div class="form-foot">
-          <span>校验：名称唯一；服务地址必须包含 http(s)；编辑密码默认保持原值。</span>
+          <span>校验：名称唯一；服务地址必须包含 http(s)；编辑时密码留空不修改。</span>
           <button type="button" class="secondary-button" @click="closeForm">取消</button>
           <button type="button" class="secondary-button blue" :disabled="saving || testingDraft" @click="testDraft">
             {{ testingDraft ? '测试中...' : '测试连接' }}
@@ -251,6 +255,7 @@ const torrentItems = ref<DownloaderTorrentItem[]>([])
 const formVisible = ref(false)
 const editingDownloaderId = ref<string>()
 const detailHasPassword = ref(false)
+const downloaderPasswordVisible = ref(false)
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
 let statusTimer: number | undefined
@@ -270,7 +275,6 @@ const form = reactive<DownloaderFormPayload>({
   host: '',
   username: '',
   password: '',
-  passwordAction: 'KEEP',
   savePath: ''
 })
 
@@ -324,6 +328,7 @@ function formatProgress(value: number) {
 function resetForm() {
   editingDownloaderId.value = undefined
   detailHasPassword.value = false
+  downloaderPasswordVisible.value = false
   draftTestResult.value = undefined
   testAfterSave.value = true
   Object.assign(form, {
@@ -333,7 +338,6 @@ function resetForm() {
     host: '',
     username: '',
     password: '',
-    passwordAction: 'KEEP',
     savePath: ''
   })
 }
@@ -347,7 +351,6 @@ function validateForm() {
   } catch {
     return '服务地址必须是合法的 http(s) 地址，且不能包含用户名或密码'
   }
-  if (editingDownloaderId.value && form.passwordAction === 'UPDATE' && !form.password) return '请输入新密码或改为保持原密码'
   return ''
 }
 
@@ -395,7 +398,6 @@ async function openEdit(downloader: DownloaderListItem) {
     host: detail.host,
     username: detail.username || '',
     password: '',
-    passwordAction: 'KEEP',
     savePath: detail.savePath || ''
   })
   formVisible.value = true
@@ -406,14 +408,15 @@ function closeForm() {
 }
 
 function buildPayload(): DownloaderFormPayload {
+  const password = form.password || undefined
   return {
     name: form.name.trim(),
     type: 'QBITTORRENT',
     enabled: form.enabled,
     host: form.host.trim(),
     username: form.username?.trim() || undefined,
-    password: form.password || undefined,
-    passwordAction: editingDownloaderId.value ? form.passwordAction : 'UPDATE',
+    password,
+    passwordAction: editingDownloaderId.value ? (password ? 'UPDATE' : 'KEEP') : 'UPDATE',
     savePath: form.savePath?.trim() || undefined
   }
 }
@@ -443,7 +446,6 @@ async function saveDownloader(runTest: boolean) {
     Snackbar.warning(validation)
     return
   }
-  if (editingDownloaderId.value && form.passwordAction === 'CLEAR' && !window.confirm('确认清空密码？清空后将以无密码方式连接下载器。')) return
 
   saving.value = true
   try {

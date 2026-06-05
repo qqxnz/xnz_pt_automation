@@ -671,6 +671,10 @@ a {
   background: #fff;
 }
 
+.site-form .password-input input {
+  padding-right: 72px;
+}
+
 .secondary-button {
   min-height: 46px;
   border: 1px solid #dbe4f0;

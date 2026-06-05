@@ -354,7 +354,7 @@ function formatBytes(value?: number) {
 }
 
 function discountText(value: TorrentItem['discountType']) {
-  return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? 'HALF FREE' : value
+  return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? '50% FREE' : value === 'NORMAL' ? '不免费' : value
 }
 
 function runModeText(value: TorrentItem['sourceRunMode']) {

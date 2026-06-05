@@ -129,12 +129,12 @@
             <label>任务名称<input v-model.trim="form.name" placeholder="例如 MTeam 免费自动推送" /></label>
             <label>站点<select v-model="form.siteId"><option value="">请选择站点</option><option v-for="site in sites" :key="site.id" :value="site.id">{{ site.displayName }}</option></select></label>
             <label>下载器<select v-model="form.downloaderId"><option value="">请选择下载器</option><option v-for="downloader in downloaders" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option></select></label>
-            <label>执行间隔分钟<input v-model.number="form.intervalMinutes" min="30" type="number" /></label>
+            <label>执行间隔分钟<input v-model.number="form.intervalMinutes" min="10" type="number" /></label>
+            <label>默认保存路径<input v-model.trim="form.savePathOverride" placeholder="不填则使用下载器或 QB 默认路径" /></label>
           </section>
           <section>
             <h3>运行规则</h3>
             <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 自动执行开关</label>
-            <label class="inline-check"><input v-model="form.freeOnly" type="checkbox" /> 只抓免费</label>
             <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
             <div class="check-grid">
               <label v-for="type in discountOptions" :key="type.value" class="inline-check">
@@ -227,16 +227,18 @@ const form = reactive<TaskPayload>({
   intervalMinutes: 30,
   freeOnly: true,
   autoPush: true,
-  discountTypes: ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+  discountTypes: ['FREE', 'TWO_X_FREE'],
   seederCondition: '',
   seederCount: 0,
-  expiringSoonMinutes: 120
+  expiringSoonMinutes: 120,
+  savePathOverride: ''
 })
 
 const discountOptions: Array<{ value: DiscountType; label: string }> = [
   { value: 'FREE', label: 'FREE' },
   { value: 'TWO_X_FREE', label: '2X FREE' },
-  { value: 'HALF_FREE', label: 'HALF FREE' }
+  { value: 'HALF_FREE', label: '50% FREE' },
+  { value: 'NORMAL', label: '不免费' }
 ]
 
 const seederConditionText: Record<SeederCondition, string> = {
@@ -262,11 +264,11 @@ function resetForm() {
     intervalMinutes: 30,
     freeOnly: true,
     autoPush: true,
-    discountTypes: ['FREE', 'TWO_X_FREE', 'HALF_FREE'],
+    discountTypes: ['FREE', 'TWO_X_FREE'],
     seederCondition: '',
     seederCount: 0,
     expiringSoonMinutes: 120,
-    savePathOverride: undefined,
+    savePathOverride: '',
     categoryOverride: undefined,
     tagsOverride: undefined
   })
@@ -302,8 +304,8 @@ function validateForm() {
   if (!form.name.trim()) return '任务名称不能为空'
   if (!form.siteId) return '请选择站点'
   if (!form.downloaderId) return '请选择下载器'
-  if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 30) return '执行间隔不能小于 30 分钟'
-  if (!form.discountTypes.length) return '请至少选择一种免费类型'
+  if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 10) return '执行间隔不能小于 10 分钟'
+  if (!form.discountTypes.length) return '请至少选择一种优惠类型'
   if (form.seederCondition && (!Number.isInteger(form.seederCount) || (form.seederCount ?? 0) < 0)) return '做种人数必须是大于等于 0 的整数'
   return ''
 }
@@ -407,11 +409,11 @@ function formatDate(value?: string) {
 }
 
 function discountText(value: string) {
-  return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? 'HALF FREE' : value
+  return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? '50% FREE' : value === 'NORMAL' ? '不免费' : value
 }
 
 function rangeText(task: TaskItem) {
-  const parts = [task.freeOnly ? task.discountTypes.map(discountText).join(', ') : '全部种子']
+  const parts = [task.discountTypes.map(discountText).join(', ')]
   if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
   return parts.join(' · ')
 }

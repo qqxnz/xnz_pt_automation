@@ -1,6 +1,6 @@
 import { apiRequest } from './client'
 
-export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE'
+export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
 export type SeederCondition = 'GT' | 'EQ' | 'LT'
 export type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 

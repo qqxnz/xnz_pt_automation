@@ -59,7 +59,7 @@ export type TaskRecord = {
   intervalMinutes: number
   freeOnly: boolean
   autoPush: boolean
-  discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT'
   seederCount?: number
   expiringSoonMinutes?: number
@@ -76,6 +76,8 @@ export type TaskRecord = {
   createdAt: string
   updatedAt: string
 }
+
+const defaultTaskDiscountTypes: TaskRecord['discountTypes'] = ['FREE', 'TWO_X_FREE']
 
 export type TorrentRecord = {
   id: string
@@ -232,6 +234,17 @@ function normalizeState(state: Partial<AppState>): AppState {
     ...defaultSystemSettings,
     ...(state.systemSettings ?? {})
   }
+  const tasks = (state.tasks ?? [])
+    .filter((task) => typeof task.name === 'string')
+    .map((task) => {
+      const discountTypes = task.discountTypes ?? defaultTaskDiscountTypes
+      const normalizedDiscountTypes: TaskRecord['discountTypes'] =
+        task.freeOnly === false && !discountTypes.includes('NORMAL') ? [...discountTypes, 'NORMAL'] : discountTypes
+      return {
+        ...task,
+        discountTypes: normalizedDiscountTypes
+      }
+    })
 
   return {
     users: state.users ?? [],
@@ -240,7 +253,7 @@ function normalizeState(state: Partial<AppState>): AppState {
     sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
     proxies: state.proxies ?? [],
     downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
-    tasks: (state.tasks ?? []).filter((task) => typeof task.name === 'string'),
+    tasks,
     torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string'),
     systemSettings,
     systemSettingsUpdatedAt: state.systemSettingsUpdatedAt
