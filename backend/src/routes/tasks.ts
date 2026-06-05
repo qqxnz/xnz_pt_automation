@@ -101,8 +101,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   const now = new Date().toISOString()
   const intervalMinutes = payload.intervalMinutes ?? existing?.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   const autoRunEnabled = payload.autoRunEnabled ?? existing?.autoRunEnabled ?? false
-  const wasAutoRunEnabled = existing?.autoRunEnabled ?? false
-  const autoRunStartedAt = autoRunEnabled ? (wasAutoRunEnabled ? existing?.autoRunStartedAt ?? now : now) : undefined
+  const autoRunStartedAt = autoRunEnabled ? now : undefined
   const hasSeederCondition = Object.hasOwn(payload, 'seederCondition')
   const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
   const hasSizeCondition = Object.hasOwn(payload, 'sizeCondition')
@@ -114,7 +113,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     downloaderId: payload.downloaderId!,
     autoRunEnabled,
     autoRunStartedAt,
-    nextRunAt: autoRunEnabled ? addMinutes(wasAutoRunEnabled ? existing?.autoRunStartedAt ?? now : now, intervalMinutes) : undefined,
+    nextRunAt: autoRunEnabled ? addMinutes(now, intervalMinutes) : undefined,
     intervalMinutes,
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,

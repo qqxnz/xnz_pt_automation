@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState, type DownloaderRecord, writeState } from '../storage.js'
+import { getQbTransferInfo } from '../utils/qbittorrent.js'
 
 export const downloadersRouter = Router()
 
@@ -30,7 +31,7 @@ type QbTorrent = {
   added_on?: number
 }
 
-type QbTransferInfo = {
+type QbTransferResponse = {
   up_info_speed?: number
   dl_info_speed?: number
   up_info_data?: number
@@ -168,7 +169,7 @@ async function testQb(config: Pick<DownloaderRecord, 'host' | 'username' | 'pass
   if (!versionResponse.ok) throw new DownloaderError('NETWORK_ERROR', `下载器返回 HTTP ${versionResponse.status}`)
   const version = (await versionResponse.text()).trim()
   const transferResponse = await qbFetch(config.host, '/api/v2/transfer/info', { headers }, 8000)
-  const transfer = transferResponse.ok ? ((await transferResponse.json()) as QbTransferInfo) : {}
+  const transfer = transferResponse.ok ? ((await transferResponse.json()) as QbTransferResponse) : {}
   return {
     success: true,
     status: 'ONLINE' as const,
@@ -182,19 +183,17 @@ async function testQb(config: Pick<DownloaderRecord, 'host' | 'username' | 'pass
 }
 
 async function getQbStatus(config: DownloaderRecord) {
-  const cookie = await loginQb(config, 10000)
-  const headers = cookie ? { Cookie: cookie } : undefined
-  const response = await qbFetch(config.host, '/api/v2/transfer/info', { headers }, 10000)
-  if (response.status === 403) throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
-  if (!response.ok) throw new DownloaderError('NETWORK_ERROR', `下载器返回 HTTP ${response.status}`)
-  const transfer = (await response.json()) as QbTransferInfo
+  const transfer = await getQbTransferInfo(config).catch((error) => {
+    if (error instanceof Error && error.message.includes('认证失败')) throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
+    throw new DownloaderError('NETWORK_ERROR', errorMessage(error))
+  })
   return {
     downloaderId: config.id,
-    uploadSpeed: transfer.up_info_speed ?? 0,
-    downloadSpeed: transfer.dl_info_speed ?? 0,
-    totalUploaded: transfer.up_info_data ?? 0,
-    totalDownloaded: transfer.dl_info_data ?? 0,
-    freeSpace: transfer.free_space_on_disk,
+    uploadSpeed: transfer.uploadSpeed,
+    downloadSpeed: transfer.downloadSpeed,
+    totalUploaded: transfer.uploadedTotal,
+    totalDownloaded: transfer.downloadedTotal,
+    freeSpace: transfer.freeSpace,
     status: 'ONLINE' as const,
     lastSyncedAt: new Date().toISOString()
   }

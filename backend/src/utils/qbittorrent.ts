@@ -8,6 +8,22 @@ export type QbAddOptions = {
   tags?: string[]
 }
 
+export type QbTransferInfo = {
+  uploadSpeed: number
+  downloadSpeed: number
+  uploadedTotal: number
+  downloadedTotal: number
+  freeSpace?: number
+}
+
+type QbTransferResponse = {
+  up_info_speed?: number
+  dl_info_speed?: number
+  up_info_data?: number
+  dl_info_data?: number
+  free_space_on_disk?: number
+}
+
 type QbTorrent = {
   hash?: string
   name?: string
@@ -47,6 +63,21 @@ async function listQbTorrents(downloader: Pick<DownloaderRecord, 'host' | 'usern
   if (response.status === 403) throw new QbittorrentError('下载器认证失败')
   if (!response.ok) throw new QbittorrentError(`下载器任务列表请求失败：HTTP ${response.status}`)
   return (await response.json()) as QbTorrent[]
+}
+
+export async function getQbTransferInfo(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>): Promise<QbTransferInfo> {
+  const cookie = await loginQb(downloader)
+  const response = await qbFetch(downloader.host, '/api/v2/transfer/info', { headers: cookieHeader(cookie) }, 10000)
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (!response.ok) throw new QbittorrentError(`下载器传输状态请求失败：HTTP ${response.status}`)
+  const transfer = (await response.json()) as QbTransferResponse
+  return {
+    uploadSpeed: transfer.up_info_speed ?? 0,
+    downloadSpeed: transfer.dl_info_speed ?? 0,
+    uploadedTotal: transfer.up_info_data ?? 0,
+    downloadedTotal: transfer.dl_info_data ?? 0,
+    freeSpace: transfer.free_space_on_disk
+  }
 }
 
 function looksLikeTorrentFile(bytes: Uint8Array) {

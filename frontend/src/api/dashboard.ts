@@ -26,6 +26,7 @@ export type DashboardOverview = {
     actionPath?: string
   }>
   recentJobs: Array<{
+    id?: string
     name: string
     status: 'SUCCESS' | 'FAILED' | 'RUNNING'
     summary: string

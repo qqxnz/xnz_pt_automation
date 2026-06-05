@@ -103,7 +103,7 @@
     <section class="panel jobs-panel">
       <h2>最近任务</h2>
       <div v-if="overview?.recentJobs.length" class="job-list">
-        <div v-for="job in overview.recentJobs" :key="job.name" class="job-row">
+        <div v-for="job in overview.recentJobs" :key="job.id ?? `${job.name}-${job.finishedAt ?? ''}`" class="job-row">
           <strong>{{ job.name }}</strong>
           <span>{{ job.status }}</span>
           <p>{{ job.summary }}</p>
