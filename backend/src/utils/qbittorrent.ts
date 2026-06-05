@@ -23,6 +23,22 @@ export type QbTransferInfo = {
   freeSpace?: number
 }
 
+export type QbTorrentItem = {
+  hash: string
+  name: string
+  size?: number
+  progress: number
+  state: string
+  ratio?: number
+  category?: string
+  tags: string[]
+  uploadSpeed?: number
+  downloadSpeed?: number
+  uploaded?: number
+  downloaded?: number
+  addedAt?: string
+}
+
 type QbTransferResponse = {
   up_info_speed?: number
   dl_info_speed?: number
@@ -42,6 +58,8 @@ type QbTorrent = {
   tags?: string
   upspeed?: number
   dlspeed?: number
+  uploaded?: number
+  downloaded?: number
   added_on?: number
 }
 
@@ -146,7 +164,7 @@ export async function testQbConnection(config: Pick<DownloaderRecord, 'host' | '
   }
 }
 
-export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>) {
+export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>): Promise<QbTorrentItem[]> {
   const cookie = await loginQb(config)
   const items = await listQbTorrents(config, cookie)
   return items.map((item) => ({
@@ -160,6 +178,8 @@ export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 
     tags: splitTags(item.tags),
     uploadSpeed: item.upspeed,
     downloadSpeed: item.dlspeed,
+    uploaded: item.uploaded,
+    downloaded: item.downloaded,
     addedAt: item.added_on ? new Date(item.added_on * 1000).toISOString() : undefined
   }))
 }

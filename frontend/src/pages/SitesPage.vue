@@ -56,6 +56,8 @@
             <span>分享率</span>
             <span>上传量</span>
             <span>下载量</span>
+            <span>昨日上传量</span>
+            <span>今日上传量</span>
             <span>凭证</span>
             <span>操作</span>
           </div>
@@ -71,6 +73,8 @@
             </span>
             <span>{{ formatBytes(site.uploaded) }}</span>
             <span>{{ formatBytes(site.downloaded) }}</span>
+            <span>{{ formatBytes(site.yesterdayUploaded) }}</span>
+            <span>{{ formatBytes(site.todayUploaded) }}</span>
             <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
             <div class="row-actions">
               <button type="button" @click="testSite(site)">测试</button>
@@ -104,6 +108,14 @@
               <div>
                 <dt>下载量</dt>
                 <dd>{{ formatBytes(site.downloaded) }}</dd>
+              </div>
+              <div>
+                <dt>昨日上传量</dt>
+                <dd>{{ formatBytes(site.yesterdayUploaded) }}</dd>
+              </div>
+              <div>
+                <dt>今日上传量</dt>
+                <dd>{{ formatBytes(site.todayUploaded) }}</dd>
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>

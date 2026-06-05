@@ -104,6 +104,14 @@ export type TorrentRecord = {
   downloaderType?: 'QBITTORRENT'
   downloaderState?: string
   torrentHash?: string
+  downloadProgress?: number
+  downloadState?: string
+  ratio?: number
+  uploadSpeed?: number
+  downloadSpeed?: number
+  uploaded?: number
+  downloaded?: number
+  downloadStatsSyncedAt?: string
   sourceTaskId?: string
   sourceTaskName?: string
   sourceRunMode: 'AUTO' | 'MANUAL_RUN'
@@ -150,6 +158,18 @@ export type SiteRecord = {
   updatedAt: string
 }
 
+export type SiteTrafficSnapshotRecord = {
+  id: string
+  siteId: string
+  siteName: string
+  date: string
+  uploaded?: number
+  downloaded?: number
+  ratio?: number
+  ratioInfinite?: boolean
+  syncedAt: string
+}
+
 export type SystemSettings = {
   sessionTtlHours: number
   operationLogRetentionDays: number
@@ -187,6 +207,7 @@ type AppState = {
   downloaders: DownloaderRecord[]
   tasks: TaskRecord[]
   torrents: TorrentRecord[]
+  siteTrafficSnapshots: SiteTrafficSnapshotRecord[]
   systemSettings: SystemSettings
   systemSettingsUpdatedAt?: string
 }
@@ -232,6 +253,7 @@ async function initialState(): Promise<AppState> {
     downloaders: [],
     tasks: [],
     torrents: [],
+    siteTrafficSnapshots: [],
     systemSettings: defaultSystemSettings
   }
 }
@@ -265,6 +287,7 @@ function normalizeState(state: Partial<AppState>): AppState {
     downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
     tasks,
     torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string'),
+    siteTrafficSnapshots: (state.siteTrafficSnapshots ?? []).filter((snapshot) => typeof snapshot.siteId === 'string' && typeof snapshot.date === 'string'),
     systemSettings,
     systemSettingsUpdatedAt: state.systemSettingsUpdatedAt
   }

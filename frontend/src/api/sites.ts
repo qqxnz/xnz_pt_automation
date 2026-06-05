@@ -16,6 +16,8 @@ export type SiteListItem = {
   ratioInfinite?: boolean
   uploaded?: number
   downloaded?: number
+  yesterdayUploaded?: number
+  todayUploaded?: number
   trafficSyncedAt?: string
   lastConnectedAt?: string
   lastConnectError?: string
@@ -122,6 +124,12 @@ export function deleteSite(id: string) {
 
 export function testSiteConnectivity(id: string) {
   return apiRequest<TestSiteConnectivityResponse>(`/api/sites/${id}/test-connectivity`, { method: 'POST' })
+}
+
+export function syncSiteTraffic() {
+  return apiRequest<{ successCount: number; failedCount: number; syncedAt: string; errors: Array<{ siteId: string; siteName: string; message: string }> }>('/api/sites/sync-traffic', {
+    method: 'POST'
+  })
 }
 
 export function browseSiteTorrents(id: string, payload: { keyword?: string; category?: string; page?: number; pageSize?: number }) {

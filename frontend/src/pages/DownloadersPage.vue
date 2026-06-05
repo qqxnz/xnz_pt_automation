@@ -4,7 +4,7 @@
       <div class="dashboard-head">
         <div>
           <h1>下载器</h1>
-          <p>配置 qBittorrent 连接、测试状态并查看当前任务</p>
+          <p>配置 qBittorrent 连接并测试下载器状态</p>
         </div>
         <button class="primary-button compact" type="button" @click="openCreate">新增下载器</button>
       </div>
@@ -16,61 +16,13 @@
         </article>
       </section>
 
-      <section class="sites-toolbar panel downloaders-toolbar">
-        <input v-model.trim="filters.keyword" placeholder="搜索下载器 / 地址" @keyup.enter="loadDownloaders" />
-        <select v-model="filters.status" @change="loadDownloaders">
-          <option value="ALL">状态：全部</option>
-          <option value="ONLINE">在线</option>
-          <option value="AUTH_FAILED">认证失败</option>
-          <option value="OFFLINE">离线</option>
-          <option value="UNKNOWN">未检测</option>
-        </select>
-        <select v-model="filters.enabled" @change="loadDownloaders">
-          <option value="ALL">启用：全部</option>
-          <option value="ENABLED">已启用</option>
-          <option value="DISABLED">已禁用</option>
-        </select>
-        <button class="secondary-button" type="button" :disabled="loading" @click="loadDownloaders">
-          {{ loading ? '刷新中...' : '刷新' }}
-        </button>
-      </section>
-
       <section class="downloaders-layout">
-        <aside class="panel downloader-list-panel">
-          <div class="panel-title-row">
-            <h2>下载器列表</h2>
-            <span>{{ items.length }}</span>
-          </div>
-          <div v-if="error" class="error-banner">
-            {{ error }}
-            <button type="button" @click="loadDownloaders">重试</button>
-          </div>
-          <div v-if="!items.length && !loading" class="sites-empty">
-            <h2>{{ hasFilters ? '没有符合条件的下载器' : '还没有下载器' }}</h2>
-            <p>{{ hasFilters ? '清空筛选后再试试。' : '添加 qBittorrent 下载器后，任务就可以推送种子。' }}</p>
-            <button class="primary-button compact" type="button" @click="hasFilters ? resetFilters() : openCreate()">
-              {{ hasFilters ? '清空筛选' : '新增下载器' }}
-            </button>
-          </div>
-          <button
-            v-for="downloader in items"
-            :key="downloader.id"
-            class="downloader-card-button"
-            :class="{ active: selectedId === downloader.id }"
-            type="button"
-            @click="selectDownloader(downloader.id)"
-          >
-            <span>
-              <strong>{{ downloader.name }}</strong>
-              <small>{{ downloader.host }}</small>
-              <small>{{ downloader.savePath || '使用下载器 QB/TR 默认路径' }}</small>
-            </span>
-            <span class="chip" :class="statusMeta(downloader.status).className">{{ statusMeta(downloader.status).label }}</span>
-          </button>
-        </aside>
-
         <main class="downloaders-main">
           <section class="panel">
+            <div v-if="error" class="error-banner">
+              {{ error }}
+              <button type="button" @click="loadDownloaders">重试</button>
+            </div>
             <div class="panel-title-row">
               <h2>{{ selectedDownloader?.name || '下载器状态' }}</h2>
               <div v-if="selectedDownloader" class="row-actions">
@@ -80,7 +32,12 @@
               </div>
             </div>
 
-            <div v-if="!selectedDownloader" class="empty-tip">选择左侧下载器查看状态。</div>
+            <div v-if="loading && !selectedDownloader" class="empty-tip">下载器状态加载中...</div>
+            <div v-else-if="!selectedDownloader" class="sites-empty">
+              <h2>还没有下载器</h2>
+              <p>添加 qBittorrent 下载器后，任务就可以推送种子。</p>
+              <button class="primary-button compact" type="button" @click="openCreate">新增下载器</button>
+            </div>
             <div v-else>
               <div class="downloader-status-grid">
                 <article>
@@ -109,36 +66,6 @@
               <div v-if="statusError" class="error-banner compact-error">
                 {{ statusError }}
                 <button type="button" @click="refreshSelectedStatus">重试</button>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-title-row">
-              <h2>当前任务</h2>
-              <button class="secondary-button" type="button" :disabled="torrentsLoading || !selectedDownloader" @click="loadTorrents">
-                {{ torrentsLoading ? '刷新中...' : '刷新任务' }}
-              </button>
-            </div>
-            <div v-if="torrentsError" class="error-banner">{{ torrentsError }}</div>
-            <div v-if="!torrentItems.length && !torrentsLoading" class="empty-tip">暂无下载器任务。</div>
-            <div v-else class="desktop-table downloader-torrent-table">
-              <div class="downloader-torrent-row table-head">
-                <span>名称</span>
-                <span>进度</span>
-                <span>状态</span>
-                <span>分享率</span>
-                <span>速度</span>
-              </div>
-              <div v-for="torrent in torrentItems" :key="torrent.hash || torrent.name" class="downloader-torrent-row">
-                <div>
-                  <strong>{{ torrent.name }}</strong>
-                  <small>{{ formatBytes(torrent.size) }} · {{ torrent.category || '-' }} · {{ torrent.tags.join(', ') || '-' }}</small>
-                </div>
-                <span class="chip muted-chip">{{ formatProgress(torrent.progress) }}</span>
-                <span>{{ torrent.state }}</span>
-                <span>{{ torrent.ratio === undefined ? '-' : torrent.ratio.toFixed(2) }}</span>
-                <span>↑ {{ formatSpeed(torrent.uploadSpeed) }} / ↓ {{ formatSpeed(torrent.downloadSpeed) }}</span>
               </div>
             </div>
           </section>
@@ -216,7 +143,7 @@
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import {
   createDownloader,
@@ -224,33 +151,26 @@ import {
   getDownloader,
   getDownloaders,
   getDownloaderStatus,
-  getDownloaderTorrents,
   testDownloader,
   testDownloaderDraft,
   updateDownloader,
-  type DownloaderFilter,
   type DownloaderFormPayload,
   type DownloaderListItem,
   type DownloaderStats,
   type DownloaderStatus,
-  type DownloaderTestResult,
-  type DownloaderTorrentItem
+  type DownloaderTestResult
 } from '../api/downloaders'
 
 const route = useRoute()
-const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const testingDraft = ref(false)
 const error = ref('')
 const statusError = ref('')
-const torrentsError = ref('')
-const torrentsLoading = ref(false)
 const items = ref<DownloaderListItem[]>([])
 const stats = ref<DownloaderStats>({ total: 0, online: 0, authFailed: 0, offline: 0, unknown: 0 })
 const selectedId = ref<string>()
 const currentStatus = ref<DownloaderStatus>()
-const torrentItems = ref<DownloaderTorrentItem[]>([])
 const formVisible = ref(false)
 const editingDownloaderId = ref<string>()
 const detailHasPassword = ref(false)
@@ -259,14 +179,7 @@ const originalDownloaderPassword = ref('')
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
 let statusTimer: number | undefined
-let torrentTimer: number | undefined
 let failedStatusRefreshes = 0
-
-const filters = reactive<Required<DownloaderFilter>>({
-  keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
-  status: typeof route.query.status === 'string' ? (route.query.status as DownloaderFilter['status']) ?? 'ALL' : 'ALL',
-  enabled: typeof route.query.enabled === 'string' ? (route.query.enabled as DownloaderFilter['enabled']) ?? 'ALL' : 'ALL'
-})
 
 const form = reactive<DownloaderFormPayload>({
   name: '',
@@ -279,7 +192,6 @@ const form = reactive<DownloaderFormPayload>({
 })
 
 const selectedDownloader = computed(() => items.value.find((item) => item.id === selectedId.value))
-const hasFilters = computed(() => Boolean(filters.keyword || filters.status !== 'ALL' || filters.enabled !== 'ALL'))
 const passwordPlaceholder = computed(() => (editingDownloaderId.value && detailHasPassword.value && !form.password ? '已保存，留空不修改' : '可选'))
 const statCards = computed(() => [
   { label: '全部下载器', value: stats.value.total, className: '' },
@@ -321,10 +233,6 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function formatProgress(value: number) {
-  return `${Math.round(value * 100)}%`
-}
-
 function resetForm() {
   editingDownloaderId.value = undefined
   detailHasPassword.value = false
@@ -359,26 +267,15 @@ async function loadDownloaders() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getDownloaders(filters)
+    const result = await getDownloaders({})
     items.value = result.items
     stats.value = result.stats
     if (!selectedId.value || !items.value.some((item) => item.id === selectedId.value)) selectedId.value = items.value[0]?.id
-    await router.replace({
-      query: {
-        keyword: filters.keyword || undefined,
-        status: filters.status === 'ALL' ? undefined : filters.status,
-        enabled: filters.enabled === 'ALL' ? undefined : filters.enabled
-      }
-    })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '下载器列表加载失败'
   } finally {
     loading.value = false
   }
-}
-
-function selectDownloader(id: string) {
-  selectedId.value = id
 }
 
 function openCreate() {
@@ -464,7 +361,6 @@ async function saveDownloader() {
     formVisible.value = false
     await loadDownloaders()
     await refreshSelectedStatus()
-    await loadTorrents()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '保存失败')
   } finally {
@@ -508,25 +404,6 @@ async function refreshSelectedStatus() {
   }
 }
 
-async function loadTorrents() {
-  if (!selectedId.value) {
-    torrentsError.value = ''
-    torrentItems.value = []
-    return
-  }
-  torrentsLoading.value = true
-  torrentsError.value = ''
-  try {
-    const result = await getDownloaderTorrents(selectedId.value)
-    torrentItems.value = result.items
-  } catch (err) {
-    torrentsError.value = err instanceof Error ? err.message : '任务列表加载失败'
-    torrentItems.value = []
-  } finally {
-    torrentsLoading.value = false
-  }
-}
-
 function stopStatusPolling() {
   if (statusTimer !== undefined) window.clearInterval(statusTimer)
   statusTimer = undefined
@@ -539,43 +416,19 @@ function startStatusPolling() {
   statusTimer = window.setInterval(refreshSelectedStatus, 3000)
 }
 
-function stopTorrentPolling() {
-  if (torrentTimer !== undefined) window.clearInterval(torrentTimer)
-  torrentTimer = undefined
-}
-
-function startTorrentPolling() {
-  stopTorrentPolling()
-  if (!selectedId.value) return
-  loadTorrents()
-  torrentTimer = window.setInterval(loadTorrents, 15000)
-}
-
 function handleVisibilityChange() {
   if (document.hidden) {
     stopStatusPolling()
-    stopTorrentPolling()
   } else {
     startStatusPolling()
-    startTorrentPolling()
   }
-}
-
-function resetFilters() {
-  filters.keyword = ''
-  filters.status = 'ALL'
-  filters.enabled = 'ALL'
-  loadDownloaders()
 }
 
 watch(selectedId, () => {
   currentStatus.value = undefined
-  torrentItems.value = []
   statusError.value = ''
-  torrentsError.value = ''
   failedStatusRefreshes = 0
   startStatusPolling()
-  startTorrentPolling()
 })
 
 onMounted(async () => {
@@ -583,12 +436,10 @@ onMounted(async () => {
   if (route.query.action === 'create') openCreate()
   await loadDownloaders()
   startStatusPolling()
-  startTorrentPolling()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   stopStatusPolling()
-  stopTorrentPolling()
 })
 </script>

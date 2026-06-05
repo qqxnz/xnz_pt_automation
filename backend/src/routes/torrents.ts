@@ -4,6 +4,7 @@ import { readState, writeState } from '../storage.js'
 import type { TorrentRecord } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { addTorrentUrlToQb, deleteTorrentFromQb } from '../utils/qbittorrent.js'
+import { syncTorrentDownloadStats } from '../utils/torrentSync.js'
 
 export const torrentsRouter = Router()
 
@@ -81,15 +82,33 @@ function requestIds(body: unknown) {
 function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
   const now = Date.now()
   const safeItems = items.map(safeTorrent)
+  const bySite = new Map<string, { siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>()
+  for (const item of safeItems) {
+    const site = bySite.get(item.siteId) ?? { siteId: item.siteId, siteName: item.siteName, uploaded: 0, downloaded: 0, torrentCount: 0 }
+    site.uploaded += item.uploaded ?? 0
+    site.downloaded += item.downloaded ?? 0
+    site.torrentCount += 1
+    bySite.set(item.siteId, site)
+  }
   return {
     total: safeItems.length,
+    running: safeItems.filter((item) => item.pushStatus === 'PUSHED').length,
+    notRunning: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED' || item.pushStatus === 'DELETED').length,
     auto: safeItems.filter((item) => item.sourceRunMode === 'AUTO').length,
     manual: safeItems.filter((item) => item.sourceRunMode === 'MANUAL_RUN').length,
     pending: safeItems.filter((item) => item.pushStatus === 'NEW').length,
     failed: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED').length,
-    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() > now && item.currentState === 'EXPIRING_SOON').length
+    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() > now && item.currentState === 'EXPIRING_SOON').length,
+    totalUploaded: safeItems.reduce((total, item) => total + (item.uploaded ?? 0), 0),
+    totalDownloaded: safeItems.reduce((total, item) => total + (item.downloaded ?? 0), 0),
+    bySite: [...bySite.values()].sort((a, b) => b.uploaded + b.downloaded - (a.uploaded + a.downloaded))
   }
 }
+
+torrentsRouter.post('/sync', requireAuth, async (_req, res) => {
+  const summary = await syncTorrentDownloadStats()
+  res.json(summary)
+})
 
 torrentsRouter.get('/', requireAuth, async (req, res) => {
   const state = await readState()
@@ -100,6 +119,7 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
   const downloaderId = String(req.query.downloaderId ?? '')
   const taskId = String(req.query.taskId ?? '')
   const pushStatus = String(req.query.pushStatus ?? 'ALL')
+  const status = String(req.query.status ?? 'ALL')
   const sourceRunMode = String(req.query.sourceRunMode ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
@@ -108,7 +128,11 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
     if (siteId && item.siteId !== siteId) return false
     if (downloaderId && item.downloaderId !== downloaderId) return false
     if (taskId && item.sourceTaskId !== taskId) return false
-    if (pushStatus !== 'ALL' && item.pushStatus !== pushStatus) return false
+    const safeItem = safeTorrent(item)
+    if (pushStatus !== 'ALL' && safeItem.pushStatus !== pushStatus) return false
+    if (status === 'RUNNING' && safeItem.pushStatus !== 'PUSHED') return false
+    if (status === 'NOT_RUNNING' && safeItem.pushStatus !== 'PUSH_FAILED' && safeItem.pushStatus !== 'DELETED') return false
+    if (status !== 'ALL' && status !== 'RUNNING' && status !== 'NOT_RUNNING' && safeItem.currentState !== status) return false
     if (sourceRunMode !== 'ALL' && item.sourceRunMode !== sourceRunMode) return false
     return true
   })
@@ -168,13 +192,16 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   torrent.pushedAt = now
   torrent.errorMessage = undefined
   await writeState(state)
+  await syncTorrentDownloadStats(downloader.id).catch(() => undefined)
+  const syncedState = await readState()
+  const syncedTorrent = syncedState.torrents.find((item) => item.id === torrent.id) ?? torrent
   await recordOperationLog({
     action: '推送种子',
     message: `推送种子「${torrent.title}」到「${downloader.name}」`,
     status: 'SUCCESS',
     ...operationActor(res, req)
   })
-  res.json(safeTorrent(torrent))
+  res.json(safeTorrent(syncedTorrent))
 })
 
 torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
@@ -218,6 +245,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     successCount += 1
   }
   await writeState(state)
+  for (const downloaderId of [...new Set(state.torrents.filter((torrent) => ids.includes(torrent.id) && torrent.pushStatus === 'PUSHED' && torrent.downloaderId).map((torrent) => torrent.downloaderId!))]) {
+    await syncTorrentDownloadStats(downloaderId).catch(() => undefined)
+  }
   await recordOperationLog({
     action: '批量推送种子',
     message: `批量推送 ${ids.length} 个种子，成功 ${successCount} 个，失败 ${failed.length} 个`,

@@ -82,6 +82,8 @@ export type DownloaderTorrentItem = {
   tags: string[]
   uploadSpeed?: number
   downloadSpeed?: number
+  uploaded?: number
+  downloaded?: number
   addedAt?: string
 }
 

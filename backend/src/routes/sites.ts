@@ -5,6 +5,10 @@ import { readState, type SiteRecord, writeState } from '../storage.js'
 
 export const sitesRouter = Router()
 
+const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
+let siteTrafficSyncTimer: NodeJS.Timeout | undefined
+let siteTrafficSyncRunning = false
+
 type SiteStrategy = 'MTEAM_API' | 'NEXUSPHP'
 type Credential = 'API_KEY' | 'COOKIE'
 
@@ -32,6 +36,8 @@ type TrafficStats = {
   uploaded?: number
   downloaded?: number
 }
+
+type AppState = Awaited<ReturnType<typeof readState>>
 
 export type TorrentListItem = {
   id: string
@@ -143,7 +149,125 @@ export function resolveSiteUrl(site: SiteRecord, value: string) {
   return new URL(value, `${siteBaseUrl(site)}/`).toString()
 }
 
-function listItem(site: SiteRecord) {
+function dateKey(value = new Date()) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function shiftDateKey(date: string, offsetDays: number) {
+  const value = new Date(`${date}T00:00:00`)
+  value.setDate(value.getDate() + offsetDays)
+  return dateKey(value)
+}
+
+function recordSiteTrafficSnapshot(state: AppState, site: SiteRecord, syncedAt: string) {
+  if (site.uploaded === undefined && site.downloaded === undefined) return
+  const date = dateKey(new Date(syncedAt))
+  const existing = state.siteTrafficSnapshots.find((item) => item.siteId === site.id && item.date === date)
+  const snapshot = {
+    id: existing?.id ?? randomUUID(),
+    siteId: site.id,
+    siteName: siteDisplayName(site),
+    date,
+    uploaded: site.uploaded,
+    downloaded: site.downloaded,
+    ratio: site.ratio,
+    ratioInfinite: site.ratioInfinite,
+    syncedAt
+  }
+  if (existing) {
+    Object.assign(existing, snapshot)
+  } else {
+    state.siteTrafficSnapshots.push(snapshot)
+  }
+  state.siteTrafficSnapshots = state.siteTrafficSnapshots
+    .sort((a, b) => b.date.localeCompare(a.date) || b.syncedAt.localeCompare(a.syncedAt))
+    .slice(0, 3660)
+}
+
+function uploadedDelta(state: AppState, siteId: string, date: string) {
+  const current = state.siteTrafficSnapshots.find((item) => item.siteId === siteId && item.date === date)
+  if (current?.uploaded === undefined) return undefined
+  const previous = state.siteTrafficSnapshots
+    .filter((item) => item.siteId === siteId && item.date < date && item.uploaded !== undefined)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+  if (previous?.uploaded === undefined) return undefined
+  return Math.max(current.uploaded - previous.uploaded, 0)
+}
+
+function trafficDeltas(state: AppState, site: SiteRecord) {
+  const today = dateKey()
+  const yesterday = shiftDateKey(today, -1)
+  return {
+    todayUploaded: uploadedDelta(state, site.id, today),
+    yesterdayUploaded: uploadedDelta(state, site.id, yesterday)
+  }
+}
+
+export async function syncSiteTrafficStats() {
+  if (siteTrafficSyncRunning) {
+    return {
+      successCount: 0,
+      failedCount: 1,
+      syncedAt: new Date().toISOString(),
+      errors: [{ siteId: 'ALL', siteName: '站点同步', message: '站点统计同步正在运行' }]
+    }
+  }
+
+  siteTrafficSyncRunning = true
+  const state = await readState()
+  const syncedAt = new Date().toISOString()
+  let successCount = 0
+  let failedCount = 0
+  const errors: Array<{ siteId: string; siteName: string; message: string }> = []
+
+  try {
+    for (const site of state.sites.filter((item) => item.enabled)) {
+      try {
+        const result = await testSite(site)
+        site.connectivityStatus = 'ONLINE'
+        site.currentCredential = result.credential
+        site.userLevel = result.stats.userLevel
+        site.ratio = result.stats.ratio
+        site.ratioInfinite = result.stats.ratioInfinite
+        site.uploaded = result.stats.uploaded
+        site.downloaded = result.stats.downloaded
+        site.trafficSyncedAt = new Date().toISOString()
+        site.lastConnectedAt = site.trafficSyncedAt
+        site.lastConnectError = undefined
+        site.updatedAt = site.trafficSyncedAt
+        recordSiteTrafficSnapshot(state, site, site.trafficSyncedAt)
+        successCount += 1
+      } catch (error) {
+        site.connectivityStatus = 'AUTH_FAILED'
+        site.currentCredential = undefined
+        site.lastConnectError = error instanceof Error ? error.message : '站点同步失败'
+        site.updatedAt = new Date().toISOString()
+        errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: site.lastConnectError })
+        failedCount += 1
+      }
+    }
+
+    await writeState(state)
+    return { successCount, failedCount, syncedAt, errors }
+  } finally {
+    siteTrafficSyncRunning = false
+  }
+}
+
+export function startSiteTrafficScheduler() {
+  if (siteTrafficSyncTimer) return
+  siteTrafficSyncTimer = setInterval(() => {
+    syncSiteTrafficStats().catch((error) => {
+      console.error('[site-traffic-sync]', error instanceof Error ? error.message : error)
+    })
+  }, SITE_TRAFFIC_SYNC_INTERVAL_MS)
+}
+
+function listItem(site: SiteRecord, state?: AppState) {
+  const deltas = state ? trafficDeltas(state, site) : { todayUploaded: undefined, yesterdayUploaded: undefined }
   return {
     id: site.id,
     displayName: siteDisplayName(site),
@@ -157,6 +281,8 @@ function listItem(site: SiteRecord) {
     ratioInfinite: site.ratioInfinite,
     uploaded: site.uploaded,
     downloaded: site.downloaded,
+    yesterdayUploaded: deltas.yesterdayUploaded,
+    todayUploaded: deltas.todayUploaded,
     trafficSyncedAt: site.trafficSyncedAt,
     lastConnectedAt: site.lastConnectedAt,
     lastConnectError: site.lastConnectError,
@@ -613,7 +739,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   })
 
   const start = (page - 1) * pageSize
-  const items = filtered.slice(start, start + pageSize).map((site) => listItem(site))
+  const items = filtered.slice(start, start + pageSize).map((site) => listItem(site, state))
   const stats = {
     total: state.sites.length,
     online: state.sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
@@ -707,6 +833,7 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
     site.lastConnectedAt = site.trafficSyncedAt
     site.lastConnectError = undefined
     site.updatedAt = site.trafficSyncedAt
+    recordSiteTrafficSnapshot(state, site, site.trafficSyncedAt)
     await writeState(state)
     return res.json({ ok: true, status: site.connectivityStatus, credential: site.currentCredential, ...result.stats })
   } catch (error) {
@@ -717,6 +844,10 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
     await writeState(state)
     return res.status(400).json({ ok: false, status: site.connectivityStatus, message: site.lastConnectError, errorMessage: site.lastConnectError })
   }
+})
+
+sitesRouter.post('/sync-traffic', requireAuth, async (_req, res) => {
+  res.json(await syncSiteTrafficStats())
 })
 
 sitesRouter.post('/:id/browse-torrents', requireAuth, async (req, res) => {

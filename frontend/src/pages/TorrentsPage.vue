@@ -15,21 +15,58 @@
         </article>
       </section>
 
-      <section class="sites-toolbar panel">
-        <input v-model.trim="filters.keyword" placeholder="搜索标题 / 站点 / 任务" @keyup.enter="loadTorrents" />
-        <select v-model="filters.sourceRunMode" @change="loadTorrents">
-          <option value="ALL">来源：全部</option>
-          <option value="AUTO">自动执行</option>
-          <option value="MANUAL_RUN">手动运行</option>
+      <section v-if="stats.bySite.length" class="panel torrent-site-summary">
+        <div class="panel-title-row">
+          <h2>站点上传下载</h2>
+          <span>最近同步：{{ formatDate(lastSyncAt) }}</span>
+        </div>
+        <div class="torrent-site-summary-grid">
+          <article v-for="site in stats.bySite" :key="site.siteId">
+            <strong>{{ site.siteName }}</strong>
+            <span>{{ site.torrentCount }} 个种子</span>
+            <span>上传 {{ formatBytes(site.uploaded) }}</span>
+            <span>下载 {{ formatBytes(site.downloaded) }}</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="sites-toolbar panel torrents-toolbar">
+        <input v-model.trim="filters.keyword" placeholder="搜索标题" @keyup.enter="resetPageAndLoad" />
+        <select v-model="filters.siteId" @change="resetPageAndLoad">
+          <option value="">站点：全部</option>
+          <option v-for="site in siteOptions" :key="site.id" :value="site.id">{{ site.displayName }}</option>
         </select>
-        <select v-model="filters.pushStatus" @change="loadTorrents">
+        <select v-model="filters.taskId" @change="resetPageAndLoad">
+          <option value="">任务：全部</option>
+          <option v-for="task in taskOptions" :key="task.id" :value="task.id">{{ task.name }}</option>
+        </select>
+        <select v-model="filters.downloaderId" @change="resetPageAndLoad">
+          <option value="">下载器：全部</option>
+          <option v-for="downloader in downloaderOptions" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option>
+        </select>
+        <select v-model="filters.status" @change="resetPageAndLoad">
+          <option value="ALL">状态：全部</option>
+          <option value="RUNNING">运行中</option>
+          <option value="NOT_RUNNING">未运行</option>
+          <option value="FREE_NOW">免费中</option>
+          <option value="EXPIRING_SOON">即将过期</option>
+          <option value="EXPIRED">已过期</option>
+        </select>
+        <select v-model="filters.pushStatus" @change="resetPageAndLoad">
           <option value="ALL">推送：全部</option>
           <option value="NEW">待推送</option>
           <option value="PUSHED">已推送</option>
           <option value="PUSH_FAILED">推送失败</option>
           <option value="DELETED">已删除</option>
         </select>
-        <button class="secondary-button" type="button" :disabled="loading" @click="loadTorrents">{{ loading ? '刷新中...' : '刷新' }}</button>
+        <select v-model="filters.sourceRunMode" @change="resetPageAndLoad">
+          <option value="ALL">来源：全部</option>
+          <option value="AUTO">自动执行</option>
+          <option value="MANUAL_RUN">手动运行</option>
+        </select>
+        <button class="secondary-button" type="button" :disabled="loading || syncing" @click="refreshNow">
+          {{ syncing ? '同步中...' : loading ? '刷新中...' : '实时刷新' }}
+        </button>
       </section>
 
       <section class="panel">
@@ -42,6 +79,7 @@
             <span>已选 {{ selectedIds.length }} 个 · 共 {{ total }} 个</span>
           </div>
         </div>
+        <div v-if="syncWarning" class="error-banner compact-error">{{ syncWarning }}<button type="button" @click="refreshNow">重试同步</button></div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadTorrents">重试</button></div>
         <div v-if="!items.length && !loading" class="sites-empty">
           <h2>暂无种子记录</h2>
@@ -59,7 +97,7 @@
                 :disabled="!items.length || loading"
                 @change="setSelectCurrentPageFromEvent"
               />
-            </span><span>种子</span><span>状态</span><span>来源</span><span>下载器</span><span>操作</span>
+            </span><span>种子</span><span>推送/免费</span><span>下载</span><span>速度</span><span>上传/下载</span><span>操作</span>
           </div>
           <div v-for="torrent in items" :key="torrent.id" class="torrent-row">
             <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
@@ -72,12 +110,16 @@
               <small>{{ torrent.errorMessage || freeText(torrent) }}</small>
             </span>
             <span>
-              <strong>{{ runModeText(torrent.sourceRunMode) }}</strong>
-              <small>{{ torrent.sourceTaskName || '-' }}</small>
+              <strong>{{ formatProgress(torrent.downloadProgress) }}</strong>
+              <small>{{ downloadStateText(torrent) }} · 分享率 {{ formatRatio(torrent.ratio) }}</small>
             </span>
             <span>
               <strong>{{ torrent.downloaderName || '-' }}</strong>
-              <small>{{ torrent.torrentHash ? `Hash ${torrent.torrentHash.slice(0, 8)}` : torrent.downloaderState || '-' }}</small>
+              <small>↑ {{ formatSpeed(torrent.uploadSpeed) }} / ↓ {{ formatSpeed(torrent.downloadSpeed) }}</small>
+            </span>
+            <span>
+              <strong>↑ {{ formatBytes(torrent.uploaded) }}</strong>
+              <small>↓ {{ formatBytes(torrent.downloaded) }} · {{ formatDate(torrent.downloadStatsSyncedAt) }}</small>
             </span>
             <span class="row-actions">
               <button type="button" :disabled="!canPushTorrent(torrent)" @click="pushOne(torrent)">{{ isPushing(torrent.id) ? '推送中...' : '推送' }}</button>
@@ -114,8 +156,25 @@
                 <dt>链接</dt>
                 <dd>{{ linkText(torrent.linkStatus) }}</dd>
               </div>
+              <div>
+                <dt>下载进度</dt>
+                <dd>{{ formatProgress(torrent.downloadProgress) }}</dd>
+              </div>
+              <div>
+                <dt>下载状态</dt>
+                <dd>{{ downloadStateText(torrent) }}</dd>
+              </div>
+              <div>
+                <dt>分享率</dt>
+                <dd>{{ formatRatio(torrent.ratio) }}</dd>
+              </div>
+              <div>
+                <dt>上传/下载</dt>
+                <dd>{{ formatBytes(torrent.uploaded) }} / {{ formatBytes(torrent.downloaded) }}</dd>
+              </div>
             </dl>
             <p>{{ torrent.errorMessage || freeText(torrent) }}</p>
+            <p>速度：↑ {{ formatSpeed(torrent.uploadSpeed) }} / ↓ {{ formatSpeed(torrent.downloadSpeed) }}</p>
             <p v-if="torrent.torrentHash">Hash：{{ torrent.torrentHash.slice(0, 8) }}</p>
             <p v-else-if="torrent.downloaderState">下载器状态：{{ torrent.downloaderState }}</p>
             <div class="row-actions">
@@ -160,6 +219,11 @@
           <article><strong>{{ detail.title }}</strong><span>{{ formatBytes(detail.size) }} · {{ discountText(detail.discountType) }}</span></article>
           <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
           <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
+          <article><strong>下载状态</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
+          <article><strong>分享率</strong><span>{{ formatRatio(detail.ratio) }}</span></article>
+          <article><strong>速度</strong><span>↑ {{ formatSpeed(detail.uploadSpeed) }} / ↓ {{ formatSpeed(detail.downloadSpeed) }}</span></article>
+          <article><strong>总上传/下载</strong><span>{{ formatBytes(detail.uploaded) }} / {{ formatBytes(detail.downloaded) }}</span></article>
+          <article><strong>同步时间</strong><span>{{ formatDate(detail.downloadStatsSyncedAt) }}</span></article>
           <article><strong>种链接状态</strong><span>{{ linkText(detail.linkStatus) }}</span></article>
           <article v-if="detail.errorMessage"><strong>失败原因</strong><span>{{ detail.errorMessage }}</span></article>
         </div>
@@ -170,8 +234,11 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
+import { getDownloaders, type DownloaderListItem } from '../api/downloaders'
+import { getSites, type SiteListItem } from '../api/sites'
+import { getTasks, type TaskItem } from '../api/tasks'
 import {
   batchDeleteTorrentsFromDownloader,
   batchPushTorrents,
@@ -179,26 +246,52 @@ import {
   deleteTorrentFromDownloader,
   getTorrents,
   pushTorrent,
+  syncTorrents,
   type TorrentFilter,
   type TorrentItem,
   type TorrentStats
 } from '../api/torrents'
 
+const emptyStats: TorrentStats = {
+  total: 0,
+  running: 0,
+  notRunning: 0,
+  auto: 0,
+  manual: 0,
+  pending: 0,
+  failed: 0,
+  expiringSoon: 0,
+  totalUploaded: 0,
+  totalDownloaded: 0,
+  bySite: []
+}
+
 const items = ref<TorrentItem[]>([])
+const siteOptions = ref<SiteListItem[]>([])
+const taskOptions = ref<TaskItem[]>([])
+const downloaderOptions = ref<DownloaderListItem[]>([])
 const selectedIds = ref<string[]>([])
 const detail = ref<TorrentItem>()
 const total = ref(0)
 const loading = ref(false)
+const syncing = ref(false)
 const batchPushing = ref(false)
 const batchDeletingRecords = ref(false)
 const batchDeletingTasks = ref(false)
 const pushingIds = ref<string[]>([])
 const deletingIds = ref<string[]>([])
 const error = ref('')
-const stats = ref<TorrentStats>({ total: 0, auto: 0, manual: 0, pending: 0, failed: 0, expiringSoon: 0 })
-const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'pushStatus' | 'sourceRunMode' | 'page' | 'pageSize'>>>({
+const syncWarning = ref('')
+const stats = ref<TorrentStats>({ ...emptyStats })
+const lastSyncAt = ref<string>()
+let refreshTimer: number | undefined
+const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'pushStatus' | 'status' | 'sourceRunMode' | 'page' | 'pageSize'>>>({
   keyword: '',
+  siteId: '',
+  downloaderId: '',
+  taskId: '',
   pushStatus: 'ALL',
+  status: 'ALL',
   sourceRunMode: 'ALL',
   page: 1,
   pageSize: 20
@@ -207,10 +300,10 @@ const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'pushStatus' |
 const totalPages = computed(() => Math.max(Math.ceil(total.value / filters.pageSize), 1))
 const statCards = computed(() => [
   { label: '全部种子', value: stats.value.total, className: '' },
-  { label: '自动执行', value: stats.value.auto, className: 'success' },
-  { label: '手动运行', value: stats.value.manual, className: 'warning' },
-  { label: '待推送', value: stats.value.pending, className: '' },
-  { label: '推送失败', value: stats.value.failed, className: 'danger' }
+  { label: '运行中', value: stats.value.running, className: 'success' },
+  { label: '未运行', value: stats.value.notRunning, className: 'danger' },
+  { label: '总上传', value: formatBytes(stats.value.totalUploaded), className: 'success' },
+  { label: '总下载', value: formatBytes(stats.value.totalDownloaded), className: '' }
 ])
 const currentPageIds = computed(() => items.value.map((item) => item.id))
 const selectedTorrents = computed(() => selectedIds.value.map((id) => items.value.find((item) => item.id === id)).filter((item): item is TorrentItem => Boolean(item)))
@@ -235,6 +328,46 @@ async function loadTorrents() {
   }
 }
 
+async function loadFilterOptions() {
+  const [sites, tasks, downloaders] = await Promise.all([
+    getSites({ page: 1, pageSize: 100 }),
+    getTasks({}),
+    getDownloaders({})
+  ])
+  siteOptions.value = sites.items
+  taskOptions.value = tasks.items
+  downloaderOptions.value = downloaders.items
+}
+
+function resetPageAndLoad() {
+  filters.page = 1
+  loadTorrents()
+}
+
+async function syncAndLoad(showSnackbar = false) {
+  if (syncing.value) return
+  syncing.value = true
+  syncWarning.value = ''
+  try {
+    const summary = await syncTorrents()
+    lastSyncAt.value = summary.syncedAt
+    if (summary.failedDownloaders) {
+      syncWarning.value = `实时同步失败 ${summary.failedDownloaders} 个下载器，已显示最近记录。`
+    } else if (showSnackbar) {
+      Snackbar.success(`已同步 ${summary.updatedTorrents} 条种子状态`)
+    }
+  } catch (err) {
+    syncWarning.value = err instanceof Error ? `实时同步失败：${err.message}，已显示最近记录。` : '实时同步失败，已显示最近记录。'
+  } finally {
+    syncing.value = false
+    await loadTorrents()
+  }
+}
+
+function refreshNow() {
+  syncAndLoad(true)
+}
+
 function changePage(page: number) {
   filters.page = Math.min(Math.max(page, 1), totalPages.value)
   loadTorrents()
@@ -246,7 +379,7 @@ async function pushOne(torrent: TorrentItem) {
   try {
     await pushTorrent(torrent.id)
     Snackbar.success('种子已推送')
-    await loadTorrents()
+    await syncAndLoad()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '推送失败')
   } finally {
@@ -263,7 +396,7 @@ async function batchPush() {
     const result = await batchPushTorrents(ids)
     Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
     selectedIds.value = []
-    await loadTorrents()
+    await syncAndLoad()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '批量推送失败')
   } finally {
@@ -353,6 +486,29 @@ function formatBytes(value?: number) {
   return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: unitIndex ? 2 : 0 }).format(size)} ${units[unitIndex]}`
 }
 
+function formatSpeed(value?: number) {
+  if (value === undefined) return '-'
+  return `${formatBytes(value)}/s`
+}
+
+function formatDate(value?: string) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatProgress(value?: number) {
+  if (value === undefined) return '-'
+  return `${Math.round(value * 100)}%`
+}
+
+function formatRatio(value?: number) {
+  return value === undefined ? '-' : value.toFixed(2)
+}
+
+function downloadStateText(torrent: TorrentItem) {
+  return torrent.downloadState || torrent.downloaderState || '-'
+}
+
 function discountText(value: TorrentItem['discountType']) {
   return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? '50% FREE' : value === 'NORMAL' ? '不免费' : value
 }
@@ -416,5 +572,34 @@ function freeText(torrent: TorrentItem) {
   return `免费至 ${new Date(torrent.freeEndAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
 }
 
-onMounted(loadTorrents)
+function stopRealtimeRefresh() {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
+  refreshTimer = undefined
+}
+
+function startRealtimeRefresh() {
+  stopRealtimeRefresh()
+  if (document.hidden) return
+  syncAndLoad()
+  refreshTimer = window.setInterval(() => syncAndLoad(), 30000)
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopRealtimeRefresh()
+  } else {
+    startRealtimeRefresh()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  loadFilterOptions().catch(() => undefined)
+  startRealtimeRefresh()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  stopRealtimeRefresh()
+})
 </script>

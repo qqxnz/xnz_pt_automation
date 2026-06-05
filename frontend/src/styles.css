@@ -649,6 +649,10 @@ a {
   grid-template-columns: minmax(220px, 1fr) 170px 146px 114px;
 }
 
+.torrents-toolbar {
+  grid-template-columns: minmax(220px, 1fr) repeat(6, minmax(128px, 0.8fr)) 128px;
+}
+
 .sites-toolbar input,
 .sites-toolbar select,
 .site-form input,
@@ -714,8 +718,7 @@ a {
 
 .downloaders-layout {
   display: grid;
-  grid-template-columns: 330px minmax(0, 1fr);
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
@@ -1030,7 +1033,36 @@ a {
 }
 
 .torrent-row {
-  grid-template-columns: 28px minmax(260px, 1.6fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(140px, 0.9fr) minmax(220px, 1.1fr);
+  grid-template-columns: 28px minmax(260px, 1.5fr) minmax(130px, 0.8fr) minmax(140px, 0.8fr) minmax(190px, 0.95fr) minmax(160px, 0.8fr) minmax(220px, 1.1fr);
+}
+
+.torrent-site-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.torrent-site-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.torrent-site-summary-grid article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.torrent-site-summary-grid strong {
+  color: #111827;
+}
+
+.torrent-site-summary-grid span {
+  color: #6b7280;
+  font-weight: 850;
 }
 
 .torrent-select-summary {
@@ -1147,7 +1179,7 @@ a {
 
 .site-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.3fr) 92px minmax(92px, 0.8fr) 74px 94px 94px 84px minmax(210px, 1.2fr);
+  grid-template-columns: minmax(150px, 1.3fr) 92px minmax(92px, 0.8fr) 74px 94px 94px 112px 112px 84px minmax(210px, 1.2fr);
   gap: 12px;
   align-items: center;
   border-top: 1px solid #e5e7eb;
@@ -1756,6 +1788,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .torrents-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-grid,
   .settings-form.three-columns {
     grid-template-columns: 1fr;
@@ -1971,6 +2007,7 @@ a {
   .quick-actions,
   .module-flow,
   .sites-toolbar,
+  .torrents-toolbar,
   .settings-form.two-columns,
   .settings-info-grid,
   .downloaders-toolbar,

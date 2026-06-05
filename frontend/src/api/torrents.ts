@@ -21,6 +21,14 @@ export type TorrentItem = {
   downloaderType?: 'QBITTORRENT'
   downloaderState?: string
   torrentHash?: string
+  downloadProgress?: number
+  downloadState?: string
+  ratio?: number
+  uploadSpeed?: number
+  downloadSpeed?: number
+  uploaded?: number
+  downloaded?: number
+  downloadStatsSyncedAt?: string
   sourceTaskId?: string
   sourceTaskName?: string
   sourceRunMode: 'AUTO' | 'MANUAL_RUN'
@@ -32,11 +40,24 @@ export type TorrentItem = {
 
 export type TorrentStats = {
   total: number
+  running: number
+  notRunning: number
   auto: number
   manual: number
   pending: number
   failed: number
   expiringSoon: number
+  totalUploaded: number
+  totalDownloaded: number
+  bySite: Array<{ siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>
+}
+
+export type TorrentSyncSummary = {
+  successfulDownloaders: number
+  failedDownloaders: number
+  updatedTorrents: number
+  syncedAt: string
+  errors: Array<{ downloaderId: string; downloaderName: string; message: string }>
 }
 
 export type TorrentFilter = {
@@ -45,6 +66,7 @@ export type TorrentFilter = {
   downloaderId?: string
   taskId?: string
   pushStatus?: 'ALL' | 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
+  status?: 'ALL' | 'RUNNING' | 'NOT_RUNNING' | TorrentItem['currentState']
   sourceRunMode?: 'ALL' | 'AUTO' | 'MANUAL_RUN'
   page?: number
   pageSize?: number
@@ -61,6 +83,10 @@ function toQuery(filters: TorrentFilter) {
 export function getTorrents(filters: TorrentFilter) {
   const query = toQuery(filters)
   return apiRequest<{ items: TorrentItem[]; total: number; page: number; pageSize: number; stats: TorrentStats }>(`/api/torrents${query ? `?${query}` : ''}`)
+}
+
+export function syncTorrents() {
+  return apiRequest<TorrentSyncSummary>('/api/torrents/sync', { method: 'POST' })
 }
 
 export function pushTorrent(id: string, downloaderId?: string) {
