@@ -8,7 +8,7 @@ export type User = {
 }
 
 export function login(payload: { username: string; password: string }) {
-  return apiRequest<{ user: User }>('/api/auth/login', {
+  return apiRequest<{ user: User; sessionToken: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload)
   })

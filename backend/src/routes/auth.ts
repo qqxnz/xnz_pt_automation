@@ -43,7 +43,7 @@ authRouter.post('/login', async (req, res) => {
   user.lastLoginAt = new Date().toISOString()
   await writeState(state)
   const settings = await readSystemSettings()
-  setSession(req, res, user.id, settings.sessionTtlHours)
+  const sessionToken = setSession(req, res, user.id, settings.sessionTtlHours)
   await recordOperationLog({
     action: 'AUTH_LOGIN',
     message: `用户 ${user.username} 登录成功`,
@@ -53,7 +53,7 @@ authRouter.post('/login', async (req, res) => {
     userAgent: req.get('user-agent'),
     status: 'SUCCESS'
   })
-  res.json({ user: toSafeUser(user) })
+  res.json({ user: toSafeUser(user), sessionToken })
 })
 
 authRouter.post('/logout', async (req, res) => {
