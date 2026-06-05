@@ -184,7 +184,7 @@
         <div class="test-result-list">
           <article v-for="item in testResult.items" :key="item.torrentId">
             <strong>{{ item.title }}</strong>
-            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · 做种 {{ item.seeders ?? 0 }}</span>
+            <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · {{ freeEndText(item) }} · 做种 {{ item.seeders ?? 0 }}</span>
           </article>
           <div v-if="!testResult.items.length" class="empty-tip">没有命中当前任务规则的种子。</div>
         </div>
@@ -433,6 +433,12 @@ function formatDate(value?: string) {
 
 function discountText(value: string) {
   return value === 'TWO_X_FREE' ? '2X FREE' : value === 'HALF_FREE' ? '50% FREE' : value === 'NORMAL' ? '不免费' : value
+}
+
+function freeEndText(item: TaskTestResult['items'][number]) {
+  if (item.freeEndAt) return `免费至 ${formatDate(item.freeEndAt)}`
+  if (item.isFreeNow) return '免费中，未获取到过期时间'
+  return '非免费'
 }
 
 function rangeText(task: TaskItem) {

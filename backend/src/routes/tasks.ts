@@ -517,22 +517,28 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!task) return res.status(404).json({ message: '任务不存在' })
   const site = state.sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
-  const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
-  const ruleMatched = matchedCandidates(task, fetched)
-  const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
-  const skippedExistingCount = ruleMatched.length - matched.length
-  await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个`)
-  res.json({
-    taskId: task.id,
-    taskName: task.name,
-    siteId: site.id,
-    siteName: siteName(site),
-    fetchedCount: fetched.length,
-    matchedCount: matched.length,
-    skippedExistingCount,
-    items: matched,
-    total: matched.length
-  })
+  try {
+    const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
+    const ruleMatched = matchedCandidates(task, fetched)
+    const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
+    const skippedExistingCount = ruleMatched.length - matched.length
+    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，规则命中 ${matched.length} 个，测试列表展示全部抓取种子`)
+    return res.json({
+      taskId: task.id,
+      taskName: task.name,
+      siteId: site.id,
+      siteName: siteName(site),
+      fetchedCount: fetched.length,
+      matchedCount: matched.length,
+      skippedExistingCount,
+      items: fetched,
+      total: fetched.length
+    })
+  } catch (error) {
+    const message = errorMessage(error, '任务测试失败')
+    await logOperation(req, res, '测试任务', `测试任务「${task.name}」失败：${message}`, 'FAILED')
+    return res.status(400).json({ message })
+  }
 })
 
 tasksRouter.post('/:id/run', requireAuth, async (req, res) => {

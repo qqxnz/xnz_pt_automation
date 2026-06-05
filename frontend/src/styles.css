@@ -650,7 +650,7 @@ a {
 }
 
 .torrents-toolbar {
-  grid-template-columns: minmax(220px, 1fr) repeat(6, minmax(128px, 0.8fr)) 128px;
+  grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(128px, 0.8fr)) 128px;
 }
 
 .sites-toolbar input,
@@ -1139,6 +1139,20 @@ a {
   color: #6b7280;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.torrent-row .torrent-state-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.torrent-state-line span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .task-form .form-grid section {

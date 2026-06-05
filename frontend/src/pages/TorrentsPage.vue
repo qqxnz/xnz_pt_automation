@@ -48,21 +48,14 @@
           <option value="ALL">状态：全部</option>
           <option value="RUNNING">运行中</option>
           <option value="NOT_RUNNING">未运行</option>
+        </select>
+        <select v-model="filters.freeStatus" @change="resetPageAndLoad">
+          <option value="ALL">种子状态：全部</option>
           <option value="FREE_NOW">免费中</option>
           <option value="EXPIRING_SOON">即将过期</option>
           <option value="EXPIRED">已过期</option>
-        </select>
-        <select v-model="filters.pushStatus" @change="resetPageAndLoad">
-          <option value="ALL">推送：全部</option>
-          <option value="NEW">待推送</option>
-          <option value="PUSHED">已推送</option>
-          <option value="PUSH_FAILED">推送失败</option>
-          <option value="DELETED">已删除</option>
-        </select>
-        <select v-model="filters.sourceRunMode" @change="resetPageAndLoad">
-          <option value="ALL">来源：全部</option>
-          <option value="AUTO">自动执行</option>
-          <option value="MANUAL_RUN">手动运行</option>
+          <option value="NORMAL">非免费</option>
+          <option value="FREE_NO_END">免费但无到期时间</option>
         </select>
         <button class="secondary-button" type="button" :disabled="loading || syncing" @click="refreshNow">
           {{ syncing ? '同步中...' : loading ? '刷新中...' : '实时刷新' }}
@@ -111,7 +104,10 @@
             </span>
             <span>
               <strong>{{ formatProgress(torrent.downloadProgress) }}</strong>
-              <small>{{ downloadStateText(torrent) }} · 分享率 {{ formatRatio(torrent.ratio) }}</small>
+              <small class="torrent-state-line">
+                <span>{{ downloadStateText(torrent) }}</span>
+                <span>分享率 {{ formatRatio(torrent.ratio) }}</span>
+              </small>
             </span>
             <span>
               <strong>{{ torrent.downloaderName || '-' }}</strong>
@@ -285,14 +281,13 @@ const syncWarning = ref('')
 const stats = ref<TorrentStats>({ ...emptyStats })
 const lastSyncAt = ref<string>()
 let refreshTimer: number | undefined
-const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'pushStatus' | 'status' | 'sourceRunMode' | 'page' | 'pageSize'>>>({
+const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'status' | 'freeStatus' | 'page' | 'pageSize'>>>({
   keyword: '',
   siteId: '',
   downloaderId: '',
   taskId: '',
-  pushStatus: 'ALL',
   status: 'ALL',
-  sourceRunMode: 'ALL',
+  freeStatus: 'ALL',
   page: 1,
   pageSize: 20
 })

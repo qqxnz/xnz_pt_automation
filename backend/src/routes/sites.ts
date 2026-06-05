@@ -407,9 +407,35 @@ function toIsoDate(value?: string | number) {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
-function parseFreeEndAt(text: string) {
-  const markerMatch = text.match(/(?:免费|免費|free|2x|2 x|two.?x|50%|half)[\s\S]{0,80}?(\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)/i)
-  return toIsoDate(markerMatch?.[1])
+function textWithAttributes(html: string) {
+  const attributeText = [...html.matchAll(/\b(?:title|alt|data-title|data-original-title)=["']([^"']+)["']/gi)]
+    .map((match) => decodeHtml(match[1]))
+    .join(' ')
+  return `${textFromHtml(html)} ${attributeText}`.replace(/\s+/g, ' ').trim()
+}
+
+function parseRelativeFreeEndAt(text: string) {
+  if (!/(?:免费|免費|free|2x|2 x|two.?x|50%|half|剩余|剩餘|过期|過期|到期|expire|remaining|left)/i.test(text)) return undefined
+  const segment = text.slice(0, 240)
+  const day = segment.match(/(\d+(?:\.\d+)?)\s*(?:天|日|day|days|d)/i)
+  const hour = segment.match(/(\d+(?:\.\d+)?)\s*(?:小时|小時|时|時|hour|hours|h)/i)
+  const minute = segment.match(/(\d+(?:\.\d+)?)\s*(?:分钟|分鐘|分|minute|minutes|min|m)/i)
+  const clock = segment.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  const days = day ? Number(day[1]) : 0
+  const hours = hour ? Number(hour[1]) : clock ? Number(clock[1]) : 0
+  const minutes = minute ? Number(minute[1]) : clock ? Number(clock[2]) : 0
+  const seconds = clock?.[3] ? Number(clock[3]) : 0
+  const durationMs = (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000
+  if (!durationMs) return undefined
+  return new Date(Date.now() + durationMs).toISOString()
+}
+
+function parseFreeEndAt(text: string, html = '') {
+  const source = `${text} ${html ? textWithAttributes(html) : ''}`.replace(/\s+/g, ' ').trim()
+  const markerMatch = source.match(/(?:免费|免費|free|2x|2 x|two.?x|50%|half|过期|過期|到期|截止|expire)[\s\S]{0,120}?(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)/i)
+  const anyDateMatch = source.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)/)
+  const absolute = toIsoDate(markerMatch?.[1] ?? anyDateMatch?.[1])
+  return absolute ?? parseRelativeFreeEndAt(source)
 }
 
 function parseRatioByLabel(text: string) {
@@ -464,14 +490,24 @@ function looksLikeAuthPage(html: string) {
   return /login|logout|password|passkey|登录|登入|登錄|密码|密碼|用户名|用戶名/.test(text)
 }
 
+function cookieHeaderValue(value: string) {
+  return value
+    .replace(/^\s*cookie\s*:\s*/i, '')
+    .replace(/[\r\n]+/g, '; ')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s*;\s*/g, '; ')
+    .trim()
+}
+
 async function fetchWithCookie(site: SiteRecord, path: string) {
-  if (!site.cookie?.trim()) throw new Error('Cookie 未配置或不可用')
+  const cookie = site.cookie ? cookieHeaderValue(site.cookie) : ''
+  if (!cookie) throw new Error('Cookie 未配置或不可用')
   const errors: string[] = []
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const response = await fetch(resolveSiteUrl(site, path), {
         headers: {
-          Cookie: site.cookie,
+          Cookie: cookie,
           'User-Agent': site.userAgent || 'Mozilla/5.0',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
@@ -585,7 +621,7 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
       title,
       subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
       size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
-      freeEndAt: parseFreeEndAt(text),
+      freeEndAt: parseFreeEndAt(text, row),
       seeders,
       leechers,
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
@@ -622,7 +658,7 @@ function parseNexusTorrentLinks(html: string): TorrentListItem[] {
       title,
       subtitle: text.replace(title, '').trim().slice(0, 140) || undefined,
       size: sizes.length ? parseSizeToBytes(sizes[sizes.length - 1][0]) : undefined,
-      freeEndAt: parseFreeEndAt(text),
+      freeEndAt: parseFreeEndAt(text, segment),
       seeders: readLinkedNumber(segment, '#seeders'),
       leechers: readLinkedNumber(segment, '#leechers'),
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((tagMatch) => tagMatch[1]))]

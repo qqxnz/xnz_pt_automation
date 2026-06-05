@@ -105,6 +105,22 @@ function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
   }
 }
 
+function matchesFreeStatus(torrent: ReturnType<typeof safeTorrent>, freeStatus: string) {
+  if (freeStatus === 'ALL') return true
+
+  const freeEndTime = torrent.freeEndAt ? new Date(torrent.freeEndAt).getTime() : undefined
+  const hasValidFreeEndAt = freeEndTime !== undefined && !Number.isNaN(freeEndTime)
+  const now = Date.now()
+  const isFreeNow = Boolean((hasValidFreeEndAt && freeEndTime > now) || torrent.isFreeNow)
+
+  if (freeStatus === 'FREE_NOW') return isFreeNow
+  if (freeStatus === 'EXPIRING_SOON') return torrent.currentState === 'EXPIRING_SOON'
+  if (freeStatus === 'EXPIRED') return torrent.currentState === 'EXPIRED' || Boolean(hasValidFreeEndAt && freeEndTime <= now)
+  if (freeStatus === 'NORMAL') return torrent.discountType === 'NORMAL' && !isFreeNow
+  if (freeStatus === 'FREE_NO_END') return torrent.isFreeNow && !torrent.freeEndAt
+  return true
+}
+
 torrentsRouter.post('/sync', requireAuth, async (_req, res) => {
   const summary = await syncTorrentDownloadStats()
   res.json(summary)
@@ -120,6 +136,7 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
   const taskId = String(req.query.taskId ?? '')
   const pushStatus = String(req.query.pushStatus ?? 'ALL')
   const status = String(req.query.status ?? 'ALL')
+  const freeStatus = String(req.query.freeStatus ?? 'ALL')
   const sourceRunMode = String(req.query.sourceRunMode ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
@@ -133,6 +150,7 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
     if (status === 'RUNNING' && safeItem.pushStatus !== 'PUSHED') return false
     if (status === 'NOT_RUNNING' && safeItem.pushStatus !== 'PUSH_FAILED' && safeItem.pushStatus !== 'DELETED') return false
     if (status !== 'ALL' && status !== 'RUNNING' && status !== 'NOT_RUNNING' && safeItem.currentState !== status) return false
+    if (!matchesFreeStatus(safeItem, freeStatus)) return false
     if (sourceRunMode !== 'ALL' && item.sourceRunMode !== sourceRunMode) return false
     return true
   })
