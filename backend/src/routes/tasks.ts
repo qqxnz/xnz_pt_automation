@@ -271,8 +271,6 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
 
   try {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
-    if (!downloader) throw new Error('任务绑定下载器不存在')
-    if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
     let fetched: CandidateTorrent[]
     try {
       fetched = await candidatesForTask(site, { includeDownloadUrl: true })
@@ -290,15 +288,23 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
       let pushError: string | undefined
       if (task.autoPush) {
-        try {
-          pushed = await addTorrentUrlToQb(downloader, site, item.downloadUrl, torrentFilename(item.title, item.torrentId), {
-            savePath: task.savePathOverride || downloader.savePath,
-            category: task.name,
-            tags: task.tagsOverride
-          })
-          pushedCount += 1
-        } catch (error) {
-          pushError = errorMessage(error, '推送到下载器失败')
+        if (!downloader) {
+          pushError = '任务绑定下载器不存在'
+        } else if (!downloader.enabled) {
+          pushError = '下载器已禁用'
+        } else {
+          try {
+            pushed = await addTorrentUrlToQb(downloader, site, item.downloadUrl, torrentFilename(item.title, item.torrentId), {
+              savePath: task.savePathOverride || downloader.savePath,
+              category: task.name,
+              tags: task.tagsOverride
+            })
+            pushedCount += 1
+          } catch (error) {
+            pushError = errorMessage(error, '推送到下载器失败')
+          }
+        }
+        if (pushError) {
           pushErrorMessages.push(`《${readableTorrentTitle(item.title)}》：${pushError}`)
           pushFailedCount += 1
         }
@@ -320,9 +326,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
         linkStatus: item.linkStatus,
         detailUrl: item.detailUrl,
-        downloaderId: downloader.id,
-        downloaderName: downloader.name,
-        downloaderType: downloader.type,
+        downloaderId: downloader?.id,
+        downloaderName: downloader?.name,
+        downloaderType: downloader?.type,
         downloaderState: pushed?.state ?? undefined,
         torrentHash: pushed?.hash,
         sourceTaskId: task.id,
@@ -343,9 +349,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     const summary = `${baseSummary}${failureSummary}`
     task.running = false
     task.lastFinishedAt = finishedAt
-    task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'
+    task.lastStatus = 'SUCCESS'
     task.lastSummary = summary
-    task.lastError = pushFailedCount > 0 ? pushErrorMessages.slice(0, 3).join('；') : undefined
+    task.lastError = undefined
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
     await writeState(state)

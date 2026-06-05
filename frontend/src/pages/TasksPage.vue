@@ -443,7 +443,7 @@ function rangeText(task: TaskItem) {
 }
 
 function statusText(task: TaskItem) {
-  if (task.running) return task.lastRunMode === 'AUTO' ? '定时运行中' : '运行中'
+  if (task.running) return task.lastRunMode === 'AUTO' ? '定时运行中' : '手动运行中'
   if (task.lastStatus === 'SUCCESS') return '成功'
   if (task.lastStatus === 'FAILED') return '失败'
   return '未运行'

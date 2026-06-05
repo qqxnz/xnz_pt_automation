@@ -103,12 +103,17 @@
     <section class="panel jobs-panel">
       <h2>最近任务</h2>
       <div v-if="overview?.recentJobs.length" class="job-list">
-        <div v-for="job in overview.recentJobs" :key="job.id ?? `${job.name}-${job.finishedAt ?? ''}`" class="job-row">
-          <strong>{{ job.name }}</strong>
-          <span>{{ job.status }}</span>
-          <p>{{ job.summary }}</p>
-          <time>{{ job.finishedAt }}</time>
-        </div>
+        <article v-for="job in overview.recentJobs" :key="job.id ?? `${job.name}-${job.finishedAt ?? ''}`" class="job-row">
+          <div class="log-meta">
+            <time>{{ formatTime(job.createdAt ?? job.finishedAt) }}</time>
+            <span class="status-badge" :class="job.status.toLowerCase()">{{ statusText(job.status) }}</span>
+          </div>
+          <div>
+            <strong>{{ job.name }}</strong>
+            <p>{{ job.summary }}</p>
+            <small>{{ jobMetaText(job) }}</small>
+          </div>
+        </article>
       </div>
       <div v-else class="empty-tip">暂无最近任务记录。</div>
     </section>
@@ -138,6 +143,48 @@ function formatBytes(value?: number, suffix = '') {
     index += 1
   }
   return `${current.toFixed(index === 0 ? 0 : 1)} ${units[index]}${suffix}`
+}
+
+function formatTime(value?: string) {
+  return value ? new Date(value).toLocaleString('zh-CN') : '-'
+}
+
+function statusText(status: DashboardOverview['recentJobs'][number]['status']) {
+  const map = {
+    SUCCESS: '成功',
+    FAILED: '失败',
+    RUNNING: '运行中'
+  }
+  return map[status]
+}
+
+function runModeText(mode: NonNullable<DashboardOverview['recentJobs'][number]['runMode']>) {
+  const map = {
+    AUTO: '自动执行',
+    MANUAL_RUN: '手动运行'
+  }
+  return map[mode]
+}
+
+function taskResultText(job: DashboardOverview['recentJobs'][number]) {
+  const parts = [
+    job.fetchedCount === undefined ? '' : `抓取：${job.fetchedCount}`,
+    job.matchedCount === undefined ? '' : `命中：${job.matchedCount}`,
+    job.pushedCount === undefined ? '' : `推送成功：${job.pushedCount}`,
+    job.pushFailedCount === undefined ? '' : `推送失败：${job.pushFailedCount}`
+  ].filter(Boolean)
+  return parts.join('，')
+}
+
+function jobMetaText(job: DashboardOverview['recentJobs'][number]) {
+  return [
+    job.runMode ? `来源：${runModeText(job.runMode)}` : '',
+    job.startedAt ? `开始：${formatTime(job.startedAt)}` : '',
+    job.finishedAt ? `结束：${formatTime(job.finishedAt)}` : '',
+    taskResultText(job)
+  ]
+    .filter(Boolean)
+    .join(' / ')
 }
 
 function healthWidth(key: keyof DashboardOverview['sites']) {

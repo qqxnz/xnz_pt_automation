@@ -1562,16 +1562,31 @@ a {
 }
 
 .job-row {
-  display: grid;
-  grid-template-columns: 220px 80px 1fr 120px;
-  gap: 20px;
-  align-items: center;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
   border-top: 1px solid #e5e7eb;
-  padding: 16px 0;
+  padding: 18px 0;
+}
+
+.job-row:first-child {
+  border-top: 0;
+}
+
+.job-row strong {
+  display: block;
+  margin-bottom: 8px;
 }
 
 .job-row p {
-  margin: 0;
+  margin: 0 0 8px;
+  color: #374151;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.job-row small,
+.job-row time {
   color: #6b7280;
 }
 
@@ -2053,7 +2068,7 @@ a {
   }
 
   .job-row {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 8px;
   }
 }

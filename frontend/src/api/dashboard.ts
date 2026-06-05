@@ -30,7 +30,14 @@ export type DashboardOverview = {
     name: string
     status: 'SUCCESS' | 'FAILED' | 'RUNNING'
     summary: string
+    createdAt?: string
+    runMode?: 'AUTO' | 'MANUAL_RUN'
+    startedAt?: string
     finishedAt?: string
+    fetchedCount?: number
+    matchedCount?: number
+    pushedCount?: number
+    pushFailedCount?: number
   }>
   quickActions: Array<{ text: string; path: string }>
 }

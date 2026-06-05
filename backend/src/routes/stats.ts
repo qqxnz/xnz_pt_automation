@@ -144,7 +144,14 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       name: log.taskName,
       status: log.status,
       summary: log.message,
-      finishedAt: log.finishedAt ?? log.createdAt
+      createdAt: log.createdAt,
+      runMode: log.runMode,
+      startedAt: log.startedAt,
+      finishedAt: log.finishedAt ?? log.createdAt,
+      fetchedCount: log.fetchedCount,
+      matchedCount: log.matchedCount,
+      pushedCount: log.pushedCount,
+      pushFailedCount: log.pushFailedCount
     }))
 
   res.json({
