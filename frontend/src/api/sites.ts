@@ -24,6 +24,8 @@ export type SiteListItem = {
 }
 
 export type SiteDetail = SiteListItem & {
+  apiKey?: string
+  cookie?: string
   userAgent?: string
 }
 

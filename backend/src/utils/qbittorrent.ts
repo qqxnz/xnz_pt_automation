@@ -61,12 +61,43 @@ function normalizeTorrentName(value?: string) {
     .toLowerCase()
 }
 
-export async function fetchTorrentFile(site: Pick<SiteRecord, 'cookie' | 'userAgent'>, downloadUrl?: string) {
-  if (!downloadUrl) throw new QbittorrentError('缺少真实种子下载链接')
-  if (!site.cookie?.trim()) throw new QbittorrentError('站点 Cookie 未配置，无法下载种子文件')
-  const response = await fetch(downloadUrl, {
+function isMTeamDownloadTokenUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return /(^|\.)m-team\.cc$/i.test(url.hostname) && url.pathname === '/api/torrent/genDlToken'
+  } catch {
+    return false
+  }
+}
+
+async function resolveMTeamDownloadUrl(site: Pick<SiteRecord, 'apiKey' | 'userAgent'>, tokenUrl: string) {
+  if (!site.apiKey?.trim()) throw new QbittorrentError('M-Team API Key 未配置，无法生成真实种子下载链接')
+  const response = await fetch(tokenUrl, {
+    method: 'POST',
     headers: {
-      Cookie: site.cookie,
+      'x-api-key': site.apiKey,
+      'User-Agent': site.userAgent || 'Mozilla/5.0',
+      Accept: 'application/json'
+    },
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!response.ok) throw new QbittorrentError(`M-Team 下载链接生成失败：HTTP ${response.status}`)
+  const result = (await response.json()) as { code?: string | number; message?: string; data?: unknown }
+  if (String(result.code) !== '0' || typeof result.data !== 'string' || !/^https?:\/\//i.test(result.data)) {
+    throw new QbittorrentError(result.message || 'M-Team 下载链接生成失败')
+  }
+  return result.data
+}
+
+export async function fetchTorrentFile(site: Pick<SiteRecord, 'apiKey' | 'cookie' | 'userAgent'>, downloadUrl?: string) {
+  if (!downloadUrl) throw new QbittorrentError('缺少真实种子下载链接')
+  const isMTeamTokenUrl = isMTeamDownloadTokenUrl(downloadUrl)
+  const resolvedDownloadUrl = isMTeamTokenUrl ? await resolveMTeamDownloadUrl(site, downloadUrl) : downloadUrl
+  if (!isMTeamTokenUrl && !site.cookie?.trim()) throw new QbittorrentError('站点 Cookie 未配置，无法下载种子文件')
+  const response = await fetch(resolvedDownloadUrl, {
+    headers: {
+      ...(site.cookie?.trim() ? { Cookie: site.cookie } : {}),
+      ...(isMTeamTokenUrl && site.apiKey?.trim() ? { 'x-api-key': site.apiKey } : {}),
       'User-Agent': site.userAgent || 'Mozilla/5.0',
       Accept: 'application/x-bittorrent,application/octet-stream,*/*'
     },
@@ -129,7 +160,7 @@ export async function addTorrentFileToQb(
 
 export async function addTorrentUrlToQb(
   downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>,
-  site: Pick<SiteRecord, 'cookie' | 'userAgent'>,
+  site: Pick<SiteRecord, 'apiKey' | 'cookie' | 'userAgent'>,
   downloadUrl: string | undefined,
   filename: string,
   options: QbAddOptions = {}

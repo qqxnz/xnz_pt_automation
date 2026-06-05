@@ -138,7 +138,12 @@ function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['di
 }
 
 function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
-  if (!item.id || /m-team\.cc$/i.test(site.domain)) return undefined
+  if (!item.id) return undefined
+  if (/m-team\.cc$/i.test(site.domain) && site.apiKey?.trim()) {
+    const url = new URL('https://api.m-team.cc/api/torrent/genDlToken')
+    url.searchParams.set('id', item.id)
+    return url.toString()
+  }
   return resolveSiteUrl(site, `/download.php?id=${encodeURIComponent(item.id)}`)
 }
 

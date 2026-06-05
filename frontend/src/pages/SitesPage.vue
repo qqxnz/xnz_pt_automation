@@ -121,11 +121,11 @@
     </section>
 
     <div v-if="formVisible" class="modal-backdrop" @click.self="closeForm">
-      <form class="site-form" @submit.prevent="saveSite(false)">
+      <form class="site-form" @submit.prevent="saveSite">
         <div class="form-head">
           <div>
             <h2>{{ editingSiteId ? '编辑站点' : '新增站点' }}</h2>
-            <p>保存并测试会先保存配置，再执行站点检查和用户统计获取。</p>
+            <p>保存后会自动执行站点检查和用户统计获取。</p>
           </div>
           <button type="button" @click="closeForm">×</button>
         </div>
@@ -139,8 +139,32 @@
 
           <section>
             <h3>访问凭证</h3>
-            <label>API Key<input v-model.trim="form.apiKey" :placeholder="editingSiteId && detailHasApiKey ? '已保存，留空不修改' : ''" /></label>
-            <label>Cookie<input v-model.trim="form.cookie" :placeholder="editingSiteId && detailHasCookie ? '已保存，留空不修改' : ''" /></label>
+            <label>
+              API Key
+              <div class="password-input">
+                <input
+                  v-model.trim="form.apiKey"
+                  :type="apiKeyVisible ? 'text' : 'password'"
+                  :placeholder="editingSiteId && detailHasApiKey && !form.apiKey ? '已保存，留空不修改' : ''"
+                />
+                <button type="button" :disabled="saving" @click="apiKeyVisible = !apiKeyVisible">
+                  {{ apiKeyVisible ? '隐藏' : '显示' }}
+                </button>
+              </div>
+            </label>
+            <label>
+              Cookie
+              <div class="password-input">
+                <input
+                  v-model.trim="form.cookie"
+                  :type="cookieVisible ? 'text' : 'password'"
+                  :placeholder="editingSiteId && detailHasCookie && !form.cookie ? '已保存，留空不修改' : ''"
+                />
+                <button type="button" :disabled="saving" @click="cookieVisible = !cookieVisible">
+                  {{ cookieVisible ? '隐藏' : '显示' }}
+                </button>
+              </div>
+            </label>
             <label>
               User-Agent
               <div class="ua-row">
@@ -154,7 +178,6 @@
         <div class="form-foot">
           <span>校验：域名合法，API Key 和 Cookie 至少填写一个。已知域名自动显示站点显示名。</span>
           <button type="button" class="secondary-button" @click="closeForm">取消</button>
-          <button type="button" class="secondary-button blue" :disabled="saving" @click="saveSite(true)">保存并测试</button>
           <button class="primary-button compact" :disabled="saving" type="submit">{{ saving ? '保存中...' : '保存' }}</button>
         </div>
       </form>
@@ -238,6 +261,10 @@ const formVisible = ref(false)
 const editingSiteId = ref<string>()
 const detailHasApiKey = ref(false)
 const detailHasCookie = ref(false)
+const apiKeyVisible = ref(false)
+const cookieVisible = ref(false)
+const originalApiKey = ref('')
+const originalCookie = ref('')
 const browseVisible = ref(false)
 const browseLoading = ref(false)
 const browseError = ref('')
@@ -279,6 +306,10 @@ function resetForm() {
   editingSiteId.value = undefined
   detailHasApiKey.value = false
   detailHasCookie.value = false
+  apiKeyVisible.value = false
+  cookieVisible.value = false
+  originalApiKey.value = ''
+  originalCookie.value = ''
   Object.assign(form, {
     domain: '',
     enabled: true,
@@ -386,10 +417,12 @@ async function openEdit(site: SiteListItem) {
   Object.assign(form, {
     domain: detail.domain,
     enabled: detail.enabled,
-    apiKey: '',
-    cookie: '',
+    apiKey: detail.apiKey || '',
+    cookie: detail.cookie || '',
     userAgent: detail.userAgent || navigator.userAgent
   })
+  originalApiKey.value = detail.apiKey || ''
+  originalCookie.value = detail.cookie || ''
   formVisible.value = true
 }
 
@@ -404,7 +437,17 @@ function validateForm() {
   return ''
 }
 
-async function saveSite(runTest: boolean) {
+function buildSitePayload(): SiteFormPayload {
+  return {
+    domain: form.domain.trim(),
+    enabled: form.enabled,
+    apiKey: editingSiteId.value && form.apiKey === originalApiKey.value ? originalApiKey.value || undefined : form.apiKey?.trim() || undefined,
+    cookie: editingSiteId.value && form.cookie === originalCookie.value ? originalCookie.value || undefined : form.cookie?.trim() || undefined,
+    userAgent: form.userAgent?.trim() || undefined
+  }
+}
+
+async function saveSite() {
   const validation = validateForm()
   if (validation) {
     Snackbar.warning(validation)
@@ -413,13 +456,13 @@ async function saveSite(runTest: boolean) {
 
   saving.value = true
   try {
-    const payload = { ...form }
+    const payload = buildSitePayload()
     const saved = editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
-    if (runTest) {
+    try {
       const result = await testSiteConnectivity(saved.id)
       Snackbar[result.ok ? 'success' : 'error'](result.ok ? `测试成功，当前使用${result.credential === 'COOKIE' ? 'Cookie' : 'API Key'}` : result.errorMessage || '测试失败')
-    } else {
-      Snackbar.success('站点已保存')
+    } catch (testError) {
+      Snackbar.error(`站点已保存，测试失败：${testError instanceof Error ? testError.message : '测试失败'}`)
     }
     formVisible.value = false
     await loadSites()

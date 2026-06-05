@@ -130,7 +130,7 @@
             <label>站点<select v-model="form.siteId"><option value="">请选择站点</option><option v-for="site in sites" :key="site.id" :value="site.id">{{ site.displayName }}</option></select></label>
             <label>下载器<select v-model="form.downloaderId"><option value="">请选择下载器</option><option v-for="downloader in downloaders" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option></select></label>
             <label>执行间隔分钟<input v-model.number="form.intervalMinutes" min="10" type="number" /></label>
-            <label>默认保存路径<input v-model.trim="form.savePathOverride" placeholder="不填则使用下载器或 QB 默认路径" /></label>
+            <label>默认保存路径<input v-model.trim="form.savePathOverride" placeholder="不填则使用下载器 QB/TR 默认路径" /></label>
           </section>
           <section>
             <h3>运行规则</h3>

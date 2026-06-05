@@ -168,6 +168,8 @@ function listItem(site: SiteRecord) {
 function detailItem(site: SiteRecord) {
   return {
     ...listItem(site),
+    apiKey: site.apiKey,
+    cookie: site.cookie,
     userAgent: site.userAgent
   }
 }
@@ -713,7 +715,7 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
     site.lastConnectError = error instanceof Error ? error.message : '站点测试失败'
     site.updatedAt = new Date().toISOString()
     await writeState(state)
-    return res.status(400).json({ ok: false, status: site.connectivityStatus, errorMessage: site.lastConnectError })
+    return res.status(400).json({ ok: false, status: site.connectivityStatus, message: site.lastConnectError, errorMessage: site.lastConnectError })
   }
 })
 

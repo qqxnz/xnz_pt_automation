@@ -19,6 +19,10 @@ export type DownloaderListItem = {
   updatedAt: string
 }
 
+export type DownloaderDetailItem = DownloaderListItem & {
+  password?: string
+}
+
 export type DownloaderFormPayload = {
   name: string
   type: 'QBITTORRENT'
@@ -95,7 +99,7 @@ export function getDownloaders(filters: DownloaderFilter) {
 }
 
 export function getDownloader(id: string) {
-  return apiRequest<DownloaderListItem>(`/api/downloaders/${id}`)
+  return apiRequest<DownloaderDetailItem>(`/api/downloaders/${id}`)
 }
 
 export function createDownloader(payload: DownloaderFormPayload) {

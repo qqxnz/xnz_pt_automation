@@ -28,7 +28,7 @@ function toCsv(headers: string[], rows: unknown[][]) {
 }
 
 function taskFailureDetails(item: TaskLogRecord) {
-  return [...(item.failureDetails ?? []), item.fetchErrorMessage ?? '', ...(item.pushErrorMessages ?? [])].filter(Boolean)
+  return [...new Set([...(item.failureDetails ?? []), item.fetchErrorMessage ?? '', ...(item.pushErrorMessages ?? [])].filter(Boolean))]
 }
 
 function operationRows(items: OperationLogRecord[]) {

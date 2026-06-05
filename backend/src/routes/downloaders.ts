@@ -80,6 +80,13 @@ function listItem(downloader: DownloaderRecord) {
   }
 }
 
+function detailItem(downloader: DownloaderRecord) {
+  return {
+    ...listItem(downloader),
+    password: downloader.password
+  }
+}
+
 function stats(items: DownloaderRecord[]) {
   return {
     total: items.length,
@@ -235,7 +242,7 @@ downloadersRouter.get('/:id', requireAuth, async (req, res) => {
   const id = String(req.params.id)
   const downloader = state.downloaders.find((item) => item.id === id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
-  return res.json(listItem(downloader))
+  return res.json(detailItem(downloader))
 })
 
 downloadersRouter.post('/', requireAuth, async (req, res) => {

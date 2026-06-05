@@ -63,7 +63,7 @@
             <span>
               <strong>{{ downloader.name }}</strong>
               <small>{{ downloader.host }}</small>
-              <small>{{ downloader.savePath || '使用 qBittorrent 默认保存路径' }}</small>
+              <small>{{ downloader.savePath || '使用下载器 QB/TR 默认路径' }}</small>
             </span>
             <span class="chip" :class="statusMeta(downloader.status).className">{{ statusMeta(downloader.status).label }}</span>
           </button>
@@ -102,7 +102,7 @@
               </div>
               <div class="downloader-detail-line">
                 <span class="chip" :class="statusMeta(selectedDownloader.status).className">{{ statusMeta(selectedDownloader.status).label }}</span>
-                <span>默认路径：{{ selectedDownloader.savePath || '使用 QB 默认路径' }}</span>
+                <span>默认路径：{{ selectedDownloader.savePath || '使用下载器 QB/TR 默认路径' }}</span>
                 <span>剩余空间：{{ formatBytes(currentStatus?.freeSpace) }}</span>
                 <span>最近同步：{{ formatDate(currentStatus?.lastSyncedAt || selectedDownloader.lastSyncedAt) }}</span>
               </div>
@@ -147,11 +147,11 @@
     </section>
 
     <div v-if="formVisible" class="modal-backdrop" @click.self="closeForm">
-      <form class="site-form downloader-form" @submit.prevent="saveDownloader(false)">
+      <form class="site-form downloader-form" @submit.prevent="saveDownloader">
         <div class="form-head">
           <div>
             <h2>{{ editingDownloaderId ? `编辑下载器 - ${form.name || ''}` : '新增下载器' }}</h2>
-            <p>密码留空不修改；输入新密码后保存即更新。</p>
+            <p>编辑时显示已保存密码；修改后保存即更新。</p>
           </div>
           <button type="button" @click="closeForm">×</button>
         </div>
@@ -190,7 +190,7 @@
 
           <section>
             <h3>默认推送设置</h3>
-            <label>默认保存路径<input v-model.trim="form.savePath" placeholder="/downloads/pt，可选" /></label>
+            <label>默认保存路径<input v-model.trim="form.savePath" placeholder="不填则使用下载器 QB/TR 默认路径" /></label>
             <label class="inline-check"><input v-model="testAfterSave" type="checkbox" /> 保存后测试连接</label>
             <div v-if="draftTestResult" class="empty-tip compact-tip" :class="{ 'success-tip': draftTestResult.success }">
               {{ draftTestResult.message }}
@@ -201,12 +201,11 @@
         </div>
 
         <div class="form-foot">
-          <span>校验：名称唯一；服务地址必须包含 http(s)；编辑时密码留空不修改。</span>
+          <span>校验：名称唯一；服务地址必须包含 http(s)；编辑时不改密码则保持原值。</span>
           <button type="button" class="secondary-button" @click="closeForm">取消</button>
           <button type="button" class="secondary-button blue" :disabled="saving || testingDraft" @click="testDraft">
             {{ testingDraft ? '测试中...' : '测试连接' }}
           </button>
-          <button type="button" class="secondary-button blue" :disabled="saving" @click="saveDownloader(true)">保存并测试</button>
           <button class="primary-button compact" :disabled="saving" type="submit">{{ saving ? '保存中...' : '保存' }}</button>
         </div>
       </form>
@@ -256,6 +255,7 @@ const formVisible = ref(false)
 const editingDownloaderId = ref<string>()
 const detailHasPassword = ref(false)
 const downloaderPasswordVisible = ref(false)
+const originalDownloaderPassword = ref('')
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
 let statusTimer: number | undefined
@@ -280,7 +280,7 @@ const form = reactive<DownloaderFormPayload>({
 
 const selectedDownloader = computed(() => items.value.find((item) => item.id === selectedId.value))
 const hasFilters = computed(() => Boolean(filters.keyword || filters.status !== 'ALL' || filters.enabled !== 'ALL'))
-const passwordPlaceholder = computed(() => (editingDownloaderId.value && detailHasPassword.value ? '已保存，留空不修改' : '可选'))
+const passwordPlaceholder = computed(() => (editingDownloaderId.value && detailHasPassword.value && !form.password ? '已保存，留空不修改' : '可选'))
 const statCards = computed(() => [
   { label: '全部下载器', value: stats.value.total, className: '' },
   { label: '在线', value: stats.value.online, className: 'success' },
@@ -329,6 +329,7 @@ function resetForm() {
   editingDownloaderId.value = undefined
   detailHasPassword.value = false
   downloaderPasswordVisible.value = false
+  originalDownloaderPassword.value = ''
   draftTestResult.value = undefined
   testAfterSave.value = true
   Object.assign(form, {
@@ -397,9 +398,10 @@ async function openEdit(downloader: DownloaderListItem) {
     enabled: detail.enabled,
     host: detail.host,
     username: detail.username || '',
-    password: '',
+    password: detail.password || '',
     savePath: detail.savePath || ''
   })
+  originalDownloaderPassword.value = detail.password || ''
   formVisible.value = true
 }
 
@@ -409,14 +411,15 @@ function closeForm() {
 
 function buildPayload(): DownloaderFormPayload {
   const password = form.password || undefined
+  const passwordChanged = editingDownloaderId.value ? form.password !== originalDownloaderPassword.value : Boolean(password)
   return {
     name: form.name.trim(),
     type: 'QBITTORRENT',
     enabled: form.enabled,
     host: form.host.trim(),
     username: form.username?.trim() || undefined,
-    password,
-    passwordAction: editingDownloaderId.value ? (password ? 'UPDATE' : 'KEEP') : 'UPDATE',
+    password: editingDownloaderId.value ? (passwordChanged ? password : undefined) : password,
+    passwordAction: editingDownloaderId.value ? (passwordChanged && password ? 'UPDATE' : 'KEEP') : 'UPDATE',
     savePath: form.savePath?.trim() || undefined
   }
 }
@@ -440,7 +443,7 @@ async function testDraft() {
   }
 }
 
-async function saveDownloader(runTest: boolean) {
+async function saveDownloader() {
   const validation = validateForm()
   if (validation) {
     Snackbar.warning(validation)
@@ -452,7 +455,7 @@ async function saveDownloader(runTest: boolean) {
     const payload = buildPayload()
     const saved = editingDownloaderId.value ? await updateDownloader(editingDownloaderId.value, payload) : await createDownloader(payload)
     selectedId.value = saved.id
-    if (runTest || testAfterSave.value) {
+    if (testAfterSave.value) {
       const result = await testDownloader(saved.id)
       Snackbar[result.success ? 'success' : 'error'](result.message)
     } else {
