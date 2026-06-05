@@ -40,7 +40,7 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
   if (siteStats.total > 0 && siteStats.online === 0) {
     risks.unshift({
       type: 'ALL_OFFLINE',
-      message: '所有站点当前不可连接，请检查网络、代理或凭证',
+      message: '所有站点当前不可连接，请检查网络或凭证',
       actionText: '测试站点',
       actionPath: '/sites'
     })

@@ -2,7 +2,6 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 
 const cookieName = 'pt_session'
-const maxAgeMs = 7 * 24 * 60 * 60 * 1000
 const secret = process.env.SESSION_SECRET ?? 'dev-session-secret-change-me'
 
 function sign(value: string) {
@@ -15,13 +14,13 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right)
 }
 
-export function setSession(res: Response, userId: string) {
+export function setSession(res: Response, userId: string, ttlHours = 168) {
   const payload = Buffer.from(JSON.stringify({ userId, nonce: randomBytes(8).toString('hex') })).toString('base64url')
   res.cookie(cookieName, `${payload}.${sign(payload)}`, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: maxAgeMs,
+    maxAge: ttlHours * 60 * 60 * 1000,
     path: '/'
   })
 }

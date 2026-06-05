@@ -23,7 +23,6 @@ type SitePayload = {
   apiKey?: string
   cookie?: string
   userAgent?: string
-  proxyId?: string
 }
 
 type TrafficStats = {
@@ -143,7 +142,7 @@ export function resolveSiteUrl(site: SiteRecord, value: string) {
   return new URL(value, `${siteBaseUrl(site)}/`).toString()
 }
 
-function listItem(site: SiteRecord, proxyName?: string) {
+function listItem(site: SiteRecord) {
   return {
     id: site.id,
     displayName: siteDisplayName(site),
@@ -158,8 +157,6 @@ function listItem(site: SiteRecord, proxyName?: string) {
     uploaded: site.uploaded,
     downloaded: site.downloaded,
     trafficSyncedAt: site.trafficSyncedAt,
-    proxyId: site.proxyId,
-    proxyName,
     lastConnectedAt: site.lastConnectedAt,
     lastConnectError: site.lastConnectError,
     hasApiKey: Boolean(site.apiKey),
@@ -576,24 +573,20 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   const state = await readState()
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const connectivityStatus = String(req.query.connectivityStatus ?? 'ALL')
-  const proxyUsage = String(req.query.proxyUsage ?? 'ALL')
   const enabled = String(req.query.enabled ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
-  const proxyById = new Map(state.proxies.map((proxy) => [proxy.id, proxy.name]))
 
   const filtered = state.sites.filter((site) => {
     if (keyword && !`${siteDisplayName(site)} ${site.domain}`.toLowerCase().includes(keyword)) return false
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
-    if (proxyUsage === 'NONE' && site.proxyId) return false
-    if (proxyUsage === 'ENABLED' && !site.proxyId) return false
     if (enabled === 'ENABLED' && !site.enabled) return false
     if (enabled === 'DISABLED' && site.enabled) return false
     return true
   })
 
   const start = (page - 1) * pageSize
-  const items = filtered.slice(start, start + pageSize).map((site) => listItem(site, site.proxyId ? proxyById.get(site.proxyId) : undefined))
+  const items = filtered.slice(start, start + pageSize).map((site) => listItem(site))
   const stats = {
     total: state.sites.length,
     online: state.sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
@@ -618,9 +611,6 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
   if (error) return res.status(400).json({ message: error })
 
   const state = await readState()
-  if (payload.proxyId && !state.proxies.some((proxy) => proxy.id === payload.proxyId && proxy.enabled)) {
-    return res.status(400).json({ message: '请选择已启用代理' })
-  }
 
   const now = new Date().toISOString()
   const site: SiteRecord = {
@@ -630,7 +620,6 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
     apiKey: payload.apiKey?.trim() || undefined,
     cookie: payload.cookie?.trim() || undefined,
     userAgent: payload.userAgent?.trim() || undefined,
-    proxyId: payload.proxyId || undefined,
     connectivityStatus: 'UNKNOWN',
     createdAt: now,
     updatedAt: now
@@ -649,9 +638,6 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
   const existing = state.sites[index]
   const error = validatePayload(payload, existing)
   if (error) return res.status(400).json({ message: error })
-  if (payload.proxyId && !state.proxies.some((proxy) => proxy.id === payload.proxyId && proxy.enabled)) {
-    return res.status(400).json({ message: '请选择已启用代理' })
-  }
 
   const updated: SiteRecord = {
     ...existing,
@@ -660,7 +646,6 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
     apiKey: payload.apiKey?.trim() || existing.apiKey,
     cookie: payload.cookie?.trim() || existing.cookie,
     userAgent: payload.userAgent?.trim() || undefined,
-    proxyId: payload.proxyId || undefined,
     updatedAt: new Date().toISOString()
   }
   state.sites[index] = updated

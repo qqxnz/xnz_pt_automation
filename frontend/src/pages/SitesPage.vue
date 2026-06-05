@@ -4,7 +4,7 @@
       <div class="dashboard-head">
         <div>
           <h1>站点</h1>
-          <p>管理 PT 站点域名、API Key、Cookie、代理、连通状态和用户统计</p>
+          <p>管理 PT 站点域名、API Key、Cookie、连通状态和用户统计</p>
         </div>
         <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
       </div>
@@ -24,11 +24,6 @@
           <option value="AUTH_FAILED">认证失败</option>
           <option value="OFFLINE">离线</option>
           <option value="UNKNOWN">未检测</option>
-        </select>
-        <select v-model="filters.proxyUsage" @change="loadSites">
-          <option value="ALL">代理：全部</option>
-          <option value="NONE">不使用代理</option>
-          <option value="ENABLED">已选择代理</option>
         </select>
         <select v-model="filters.enabled" @change="loadSites">
           <option value="ALL">启用：全部</option>
@@ -112,7 +107,6 @@
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>
-            <p>代理：{{ site.proxyName ?? '不使用代理' }}</p>
             <p>最近成功：{{ formatDate(site.lastConnectedAt) }}</p>
             <p v-if="site.lastConnectError">错误：{{ site.lastConnectError }}</p>
             <div class="row-actions">
@@ -154,20 +148,6 @@
                 <button type="button" @click="restoreUserAgent">恢复当前浏览器</button>
               </div>
             </label>
-          </section>
-
-          <section>
-            <h3>代理配置</h3>
-            <label>
-              使用代理
-              <select v-model="form.proxyId">
-                <option value="">不使用代理</option>
-                <option v-for="proxy in enabledProxies" :key="proxy.id" :value="proxy.id">
-                  {{ proxy.name }} · {{ proxy.type }}
-                </option>
-              </select>
-            </label>
-            <div class="empty-tip compact-tip">代理配置来自代理管理模块。默认不使用代理。</div>
           </section>
         </div>
 
@@ -236,13 +216,11 @@ import {
   browseSiteTorrents,
   createSite,
   deleteSite,
-  getProxies,
   getSite,
   getSites,
   testSiteConnectivity,
   updateSite,
   type BrowseTorrentItem,
-  type ProxyOption,
   type SiteFilter,
   type SiteFormPayload,
   type SiteListItem,
@@ -256,7 +234,6 @@ const saving = ref(false)
 const error = ref('')
 const items = ref<SiteListItem[]>([])
 const stats = ref<SiteStats>({ total: 0, online: 0, authFailed: 0, offline: 0, unknown: 0 })
-const proxies = ref<ProxyOption[]>([])
 const formVisible = ref(false)
 const editingSiteId = ref<string>()
 const detailHasApiKey = ref(false)
@@ -271,7 +248,6 @@ const browseTotal = ref(0)
 const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
   keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
   connectivityStatus: typeof route.query.connectivityStatus === 'string' ? (route.query.connectivityStatus as SiteFilter['connectivityStatus']) ?? 'ALL' : 'ALL',
-  proxyUsage: typeof route.query.proxyUsage === 'string' ? (route.query.proxyUsage as SiteFilter['proxyUsage']) ?? 'ALL' : 'ALL',
   enabled: typeof route.query.enabled === 'string' ? (route.query.enabled as SiteFilter['enabled']) ?? 'ALL' : 'ALL'
 })
 
@@ -280,8 +256,7 @@ const form = reactive<SiteFormPayload>({
   enabled: true,
   apiKey: '',
   cookie: '',
-  userAgent: '',
-  proxyId: ''
+  userAgent: ''
 })
 
 const browseFilters = reactive({
@@ -291,8 +266,7 @@ const browseFilters = reactive({
   pageSize: 100
 })
 
-const enabledProxies = computed(() => proxies.value.filter((proxy) => proxy.enabled))
-const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.proxyUsage !== 'ALL' || filters.enabled !== 'ALL'))
+const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.enabled !== 'ALL'))
 const statCards = computed(() => [
   { label: '全部站点', value: stats.value.total, className: '' },
   { label: '在线站点', value: stats.value.online, className: 'success' },
@@ -310,8 +284,7 @@ function resetForm() {
     enabled: true,
     apiKey: '',
     cookie: '',
-    userAgent: navigator.userAgent,
-    proxyId: ''
+    userAgent: navigator.userAgent
   })
 }
 
@@ -389,7 +362,6 @@ async function loadSites() {
       query: {
         keyword: filters.keyword || undefined,
         connectivityStatus: filters.connectivityStatus === 'ALL' ? undefined : filters.connectivityStatus,
-        proxyUsage: filters.proxyUsage === 'ALL' ? undefined : filters.proxyUsage,
         enabled: filters.enabled === 'ALL' ? undefined : filters.enabled
       }
     })
@@ -398,11 +370,6 @@ async function loadSites() {
   } finally {
     loading.value = false
   }
-}
-
-async function loadProxies() {
-  const result = await getProxies().catch(() => ({ items: [] }))
-  proxies.value = result.items
 }
 
 function openCreate() {
@@ -421,8 +388,7 @@ async function openEdit(site: SiteListItem) {
     enabled: detail.enabled,
     apiKey: '',
     cookie: '',
-    userAgent: detail.userAgent || navigator.userAgent,
-    proxyId: detail.proxyId || ''
+    userAgent: detail.userAgent || navigator.userAgent
   })
   formVisible.value = true
 }
@@ -447,7 +413,7 @@ async function saveSite(runTest: boolean) {
 
   saving.value = true
   try {
-    const payload = { ...form, proxyId: form.proxyId || undefined }
+    const payload = { ...form }
     const saved = editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
     if (runTest) {
       const result = await testSiteConnectivity(saved.id)
@@ -513,13 +479,12 @@ async function removeSite(site: SiteListItem) {
 function resetFilters() {
   filters.keyword = ''
   filters.connectivityStatus = 'ALL'
-  filters.proxyUsage = 'ALL'
   filters.enabled = 'ALL'
   loadSites()
 }
 
 onMounted(async () => {
   if (route.query.action === 'create') openCreate()
-  await Promise.all([loadSites(), loadProxies()])
+  await loadSites()
 })
 </script>

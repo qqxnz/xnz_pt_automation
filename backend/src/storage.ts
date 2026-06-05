@@ -138,6 +138,17 @@ export type SiteRecord = {
   updatedAt: string
 }
 
+export type SystemSettings = {
+  sessionTtlHours: number
+  operationLogRetentionDays: number
+  taskLogRetentionDays: number
+  torrentRetentionDays: number
+  requestTimeoutMs: number
+  proxyTestUrl: string
+  maxConcurrentTasks: number
+  defaultUserAgent: string
+}
+
 export type DownloaderRecord = {
   id: string
   name: string
@@ -164,11 +175,31 @@ type AppState = {
   downloaders: DownloaderRecord[]
   tasks: TaskRecord[]
   torrents: TorrentRecord[]
+  systemSettings: SystemSettings
+  systemSettingsUpdatedAt?: string
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const stateFile = path.join(dataDir, 'app-state.json')
+
+export const storagePaths = {
+  root,
+  dataDir,
+  stateFile,
+  logDir: path.join(dataDir, 'logs')
+}
+
+export const defaultSystemSettings: SystemSettings = {
+  sessionTtlHours: 168,
+  operationLogRetentionDays: 180,
+  taskLogRetentionDays: 60,
+  torrentRetentionDays: 365,
+  requestTimeoutMs: 15000,
+  proxyTestUrl: 'https://www.gstatic.com/generate_204',
+  maxConcurrentTasks: 2,
+  defaultUserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 async function initialState(): Promise<AppState> {
   return {
@@ -185,11 +216,17 @@ async function initialState(): Promise<AppState> {
     proxies: [],
     downloaders: [],
     tasks: [],
-    torrents: []
+    torrents: [],
+    systemSettings: defaultSystemSettings
   }
 }
 
 function normalizeState(state: Partial<AppState>): AppState {
+  const systemSettings = {
+    ...defaultSystemSettings,
+    ...(state.systemSettings ?? {})
+  }
+
   return {
     users: state.users ?? [],
     operationLogs: state.operationLogs ?? [],
@@ -198,7 +235,9 @@ function normalizeState(state: Partial<AppState>): AppState {
     proxies: state.proxies ?? [],
     downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
     tasks: (state.tasks ?? []).filter((task) => typeof task.name === 'string'),
-    torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string')
+    torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string'),
+    systemSettings,
+    systemSettingsUpdatedAt: state.systemSettingsUpdatedAt
   }
 }
 
@@ -216,6 +255,11 @@ export async function readState(): Promise<AppState> {
 export async function writeState(state: AppState) {
   await mkdir(dataDir, { recursive: true })
   await writeFile(stateFile, JSON.stringify(state, null, 2), 'utf8')
+}
+
+export async function readSystemSettings() {
+  const state = await readState()
+  return state.systemSettings
 }
 
 export async function appendOperationLog(payload: Omit<OperationLogRecord, 'id' | 'type' | 'createdAt'>) {

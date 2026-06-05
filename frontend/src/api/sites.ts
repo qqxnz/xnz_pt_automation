@@ -17,8 +17,6 @@ export type SiteListItem = {
   uploaded?: number
   downloaded?: number
   trafficSyncedAt?: string
-  proxyId?: string
-  proxyName?: string
   lastConnectedAt?: string
   lastConnectError?: string
   hasApiKey: boolean
@@ -35,13 +33,11 @@ export type SiteFormPayload = {
   apiKey?: string
   cookie?: string
   userAgent?: string
-  proxyId?: string
 }
 
 export type SiteFilter = {
   keyword?: string
   connectivityStatus?: 'ALL' | ConnectivityStatus
-  proxyUsage?: 'ALL' | 'NONE' | 'ENABLED'
   enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
   page?: number
   pageSize?: number
@@ -53,15 +49,6 @@ export type SiteStats = {
   authFailed: number
   offline: number
   unknown: number
-}
-
-export type ProxyOption = {
-  id: string
-  name: string
-  enabled: boolean
-  type: 'HTTP' | 'HTTPS' | 'SOCKS5'
-  host: string
-  port: number
 }
 
 export type TestSiteConnectivityResponse = {
@@ -140,8 +127,4 @@ export function browseSiteTorrents(id: string, payload: { keyword?: string; cate
     method: 'POST',
     body: JSON.stringify(payload)
   })
-}
-
-export function getProxies() {
-  return apiRequest<{ items: ProxyOption[] }>('/api/proxies')
 }

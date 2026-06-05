@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { authRouter } from './routes/auth.js'
 import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
-import { proxiesRouter } from './routes/proxies.js'
+import { settingsRouter } from './routes/settings.js'
 import { sitesRouter } from './routes/sites.js'
 import { statsRouter } from './routes/stats.js'
 import { tasksRouter } from './routes/tasks.js'
@@ -26,8 +26,8 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/settings', settingsRouter)
 app.use('/api/sites', sitesRouter)
-app.use('/api/proxies', proxiesRouter)
 app.use('/api/downloaders', downloadersRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/torrents', torrentsRouter)

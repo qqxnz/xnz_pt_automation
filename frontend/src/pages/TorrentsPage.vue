@@ -223,7 +223,7 @@ function pushClass(value: TorrentItem['pushStatus']) {
   if (value === 'PUSHED') return 'online-chip'
   if (value === 'PUSH_FAILED') return 'offline-chip'
   if (value === 'DELETED') return 'muted-chip'
-  return 'proxy-chip'
+  return 'pending-chip'
 }
 
 function freeText(torrent: TorrentItem) {

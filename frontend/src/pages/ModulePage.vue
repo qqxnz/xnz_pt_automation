@@ -34,7 +34,7 @@ const route = useRoute()
 const moduleCopy = {
   sites: {
     title: '站点',
-    description: '维护 PT 站点访问凭证、代理策略和连通状态。',
+    description: '维护 PT 站点访问凭证和连通状态。',
     panelTitle: '站点列表',
     emptyText: '暂无站点数据。'
   },
@@ -55,12 +55,6 @@ const moduleCopy = {
     description: '查看抓取到的种子、当前是否免费、推送状态和目标下载器。',
     panelTitle: '种子列表',
     emptyText: '暂无种子数据。'
-  },
-  proxies: {
-    title: '代理管理',
-    description: '维护全局代理和站点级代理配置。',
-    panelTitle: '代理列表',
-    emptyText: '暂无代理数据。'
   },
   settings: {
     title: '系统设置',
