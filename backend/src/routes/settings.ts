@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { defaultSystemSettings, readState, storagePaths, type SystemSettings, writeState } from '../storage.js'
+import { defaultSystemSettings, readState, readStorageMigrationStatus, storagePaths, type SystemSettings, writeState } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -111,15 +111,16 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
     startedAt,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     database: {
-      type: 'json',
-      path: storagePaths.stateFile,
-      sizeBytes: await fileSize(storagePaths.stateFile),
+      type: 'sqlite',
+      path: storagePaths.dbFile,
+      sizeBytes: await fileSize(storagePaths.dbFile),
       schemaVersion: 'app-state-v1',
-      lastMigrationStatus: 'SUCCESS'
+      lastMigrationStatus: await readStorageMigrationStatus()
     },
     paths: {
       dataDir: storagePaths.dataDir,
-      logDir: storagePaths.logDir
+      logDir: storagePaths.logDir,
+      cacheDir: storagePaths.cacheDir
     },
     security: {
       defaultPasswordInUse: admin ? await verifyPassword(defaultPassword, admin.passwordHash) : false

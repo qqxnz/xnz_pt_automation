@@ -1,6 +1,8 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { createPasswordHash } from './utils/password.js'
 
@@ -191,13 +193,16 @@ type AppState = {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
-const stateFile = path.join(dataDir, 'app-state.json')
+const dbFile = path.join(dataDir, 'app.db')
+const legacyStateFile = path.join(dataDir, 'app-state.json')
 
 export const storagePaths = {
   root,
   dataDir,
-  stateFile,
-  logDir: path.join(dataDir, 'logs')
+  dbFile,
+  legacyStateFile,
+  logDir: path.join(dataDir, 'logs'),
+  cacheDir: path.join(dataDir, 'cache')
 }
 
 export const defaultSystemSettings: SystemSettings = {
@@ -265,20 +270,91 @@ function normalizeState(state: Partial<AppState>): AppState {
   }
 }
 
-export async function readState(): Promise<AppState> {
+let database: DatabaseSync | undefined
+
+function openDatabase() {
+  mkdirSync(dataDir, { recursive: true })
+  mkdirSync(storagePaths.cacheDir, { recursive: true })
+
+  if (database) return database
+
+  database = new DatabaseSync(dbFile)
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS app_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      state_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 1;
+  `)
+  return database
+}
+
+function readDbState(db: DatabaseSync): Partial<AppState> | undefined {
+  const row = db.prepare('SELECT state_json FROM app_state WHERE id = 1').get() as { state_json?: string } | undefined
+  if (!row?.state_json) return undefined
+  return JSON.parse(row.state_json) as Partial<AppState>
+}
+
+function setMeta(db: DatabaseSync, key: string, value: string) {
+  db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+}
+
+function writeDbState(db: DatabaseSync, state: AppState) {
+  const updatedAt = new Date().toISOString()
+  db.exec('BEGIN IMMEDIATE')
   try {
-    const raw = await readFile(stateFile, 'utf8')
-    return normalizeState(JSON.parse(raw) as Partial<AppState>)
+    db.prepare(
+      'INSERT INTO app_state (id, state_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at'
+    ).run(JSON.stringify(state), updatedAt)
+    setMeta(db, 'last_migration_status', 'SUCCESS')
+    setMeta(db, 'last_write_at', updatedAt)
+    db.exec('COMMIT')
   } catch (error) {
-    const state = await initialState()
-    await writeState(state)
-    return state
+    db.exec('ROLLBACK')
+    throw error
   }
+}
+
+async function ensureState() {
+  await mkdir(dataDir, { recursive: true })
+  await mkdir(storagePaths.cacheDir, { recursive: true })
+  const db = openDatabase()
+  const existing = readDbState(db)
+  if (existing) return normalizeState(existing)
+
+  if (existsSync(legacyStateFile)) {
+    const migrated = normalizeState(JSON.parse(readFileSync(legacyStateFile, 'utf8')) as Partial<AppState>)
+    writeDbState(db, migrated)
+    setMeta(db, 'migrated_from', legacyStateFile)
+    return migrated
+  }
+
+  const state = await initialState()
+  writeDbState(db, state)
+  return state
+}
+
+export async function readState(): Promise<AppState> {
+  return ensureState()
 }
 
 export async function writeState(state: AppState) {
   await mkdir(dataDir, { recursive: true })
-  await writeFile(stateFile, JSON.stringify(state, null, 2), 'utf8')
+  await mkdir(storagePaths.cacheDir, { recursive: true })
+  writeDbState(openDatabase(), normalizeState(state))
+}
+
+export async function readStorageMigrationStatus() {
+  const db = openDatabase()
+  const row = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('last_migration_status') as { value?: string } | undefined
+  return row?.value ?? 'SUCCESS'
 }
 
 export async function readSystemSettings() {

@@ -28,6 +28,7 @@ export type SystemInfo = {
   paths: {
     dataDir?: string
     logDir?: string
+    cacheDir?: string
   }
   security: {
     defaultPasswordInUse: boolean

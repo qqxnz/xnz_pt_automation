@@ -155,7 +155,8 @@ const systemInfoItems = computed(() => {
     { label: 'Schema 版本', value: info.database.schemaVersion },
     { label: '最近迁移结果', value: migrationText(info.database.lastMigrationStatus) },
     { label: '数据目录', value: info.paths.dataDir || '-' },
-    { label: '日志目录', value: info.paths.logDir || '-' }
+    { label: '日志目录', value: info.paths.logDir || '-' },
+    { label: '缓存目录', value: info.paths.cacheDir || '-' }
   ]
 })
 
