@@ -3,6 +3,7 @@ import type { Request, Response } from 'express'
 
 const cookieName = 'pt_session'
 const secret = process.env.SESSION_SECRET ?? 'dev-session-secret-change-me'
+const cookieSecureMode = (process.env.SESSION_COOKIE_SECURE ?? 'auto').toLowerCase()
 
 function sign(value: string) {
   return createHmac('sha256', secret).update(value).digest('hex')
@@ -14,12 +15,20 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right)
 }
 
-export function setSession(res: Response, userId: string, ttlHours = 168) {
+function shouldUseSecureCookie(req: Request) {
+  if (cookieSecureMode === 'true') return true
+  if (cookieSecureMode === 'false') return false
+
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase()
+  return req.secure || forwardedProto === 'https'
+}
+
+export function setSession(req: Request, res: Response, userId: string, ttlHours = 168) {
   const payload = Buffer.from(JSON.stringify({ userId, nonce: randomBytes(8).toString('hex') })).toString('base64url')
   res.cookie(cookieName, `${payload}.${sign(payload)}`, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(req),
     maxAge: ttlHours * 60 * 60 * 1000,
     path: '/'
   })

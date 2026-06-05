@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, handleUnauthorized } from './client'
 
 export type OperationLog = {
   id: string
@@ -66,10 +66,7 @@ export async function exportLogs(type: LogType) {
   })
 
   if (response.status === 401) {
-    if (window.location.pathname !== '/login') {
-      const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
-      window.history.replaceState(null, '', `/login?redirect=${encodeURIComponent(redirect)}`)
-    }
+    await handleUnauthorized()
     throw new Error('登录态已过期，请重新登录')
   }
 

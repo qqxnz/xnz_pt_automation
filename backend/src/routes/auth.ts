@@ -43,7 +43,7 @@ authRouter.post('/login', async (req, res) => {
   user.lastLoginAt = new Date().toISOString()
   await writeState(state)
   const settings = await readSystemSettings()
-  setSession(res, user.id, settings.sessionTtlHours)
+  setSession(req, res, user.id, settings.sessionTtlHours)
   await recordOperationLog({
     action: 'AUTH_LOGIN',
     message: `用户 ${user.username} 登录成功`,
