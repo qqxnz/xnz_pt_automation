@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState, type DownloaderRecord, writeState } from '../storage.js'
-import { getQbTransferInfo } from '../utils/qbittorrent.js'
+import { getQbTorrentItems, getQbTransferInfo, QbittorrentError, testQbConnection } from '../utils/qbittorrent.js'
 
 export const downloadersRouter = Router()
 
@@ -15,28 +15,6 @@ type DownloaderPayload = {
   password?: string
   passwordAction?: 'KEEP' | 'UPDATE' | 'CLEAR'
   savePath?: string
-}
-
-type QbTorrent = {
-  hash?: string
-  name?: string
-  size?: number
-  progress?: number
-  state?: string
-  ratio?: number
-  category?: string
-  tags?: string
-  upspeed?: number
-  dlspeed?: number
-  added_on?: number
-}
-
-type QbTransferResponse = {
-  up_info_speed?: number
-  dl_info_speed?: number
-  up_info_data?: number
-  dl_info_data?: number
-  free_space_on_disk?: number
 }
 
 class DownloaderError extends Error {
@@ -98,17 +76,11 @@ function stats(items: DownloaderRecord[]) {
   }
 }
 
-function splitTags(value?: string) {
-  return value
-    ? value
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-    : []
-}
-
 function statusFromError(error: unknown) {
   if (error instanceof DownloaderError) {
+    return error.code === 'AUTH_FAILED' ? 'AUTH_FAILED' : 'OFFLINE'
+  }
+  if (error instanceof QbittorrentError) {
     return error.code === 'AUTH_FAILED' ? 'AUTH_FAILED' : 'OFFLINE'
   }
   return 'OFFLINE'
@@ -118,73 +90,9 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '下载器访问失败'
 }
 
-async function qbFetch(host: string, path: string, options: RequestInit = {}, timeoutMs = 10000) {
-  const url = new URL(path, `${host}/`)
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        Accept: 'application/json,text/plain,*/*',
-        ...(options.headers ?? {})
-      }
-    })
-    return response
-  } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new DownloaderError('TIMEOUT', '连接测试超时')
-    }
-    throw new DownloaderError('NETWORK_ERROR', '无法连接下载器，请检查地址和网络')
-  }
-}
-
-async function loginQb(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>, timeoutMs = 8000) {
-  if (!config.username && !config.password) return undefined
-  const body = new URLSearchParams({
-    username: config.username ?? '',
-    password: config.password ?? ''
-  })
-  const response = await qbFetch(
-    config.host,
-    '/api/v2/auth/login',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body
-    },
-    timeoutMs
-  )
-  const text = await response.text()
-  if (!response.ok || text.trim().toLowerCase() !== 'ok.') {
-    throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
-  }
-  return response.headers.get('set-cookie')?.split(';')[0]
-}
-
-async function testQb(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>) {
-  const cookie = await loginQb(config, 8000)
-  const headers = cookie ? { Cookie: cookie } : undefined
-  const versionResponse = await qbFetch(config.host, '/api/v2/app/version', { headers }, 8000)
-  if (versionResponse.status === 403) throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
-  if (!versionResponse.ok) throw new DownloaderError('NETWORK_ERROR', `下载器返回 HTTP ${versionResponse.status}`)
-  const version = (await versionResponse.text()).trim()
-  const transferResponse = await qbFetch(config.host, '/api/v2/transfer/info', { headers }, 8000)
-  const transfer = transferResponse.ok ? ((await transferResponse.json()) as QbTransferResponse) : {}
-  return {
-    success: true,
-    status: 'ONLINE' as const,
-    message: '连接测试成功',
-    version,
-    user: config.username,
-    uploadSpeed: transfer.up_info_speed ?? 0,
-    downloadSpeed: transfer.dl_info_speed ?? 0,
-    testedAt: new Date().toISOString()
-  }
-}
-
 async function getQbStatus(config: DownloaderRecord) {
   const transfer = await getQbTransferInfo(config).catch((error) => {
-    if (error instanceof Error && error.message.includes('认证失败')) throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
+    if (error instanceof QbittorrentError && error.code === 'AUTH_FAILED') throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
     throw new DownloaderError('NETWORK_ERROR', errorMessage(error))
   })
   return {
@@ -197,28 +105,6 @@ async function getQbStatus(config: DownloaderRecord) {
     status: 'ONLINE' as const,
     lastSyncedAt: new Date().toISOString()
   }
-}
-
-async function getQbTorrents(config: DownloaderRecord) {
-  const cookie = await loginQb(config, 15000)
-  const headers = cookie ? { Cookie: cookie } : undefined
-  const response = await qbFetch(config.host, '/api/v2/torrents/info', { headers }, 15000)
-  if (response.status === 403) throw new DownloaderError('AUTH_FAILED', '认证失败，请检查用户名和密码')
-  if (!response.ok) throw new DownloaderError('NETWORK_ERROR', `下载器返回 HTTP ${response.status}`)
-  const items = (await response.json()) as QbTorrent[]
-  return items.map((item) => ({
-    hash: item.hash ?? '',
-    name: item.name ?? '-',
-    size: item.size,
-    progress: item.progress ?? 0,
-    state: item.state ?? 'unknown',
-    ratio: item.ratio,
-    category: item.category,
-    tags: splitTags(item.tags),
-    uploadSpeed: item.upspeed,
-    downloadSpeed: item.dlspeed,
-    addedAt: item.added_on ? new Date(item.added_on * 1000).toISOString() : undefined
-  }))
 }
 
 downloadersRouter.get('/', requireAuth, async (req, res) => {
@@ -313,7 +199,7 @@ downloadersRouter.post('/test', requireAuth, async (req, res) => {
   if (payload.type && payload.type !== 'QBITTORRENT') return res.status(400).json({ message: '暂不支持该下载器类型' })
   if (!payload.host) return res.status(400).json({ message: '服务地址不能为空' })
   try {
-    const result = await testQb({
+    const result = await testQbConnection({
       host: normalizeHost(payload.host),
       username: payload.username?.trim() || undefined,
       password: payload.password || undefined
@@ -336,7 +222,7 @@ downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
 
   try {
-    const result = await testQb(downloader)
+    const result = await testQbConnection(downloader)
     downloader.status = 'ONLINE'
     downloader.statusMessage = result.message
     downloader.lastTestedAt = result.testedAt
@@ -396,7 +282,7 @@ downloadersRouter.get('/:id/torrents', requireAuth, async (req, res) => {
   const downloader = state.downloaders.find((item) => item.id === id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
   try {
-    const items = await getQbTorrents(downloader)
+    const items = await getQbTorrentItems(downloader)
     return res.json({ items, total: items.length })
   } catch (error) {
     return res.status(400).json({ message: errorMessage(error), items: [], total: 0 })

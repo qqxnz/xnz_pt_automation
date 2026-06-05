@@ -1,6 +1,13 @@
 import type { DownloaderRecord, SiteRecord } from '../storage.js'
 
-export class QbittorrentError extends Error {}
+export class QbittorrentError extends Error {
+  constructor(
+    message: string,
+    public code: 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT' = 'NETWORK_ERROR'
+  ) {
+    super(message)
+  }
+}
 
 export type QbAddOptions = {
   savePath?: string
@@ -28,21 +35,50 @@ type QbTorrent = {
   hash?: string
   name?: string
   state?: string
+  size?: number
+  progress?: number
+  ratio?: number
+  category?: string
+  tags?: string
+  upspeed?: number
+  dlspeed?: number
+  added_on?: number
 }
 
 function cookieHeader(cookie?: string) {
   return cookie ? { Cookie: cookie } : undefined
 }
 
+function sameOriginHeaders(host: string, headers?: HeadersInit) {
+  const requestHeaders = new Headers(headers)
+  const origin = new URL(host).origin
+  if (!requestHeaders.has('Accept')) requestHeaders.set('Accept', 'application/json,text/plain,*/*')
+  if (!requestHeaders.has('Origin')) requestHeaders.set('Origin', origin)
+  if (!requestHeaders.has('Referer')) requestHeaders.set('Referer', `${origin}/`)
+  return requestHeaders
+}
+
 async function qbFetch(host: string, path: string, options: RequestInit = {}, timeoutMs = 15000) {
-  return fetch(new URL(path, `${host}/`), {
-    ...options,
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: {
-      Accept: 'application/json,text/plain,*/*',
-      ...(options.headers ?? {})
+  const url = new URL(path, `${host}/`)
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: sameOriginHeaders(host, options.headers)
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new QbittorrentError('连接下载器超时', 'TIMEOUT')
     }
-  })
+    throw new QbittorrentError('无法连接下载器，请检查地址和网络')
+  }
+}
+
+function sessionCookie(response: Response) {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] }
+  const setCookies = headers.getSetCookie?.() ?? []
+  const setCookie = setCookies[0] ?? response.headers.get('set-cookie')
+  return setCookie?.split(';')[0]
 }
 
 async function loginQb(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>) {
@@ -54,13 +90,13 @@ async function loginQb(downloader: Pick<DownloaderRecord, 'host' | 'username' | 
     body
   })
   const text = await response.text()
-  if (!response.ok || text.trim().toLowerCase() !== 'ok.') throw new QbittorrentError('下载器认证失败')
-  return response.headers.get('set-cookie')?.split(';')[0]
+  if (!response.ok || text.trim().toLowerCase() !== 'ok.') throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
+  return sessionCookie(response)
 }
 
 async function listQbTorrents(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>, cookie?: string) {
   const response = await qbFetch(downloader.host, '/api/v2/torrents/info', { headers: cookieHeader(cookie) })
-  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
   if (!response.ok) throw new QbittorrentError(`下载器任务列表请求失败：HTTP ${response.status}`)
   return (await response.json()) as QbTorrent[]
 }
@@ -68,7 +104,7 @@ async function listQbTorrents(downloader: Pick<DownloaderRecord, 'host' | 'usern
 export async function getQbTransferInfo(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>): Promise<QbTransferInfo> {
   const cookie = await loginQb(downloader)
   const response = await qbFetch(downloader.host, '/api/v2/transfer/info', { headers: cookieHeader(cookie) }, 10000)
-  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
   if (!response.ok) throw new QbittorrentError(`下载器传输状态请求失败：HTTP ${response.status}`)
   const transfer = (await response.json()) as QbTransferResponse
   return {
@@ -78,6 +114,54 @@ export async function getQbTransferInfo(downloader: Pick<DownloaderRecord, 'host
     downloadedTotal: transfer.dl_info_data ?? 0,
     freeSpace: transfer.free_space_on_disk
   }
+}
+
+function splitTags(value?: string) {
+  return value
+    ? value
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    : []
+}
+
+export async function testQbConnection(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>) {
+  const cookie = await loginQb(config)
+  const headers = cookieHeader(cookie)
+  const versionResponse = await qbFetch(config.host, '/api/v2/app/version', { headers }, 8000)
+  if (versionResponse.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
+  if (!versionResponse.ok) throw new QbittorrentError(`下载器返回 HTTP ${versionResponse.status}`)
+  const version = (await versionResponse.text()).trim()
+  const transferResponse = await qbFetch(config.host, '/api/v2/transfer/info', { headers }, 8000)
+  const transfer = transferResponse.ok ? ((await transferResponse.json()) as QbTransferResponse) : {}
+  return {
+    success: true,
+    status: 'ONLINE' as const,
+    message: '连接测试成功',
+    version,
+    user: config.username,
+    uploadSpeed: transfer.up_info_speed ?? 0,
+    downloadSpeed: transfer.dl_info_speed ?? 0,
+    testedAt: new Date().toISOString()
+  }
+}
+
+export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>) {
+  const cookie = await loginQb(config)
+  const items = await listQbTorrents(config, cookie)
+  return items.map((item) => ({
+    hash: item.hash ?? '',
+    name: item.name ?? '-',
+    size: item.size,
+    progress: item.progress ?? 0,
+    state: item.state ?? 'unknown',
+    ratio: item.ratio,
+    category: item.category,
+    tags: splitTags(item.tags),
+    uploadSpeed: item.upspeed,
+    downloadSpeed: item.dlspeed,
+    addedAt: item.added_on ? new Date(item.added_on * 1000).toISOString() : undefined
+  }))
 }
 
 function looksLikeTorrentFile(bytes: Uint8Array) {
@@ -168,7 +252,7 @@ export async function addTorrentFileToQb(
     },
     30000
   )
-  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
   if (!response.ok) throw new QbittorrentError(`下载器添加任务失败：HTTP ${response.status}`)
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -216,7 +300,7 @@ export async function deleteTorrentFromQb(downloader: Pick<DownloaderRecord, 'ho
     },
     body
   })
-  if (response.status === 403) throw new QbittorrentError('下载器认证失败')
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
   if (!response.ok) throw new QbittorrentError(`下载器删除任务失败：HTTP ${response.status}`)
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
