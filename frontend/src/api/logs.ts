@@ -29,6 +29,9 @@ export type TaskLog = {
   pushFailedCount?: number
   summary?: string
   errorMessage?: string
+  fetchErrorMessage?: string
+  pushErrorMessages?: string[]
+  failureDetails?: string[]
   createdAt: string
 }
 
@@ -49,4 +52,34 @@ export function getLogs<T extends LogType>(type: T, page = 1, pageSize = 20) {
     pageSize: String(pageSize)
   })
   return apiRequest<LogsResponse<T>>(`/api/logs?${params.toString()}`)
+}
+
+export function clearLogs(type: LogType) {
+  return apiRequest<{ type: LogType; clearedCount: number }>(`/api/logs?type=${type}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function exportLogs(type: LogType) {
+  const response = await fetch(`/api/logs/export?type=${type}`, {
+    credentials: 'include'
+  })
+
+  if (response.status === 401) {
+    if (window.location.pathname !== '/login') {
+      const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      window.history.replaceState(null, '', `/login?redirect=${encodeURIComponent(redirect)}`)
+    }
+    throw new Error('登录态已过期，请重新登录')
+  }
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { message?: string }
+    throw new Error(data.message ?? '日志导出失败')
+  }
+
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `${type}-logs.csv`
+  return { blob, filename }
 }

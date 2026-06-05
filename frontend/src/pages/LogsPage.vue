@@ -7,6 +7,12 @@
       </div>
       <div class="head-actions">
         <span v-if="lastUpdatedAt">最近更新：{{ lastUpdatedAt }}</span>
+        <button class="secondary-button compact" type="button" :disabled="loading || exporting" @click="downloadLogs">
+          {{ exporting ? '导出中...' : '导出' }}
+        </button>
+        <button class="secondary-button compact danger-button" type="button" :disabled="loading || clearing || total === 0" @click="clearCurrentLogs">
+          {{ clearing ? '清空中...' : '清空' }}
+        </button>
         <button class="primary-button compact" type="button" :disabled="loading" @click="loadLogs">
           {{ loading ? '刷新中...' : '刷新' }}
         </button>
@@ -40,6 +46,9 @@
           <div>
             <strong>{{ primaryText(item) }}</strong>
             <p>{{ item.message }}</p>
+            <div v-if="failureDetails(item).length" class="log-details">
+              <span v-for="detail in failureDetails(item)" :key="detail">{{ detail }}</span>
+            </div>
             <small>{{ secondaryText(item) }}</small>
           </div>
         </article>
@@ -61,13 +70,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
-import { getLogs, type LogType, type OperationLog, type TaskLog } from '../api/logs'
+import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type TaskLog } from '../api/logs'
 
 const route = useRoute()
 const activeType = ref<LogType>(route.query.type === 'task' ? 'task' : 'operation')
 const operationLogs = ref<OperationLog[]>([])
 const taskLogs = ref<TaskLog[]>([])
 const loading = ref(false)
+const exporting = ref(false)
+const clearing = ref(false)
 const error = ref('')
 const lastUpdatedAt = ref('')
 const page = ref(1)
@@ -76,6 +87,7 @@ const total = ref(0)
 
 const items = computed(() => (activeType.value === 'operation' ? operationLogs.value : taskLogs.value))
 const totalPages = computed(() => Math.max(Math.ceil(total.value / pageSize), 1))
+const activeTypeText = computed(() => (activeType.value === 'operation' ? '操作日志' : '任务日志'))
 
 function switchType(type: LogType) {
   if (activeType.value === type) {
@@ -139,6 +151,51 @@ function taskResultText(item: TaskLog) {
     item.pushFailedCount === undefined ? '' : `推送失败：${item.pushFailedCount}`
   ].filter(Boolean)
   return parts.join('，')
+}
+
+function failureDetails(item: OperationLog | TaskLog) {
+  if (item.type !== 'TASK') return []
+  const details = [...(item.failureDetails ?? []), item.fetchErrorMessage ? `抓取失败：${item.fetchErrorMessage}` : '', ...(item.pushErrorMessages ?? [])].filter(Boolean)
+  return [...new Set(details)].slice(0, 4)
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function downloadLogs() {
+  exporting.value = true
+  error.value = ''
+  try {
+    const result = await exportLogs(activeType.value)
+    saveBlob(result.blob, result.filename)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '日志导出失败'
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function clearCurrentLogs() {
+  if (!window.confirm(`确认清空当前 ${activeTypeText.value}？此操作不可恢复。`)) return
+  clearing.value = true
+  error.value = ''
+  try {
+    await clearLogs(activeType.value)
+    page.value = 1
+    await loadLogs()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '日志清空失败'
+  } finally {
+    clearing.value = false
+  }
 }
 
 async function loadLogs() {

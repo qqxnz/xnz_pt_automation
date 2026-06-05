@@ -682,10 +682,25 @@ a {
   cursor: pointer;
 }
 
+.secondary-button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.secondary-button.compact {
+  min-height: 46px;
+}
+
 .secondary-button.blue {
   color: #2563eb;
   border-color: #bfdbfe;
   background: #eef6ff;
+}
+
+.danger-button {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fff7f7;
 }
 
 .sites-table {
@@ -1012,6 +1027,57 @@ a {
 
 .torrent-row {
   grid-template-columns: 28px minmax(260px, 1.6fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(140px, 0.9fr) minmax(220px, 1.1fr);
+}
+
+.torrent-select-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  color: #6b7280;
+  font-weight: 850;
+}
+
+.select-all-button {
+  flex: 0 0 auto;
+  color: #2563eb;
+  font-weight: 850;
+}
+
+.select-all-button:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.torrent-row input[type="checkbox"],
+.mobile-torrent-select input {
+  width: 16px;
+  height: 16px;
+  accent-color: #3f7cff;
+}
+
+.torrent-batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 8px;
+  padding-top: 18px;
+}
+
+.torrent-batch-bar > span {
+  color: #6b7280;
+  font-weight: 850;
+}
+
+.torrent-batch-bar > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
 }
 
 .task-row.table-head,
@@ -1588,6 +1654,21 @@ a {
 .log-row p {
   margin: 0 0 8px;
   color: #374151;
+}
+
+.log-details {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.log-details span {
+  border-left: 3px solid #fecaca;
+  padding-left: 10px;
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .status-badge {

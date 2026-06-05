@@ -194,6 +194,15 @@ function torrentFilename(title: string, fallback: string) {
   return `${safeTitle || fallback}.torrent`
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
+
+function readableTorrentTitle(title: string) {
+  const normalized = title.replace(/\s+/g, ' ').trim()
+  return normalized.length > 80 ? `${normalized.slice(0, 80)}...` : normalized || '未知种子'
+}
+
 type TaskRunResult = {
   task: TaskRecord
   fetchedCount: number
@@ -244,13 +253,19 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
     if (!downloader) throw new Error('任务绑定下载器不存在')
     if (task.autoPush && !downloader.enabled) throw new Error('下载器已禁用')
-    const fetched = await candidatesForTask(site, { includeDownloadUrl: true })
+    let fetched: CandidateTorrent[]
+    try {
+      fetched = await candidatesForTask(site, { includeDownloadUrl: true })
+    } catch (error) {
+      throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
+    }
     const ruleMatched = matchedCandidates(task, fetched)
     const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
     const skippedExistingCount = ruleMatched.length - matched.length
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
+    const pushErrorMessages: string[] = []
     for (const item of matched) {
       let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
       let pushError: string | undefined
@@ -263,7 +278,8 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
           })
           pushedCount += 1
         } catch (error) {
-          pushError = error instanceof Error ? error.message : '推送到下载器失败'
+          pushError = errorMessage(error, '推送到下载器失败')
+          pushErrorMessages.push(`《${readableTorrentTitle(item.title)}》：${pushError}`)
           pushFailedCount += 1
         }
       }
@@ -302,12 +318,14 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       state.torrents.unshift(record)
     }
     const finishedAt = new Date().toISOString()
-    const summary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const baseSummary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const failureSummary = pushErrorMessages.length ? `；失败原因：${pushErrorMessages.slice(0, 3).join('；')}${pushErrorMessages.length > 3 ? `；另有 ${pushErrorMessages.length - 3} 条失败` : ''}` : ''
+    const summary = `${baseSummary}${failureSummary}`
     task.running = false
     task.lastFinishedAt = finishedAt
     task.lastStatus = pushFailedCount > 0 ? 'FAILED' : 'SUCCESS'
     task.lastSummary = summary
-    task.lastError = pushFailedCount > 0 ? `${pushFailedCount} 个种子推送失败` : undefined
+    task.lastError = pushFailedCount > 0 ? pushErrorMessages.slice(0, 3).join('；') : undefined
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
     await writeState(state)
@@ -325,12 +343,15 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       pushedCount,
       pushFailedCount,
       summary,
-      errorMessage: task.lastError
+      errorMessage: task.lastError,
+      pushErrorMessages,
+      failureDetails: pushErrorMessages
     })
     return { task, fetchedCount: fetched.length, matchedCount: matched.length, skippedExistingCount, pushedCount, pushFailedCount, summary }
   } catch (error) {
     const finishedAt = new Date().toISOString()
-    const message = error instanceof Error ? error.message : '任务执行失败'
+    const message = errorMessage(error, '任务执行失败')
+    const fetchErrorMessage = message.startsWith('抓取失败：') ? message.replace(/^抓取失败：/, '') : undefined
     task.running = false
     task.lastFinishedAt = finishedAt
     task.lastStatus = 'FAILED'
@@ -353,7 +374,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       pushedCount: 0,
       pushFailedCount: 0,
       summary: message,
-      errorMessage: message
+      errorMessage: message,
+      fetchErrorMessage,
+      failureDetails: [message]
     })
     throw error
   } finally {

@@ -73,6 +73,11 @@ function torrentFilename(title: string, fallback: string) {
   return `${safeTitle || fallback}.torrent`
 }
 
+function requestIds(body: unknown) {
+  const ids = Array.isArray((body as { ids?: unknown[] })?.ids) ? (body as { ids: unknown[] }).ids : []
+  return [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))]
+}
+
 function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
   const now = Date.now()
   const safeItems = items.map(safeTorrent)
@@ -173,7 +178,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
 })
 
 torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
-  const ids = Array.isArray((req.body as { ids?: string[] }).ids) ? (req.body as { ids: string[] }).ids : []
+  const ids = requestIds(req.body)
   const state = await readState()
   let successCount = 0
   const failed: Array<{ id: string; message: string }> = []
@@ -216,6 +221,73 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
   await recordOperationLog({
     action: '批量推送种子',
     message: `批量推送 ${ids.length} 个种子，成功 ${successCount} 个，失败 ${failed.length} 个`,
+    status: failed.length ? 'FAILED' : 'SUCCESS',
+    ...operationActor(res, req)
+  })
+  res.json({ successCount, failedCount: failed.length, failed })
+})
+
+torrentsRouter.post('/batch-delete', requireAuth, async (req, res) => {
+  const ids = requestIds(req.body)
+  if (!ids.length) return res.status(400).json({ message: '请选择要删除的种子记录' })
+  const state = await readState()
+  const idSet = new Set(ids)
+  const existingIds = new Set(state.torrents.map((torrent) => torrent.id))
+  const beforeCount = state.torrents.length
+  state.torrents = state.torrents.filter((torrent) => !idSet.has(torrent.id))
+  const deletedCount = beforeCount - state.torrents.length
+  const missingIds = ids.filter((id) => !existingIds.has(id))
+  await writeState(state)
+  await recordOperationLog({
+    action: '删除种子记录',
+    message: `删除 ${ids.length} 个种子记录，成功 ${deletedCount} 个，缺失 ${missingIds.length} 个`,
+    status: missingIds.length ? 'FAILED' : 'SUCCESS',
+    ...operationActor(res, req)
+  })
+  res.json({ deletedCount, missingIds })
+})
+
+torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, res) => {
+  const ids = requestIds(req.body)
+  if (!ids.length) return res.status(400).json({ message: '请选择要删除的下载器任务' })
+  const state = await readState()
+  let successCount = 0
+  const failed: Array<{ id: string; message: string }> = []
+  for (const id of ids) {
+    const torrent = state.torrents.find((item) => item.id === id)
+    if (!torrent) {
+      failed.push({ id, message: '种子不存在' })
+      continue
+    }
+    const downloader = state.downloaders.find((item) => item.id === torrent.downloaderId)
+    if (!downloader) {
+      failed.push({ id, message: '种子绑定下载器不存在' })
+      continue
+    }
+    if (!downloader.enabled) {
+      failed.push({ id, message: '下载器已禁用' })
+      continue
+    }
+    if (!torrent.torrentHash) {
+      failed.push({ id, message: '缺少下载器任务 Hash，无法删除' })
+      continue
+    }
+    try {
+      await deleteTorrentFromQb(downloader, torrent.torrentHash, true)
+    } catch (error) {
+      failed.push({ id, message: error instanceof Error ? error.message : '删除下载器任务失败' })
+      continue
+    }
+    torrent.pushStatus = 'DELETED'
+    torrent.currentState = 'DOWNLOADER_DELETED'
+    torrent.downloaderState = 'deleted'
+    torrent.errorMessage = undefined
+    successCount += 1
+  }
+  await writeState(state)
+  await recordOperationLog({
+    action: '批量删除下载器任务',
+    message: `批量删除 ${ids.length} 个下载器任务，成功 ${successCount} 个，失败 ${failed.length} 个`,
     status: failed.length ? 'FAILED' : 'SUCCESS',
     ...operationActor(res, req)
   })

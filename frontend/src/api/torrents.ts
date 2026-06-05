@@ -77,6 +77,20 @@ export function batchPushTorrents(ids: string[]) {
   })
 }
 
+export function deleteTorrentRecords(ids: string[]) {
+  return apiRequest<{ deletedCount: number; missingIds: string[] }>('/api/torrents/batch-delete', {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}
+
+export function batchDeleteTorrentsFromDownloader(ids: string[]) {
+  return apiRequest<{ successCount: number; failedCount: number; failed: Array<{ id: string; message: string }> }>('/api/torrents/batch-delete-from-downloader', {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}
+
 export function deleteTorrentFromDownloader(id: string) {
   return apiRequest<TorrentItem>(`/api/torrents/${id}/delete-from-downloader`, { method: 'POST' })
 }

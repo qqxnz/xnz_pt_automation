@@ -42,6 +42,9 @@ export type TaskLogRecord = {
   pushFailedCount?: number
   summary?: string
   errorMessage?: string
+  fetchErrorMessage?: string
+  pushErrorMessages?: string[]
+  failureDetails?: string[]
   createdAt: string
 }
 
@@ -289,4 +292,16 @@ export async function appendTaskLog(payload: Omit<TaskLogRecord, 'id' | 'type' |
   state.taskLogs = [log, ...state.taskLogs].slice(0, 1000)
   await writeState(state)
   return log
+}
+
+export async function clearLogsByType(type: 'operation' | 'task') {
+  const state = await readState()
+  const clearedCount = type === 'task' ? state.taskLogs.length : state.operationLogs.length
+  if (type === 'task') {
+    state.taskLogs = []
+  } else {
+    state.operationLogs = []
+  }
+  await writeState(state)
+  return { clearedCount }
 }

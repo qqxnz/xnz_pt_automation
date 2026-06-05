@@ -6,9 +6,6 @@
           <h1>种子</h1>
           <p>只展示自动执行和手动运行写入的种子；测试结果不会进入列表。</p>
         </div>
-        <button class="primary-button compact" type="button" :disabled="!selectedIds.length || batchPushing" @click="batchPush">
-          {{ batchPushing ? '批量推送中...' : '批量推送' }}
-        </button>
       </div>
 
       <section class="site-stats">
@@ -38,7 +35,12 @@
       <section class="panel">
         <div class="panel-title-row">
           <h2>种子列表</h2>
-          <span>已选 {{ selectedIds.length }} 个 · 共 {{ total }} 个</span>
+          <div class="torrent-select-summary">
+            <button class="text-button select-all-button" type="button" :disabled="!items.length || loading" @click="toggleSelectCurrentPage">
+              {{ isCurrentPageAllSelected ? '取消全选' : '全选当前页' }}
+            </button>
+            <span>已选 {{ selectedIds.length }} 个 · 共 {{ total }} 个</span>
+          </div>
         </div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadTorrents">重试</button></div>
         <div v-if="!items.length && !loading" class="sites-empty">
@@ -48,10 +50,19 @@
         </div>
         <div v-else class="desktop-table torrent-table">
           <div class="torrent-row table-head">
-            <span></span><span>种子</span><span>状态</span><span>来源</span><span>下载器</span><span>操作</span>
+            <span>
+              <input
+                type="checkbox"
+                title="全选当前页"
+                :checked="isCurrentPageAllSelected"
+                :indeterminate="isCurrentPagePartiallySelected"
+                :disabled="!items.length || loading"
+                @change="setSelectCurrentPageFromEvent"
+              />
+            </span><span>种子</span><span>状态</span><span>来源</span><span>下载器</span><span>操作</span>
           </div>
           <div v-for="torrent in items" :key="torrent.id" class="torrent-row">
-            <input v-model="selectedIds" type="checkbox" :value="torrent.id" :disabled="torrent.pushStatus !== 'NEW' || isTorrentBusy(torrent.id)" />
+            <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
             <span>
               <strong>{{ torrent.title }}</strong>
               <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
@@ -80,7 +91,7 @@
           <article v-for="torrent in items" :key="torrent.id" class="site-card torrent-card">
             <div>
               <label class="mobile-torrent-select">
-                <input v-model="selectedIds" type="checkbox" :value="torrent.id" :disabled="torrent.pushStatus !== 'NEW' || isTorrentBusy(torrent.id)" />
+                <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
                 <strong>{{ torrent.title }}</strong>
               </label>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
@@ -113,6 +124,20 @@
               <button v-if="canDeleteFromDownloader(torrent)" class="danger-text" type="button" :disabled="isTorrentBusy(torrent.id)" @click="deleteFromDownloader(torrent)">{{ isDeleting(torrent.id) ? '删除中...' : '删除任务' }}</button>
             </div>
           </article>
+        </div>
+        <div v-if="items.length" class="torrent-batch-bar">
+          <span>已选 {{ selectedIds.length }} 个</span>
+          <div>
+            <button class="secondary-button blue" type="button" :disabled="!selectedPushableIds.length || batchPushing" @click="batchPush">
+              {{ batchPushing ? '批量推送中...' : `批量推送${selectedPushableIds.length ? ` (${selectedPushableIds.length})` : ''}` }}
+            </button>
+            <button class="secondary-button danger-button" type="button" :disabled="!selectedIds.length || batchDeletingRecords" @click="batchDeleteRecords">
+              {{ batchDeletingRecords ? '删除中...' : '删除记录' }}
+            </button>
+            <button class="secondary-button danger-button" type="button" :disabled="!selectedDeletableTaskIds.length || batchDeletingTasks" @click="batchDeleteTasks">
+              {{ batchDeletingTasks ? '删除任务中...' : `删除任务${selectedDeletableTaskIds.length ? ` (${selectedDeletableTaskIds.length})` : ''}` }}
+            </button>
+          </div>
         </div>
         <div class="pager">
           <button type="button" :disabled="filters.page <= 1 || loading" @click="changePage(filters.page - 1)">上一页</button>
@@ -148,7 +173,9 @@ import { Snackbar } from '@varlet/ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import {
+  batchDeleteTorrentsFromDownloader,
   batchPushTorrents,
+  deleteTorrentRecords,
   deleteTorrentFromDownloader,
   getTorrents,
   pushTorrent,
@@ -163,6 +190,8 @@ const detail = ref<TorrentItem>()
 const total = ref(0)
 const loading = ref(false)
 const batchPushing = ref(false)
+const batchDeletingRecords = ref(false)
+const batchDeletingTasks = ref(false)
 const pushingIds = ref<string[]>([])
 const deletingIds = ref<string[]>([])
 const error = ref('')
@@ -183,6 +212,12 @@ const statCards = computed(() => [
   { label: '待推送', value: stats.value.pending, className: '' },
   { label: '推送失败', value: stats.value.failed, className: 'danger' }
 ])
+const currentPageIds = computed(() => items.value.map((item) => item.id))
+const selectedTorrents = computed(() => selectedIds.value.map((id) => items.value.find((item) => item.id === id)).filter((item): item is TorrentItem => Boolean(item)))
+const selectedPushableIds = computed(() => selectedTorrents.value.filter(canPushTorrent).map((torrent) => torrent.id))
+const selectedDeletableTaskIds = computed(() => selectedTorrents.value.filter(canDeleteFromDownloader).map((torrent) => torrent.id))
+const isCurrentPageAllSelected = computed(() => Boolean(items.value.length) && items.value.every((item) => selectedIds.value.includes(item.id)))
+const isCurrentPagePartiallySelected = computed(() => !isCurrentPageAllSelected.value && items.value.some((item) => selectedIds.value.includes(item.id)))
 
 async function loadTorrents() {
   loading.value = true
@@ -192,7 +227,7 @@ async function loadTorrents() {
     items.value = result.items
     total.value = result.total
     stats.value = result.stats
-    selectedIds.value = selectedIds.value.filter((id) => result.items.some((item) => item.id === id && item.pushStatus === 'NEW'))
+    selectedIds.value = selectedIds.value.filter((id) => result.items.some((item) => item.id === id))
   } catch (err) {
     error.value = err instanceof Error ? err.message : '种子列表加载失败'
   } finally {
@@ -220,9 +255,9 @@ async function pushOne(torrent: TorrentItem) {
 }
 
 async function batchPush() {
-  if (!selectedIds.value.length || batchPushing.value) return
+  const ids = [...selectedPushableIds.value]
+  if (!ids.length || batchPushing.value) return
   batchPushing.value = true
-  const ids = [...selectedIds.value]
   pushingIds.value = [...new Set([...pushingIds.value, ...ids])]
   try {
     const result = await batchPushTorrents(ids)
@@ -234,6 +269,43 @@ async function batchPush() {
   } finally {
     batchPushing.value = false
     pushingIds.value = pushingIds.value.filter((id) => !ids.includes(id))
+  }
+}
+
+async function batchDeleteRecords() {
+  if (!selectedIds.value.length || batchDeletingRecords.value) return
+  const ids = [...selectedIds.value]
+  if (!window.confirm(`确认删除选中的 ${ids.length} 条种子记录？此操作不会删除下载器任务或文件。`)) return
+  batchDeletingRecords.value = true
+  try {
+    const result = await deleteTorrentRecords(ids)
+    Snackbar[result.missingIds.length ? 'warning' : 'success'](`已删除 ${result.deletedCount} 条记录`)
+    selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id))
+    if (detail.value && ids.includes(detail.value.id)) detail.value = undefined
+    await loadTorrents()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '删除记录失败')
+  } finally {
+    batchDeletingRecords.value = false
+  }
+}
+
+async function batchDeleteTasks() {
+  const ids = [...selectedDeletableTaskIds.value]
+  if (!ids.length || batchDeletingTasks.value) return
+  if (!window.confirm(`确认删除选中的 ${ids.length} 个下载器任务并同时删除已下载文件？`)) return
+  batchDeletingTasks.value = true
+  deletingIds.value = [...new Set([...deletingIds.value, ...ids])]
+  try {
+    const result = await batchDeleteTorrentsFromDownloader(ids)
+    Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
+    selectedIds.value = []
+    await loadTorrents()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '批量删除任务失败')
+  } finally {
+    batchDeletingTasks.value = false
+    deletingIds.value = deletingIds.value.filter((id) => !ids.includes(id))
   }
 }
 
@@ -254,6 +326,19 @@ async function deleteFromDownloader(torrent: TorrentItem) {
 
 function showDetail(torrent: TorrentItem) {
   detail.value = torrent
+}
+
+function toggleSelectCurrentPage() {
+  setSelectCurrentPage(!isCurrentPageAllSelected.value)
+}
+
+function setSelectCurrentPageFromEvent(event: Event) {
+  setSelectCurrentPage((event.target as HTMLInputElement).checked)
+}
+
+function setSelectCurrentPage(checked: boolean) {
+  const pageIds = currentPageIds.value
+  selectedIds.value = checked ? [...new Set([...selectedIds.value, ...pageIds])] : selectedIds.value.filter((id) => !pageIds.includes(id))
 }
 
 function formatBytes(value?: number) {
