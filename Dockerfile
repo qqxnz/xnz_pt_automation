@@ -50,9 +50,11 @@ COPY frontend/package.json frontend/package.json
 
 # 优化7：添加 --no-audit --no-fund 加快安装
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && \
+    npm install -g pm2@6 --no-audit --no-fund && \
     npm cache clean --force
 
 # 优化8：使用多阶段复制，并设置正确的权限
+COPY --chown=node:node ecosystem.config.cjs ecosystem.config.cjs
 COPY --from=build --chown=node:node /app/backend/dist backend/dist
 COPY --from=build --chown=node:node /app/frontend/dist frontend/dist
 
@@ -65,5 +67,5 @@ USER node
 VOLUME ["/data"]
 EXPOSE 3180
 
-# 优化11：使用更明确的启动命令
-CMD ["npm", "run", "start", "-w", "backend"]
+# 优化11：使用 PM2 Runtime 守护 Node.js 进程
+CMD ["pm2-runtime", "ecosystem.config.cjs"]
