@@ -35,13 +35,14 @@ fi
 
 # 创建或使用构建器
 BUILDER_NAME="multiarch-builder"
-if ! docker buildx ls | grep -q "${BUILDER_NAME}"; then
-    echo -e "${GREEN}创建多架构构建器...${NC}"
-    docker buildx create --name ${BUILDER_NAME} --use
+if docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1; then
+    echo -e "${GREEN}使用已存在的构建器: ${BUILDER_NAME}${NC}"
+    docker buildx use "${BUILDER_NAME}"
     docker buildx inspect --bootstrap
 else
-    echo -e "${GREEN}使用已存在的构建器: ${BUILDER_NAME}${NC}"
-    docker buildx use ${BUILDER_NAME}
+    echo -e "${GREEN}创建多架构构建器...${NC}"
+    docker buildx create --name "${BUILDER_NAME}" --use
+    docker buildx inspect --bootstrap
 fi
 
 # 构建并推送
