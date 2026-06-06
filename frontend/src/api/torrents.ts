@@ -28,6 +28,8 @@ export type TorrentItem = {
   downloadSpeed?: number
   uploaded?: number
   downloaded?: number
+  taskSavePath?: string
+  downloaderSavePath?: string
   downloadStatsSyncedAt?: string
   sourceTaskId?: string
   sourceTaskName?: string

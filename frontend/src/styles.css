@@ -843,7 +843,7 @@ a {
 
 .downloader-card-status-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 240px));
   gap: 12px;
 }
 
@@ -1133,7 +1133,7 @@ a {
 }
 
 .torrent-row {
-  grid-template-columns: 28px minmax(260px, 1.5fr) minmax(130px, 0.8fr) minmax(140px, 0.8fr) minmax(190px, 0.95fr) minmax(160px, 0.8fr) minmax(220px, 1.1fr);
+  grid-template-columns: 28px minmax(240px, 1.35fr) minmax(130px, 0.75fr) minmax(130px, 0.7fr) minmax(180px, 0.95fr) minmax(180px, 0.9fr) minmax(150px, 0.75fr) minmax(220px, 1.05fr);
 }
 
 .torrent-site-summary {
@@ -1230,6 +1230,10 @@ a {
 .torrent-row strong,
 .torrent-row small {
   display: block;
+}
+
+.torrent-row strong {
+  overflow-wrap: anywhere;
 }
 
 .task-row small,

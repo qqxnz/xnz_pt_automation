@@ -38,6 +38,7 @@ function applySnapshot(torrent: TorrentRecord, item: QbTorrentItem, syncedAt: st
   changed = assignIfChanged(torrent, 'downloadSpeed', item.downloadSpeed ?? 0) || changed
   changed = assignIfChanged(torrent, 'uploaded', item.uploaded ?? 0) || changed
   changed = assignIfChanged(torrent, 'downloaded', item.downloaded ?? 0) || changed
+  changed = assignIfChanged(torrent, 'downloaderSavePath', item.savePath?.trim() || undefined) || changed
   changed = assignIfChanged(torrent, 'downloadStatsSyncedAt', syncedAt) || changed
   return changed
 }

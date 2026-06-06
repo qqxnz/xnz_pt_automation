@@ -36,6 +36,7 @@ export type QbTorrentItem = {
   downloadSpeed?: number
   uploaded?: number
   downloaded?: number
+  savePath?: string
   addedAt?: string
 }
 
@@ -60,6 +61,7 @@ type QbTorrent = {
   dlspeed?: number
   uploaded?: number
   downloaded?: number
+  save_path?: string
   added_on?: number
 }
 
@@ -180,6 +182,7 @@ export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 
     downloadSpeed: item.dlspeed,
     uploaded: item.uploaded,
     downloaded: item.downloaded,
+    savePath: item.save_path,
     addedAt: item.added_on ? new Date(item.added_on * 1000).toISOString() : undefined
   }))
 }

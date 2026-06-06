@@ -69,18 +69,6 @@
                       <span>下载速度</span>
                       <strong>{{ formatSpeed(statusById[downloader.id]?.downloadSpeed) }}</strong>
                     </article>
-                    <article>
-                      <span>总上传</span>
-                      <strong>{{ formatBytes(statusById[downloader.id]?.totalUploaded) }}</strong>
-                    </article>
-                    <article>
-                      <span>总下载</span>
-                      <strong>{{ formatBytes(statusById[downloader.id]?.totalDownloaded) }}</strong>
-                    </article>
-                    <article>
-                      <span>剩余空间</span>
-                      <strong>{{ formatBytes(statusById[downloader.id]?.freeSpace) }}</strong>
-                    </article>
                   </div>
                   <p v-if="statusErrors[downloader.id] || downloader.statusMessage" class="downloader-card-message">
                     {{ statusErrors[downloader.id] || downloader.statusMessage }}

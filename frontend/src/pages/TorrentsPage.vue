@@ -90,7 +90,7 @@
                 :disabled="!items.length || loading"
                 @change="setSelectCurrentPageFromEvent"
               />
-            </span><span>种子</span><span>推送/免费</span><span>下载</span><span>速度</span><span>上传/下载</span><span>操作</span>
+            </span><span>种子</span><span>推送/免费</span><span>下载</span><span>保存位置</span><span>速度</span><span>上传/下载</span><span>操作</span>
           </div>
           <div v-for="torrent in items" :key="torrent.id" class="torrent-row">
             <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
@@ -108,6 +108,10 @@
                 <span>{{ downloadStateText(torrent) }}</span>
                 <span>分享率 {{ formatRatio(torrent.ratio) }}</span>
               </small>
+            </span>
+            <span>
+              <strong>{{ taskSavePathText(torrent) }}</strong>
+              <small>{{ downloaderSavePathText(torrent) }}</small>
             </span>
             <span>
               <strong>{{ torrent.downloaderName || '-' }}</strong>
@@ -159,6 +163,14 @@
               <div>
                 <dt>下载状态</dt>
                 <dd>{{ downloadStateText(torrent) }}</dd>
+              </div>
+              <div>
+                <dt>任务保存位置</dt>
+                <dd>{{ taskSavePathText(torrent) }}</dd>
+              </div>
+              <div>
+                <dt>实际保存位置</dt>
+                <dd>{{ downloaderSavePathText(torrent) }}</dd>
               </div>
               <div>
                 <dt>分享率</dt>
@@ -216,6 +228,8 @@
           <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
           <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
           <article><strong>下载状态</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
+          <article><strong>任务保存位置</strong><span>{{ taskSavePathText(detail) }}</span></article>
+          <article><strong>实际保存位置</strong><span>{{ downloaderSavePathText(detail) }}</span></article>
           <article><strong>分享率</strong><span>{{ formatRatio(detail.ratio) }}</span></article>
           <article><strong>速度</strong><span>↑ {{ formatSpeed(detail.uploadSpeed) }} / ↓ {{ formatSpeed(detail.downloadSpeed) }}</span></article>
           <article><strong>总上传/下载</strong><span>{{ formatBytes(detail.uploaded) }} / {{ formatBytes(detail.downloaded) }}</span></article>
@@ -502,6 +516,14 @@ function formatRatio(value?: number) {
 
 function downloadStateText(torrent: TorrentItem) {
   return torrent.downloadState || torrent.downloaderState || '-'
+}
+
+function taskSavePathText(torrent: TorrentItem) {
+  return torrent.taskSavePath || '使用下载器配置'
+}
+
+function downloaderSavePathText(torrent: TorrentItem) {
+  return torrent.downloaderSavePath || '未同步'
 }
 
 function discountText(value: TorrentItem['discountType']) {

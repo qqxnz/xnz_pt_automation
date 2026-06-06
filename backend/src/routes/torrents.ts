@@ -79,6 +79,16 @@ function requestIds(body: unknown) {
   return [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))]
 }
 
+function torrentSortTime(torrent: TorrentRecord) {
+  const value = torrent.firstSeenAt || torrent.lastSeenAt || torrent.pushedAt
+  const time = value ? new Date(value).getTime() : 0
+  return Number.isNaN(time) ? 0 : time
+}
+
+function resolvePushSavePath(torrent: TorrentRecord, downloader: { savePath?: string }) {
+  return torrent.taskSavePath?.trim() || downloader.savePath?.trim() || undefined
+}
+
 function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
   const now = Date.now()
   const safeItems = items.map(safeTorrent)
@@ -154,8 +164,9 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
     if (sourceRunMode !== 'ALL' && item.sourceRunMode !== sourceRunMode) return false
     return true
   })
+  const sorted = [...filtered].sort((a, b) => torrentSortTime(b) - torrentSortTime(a) || b.id.localeCompare(a.id))
   const start = (page - 1) * pageSize
-  res.json({ items: filtered.slice(start, start + pageSize).map(safeTorrent), total: filtered.length, page, pageSize, stats: stats(state.torrents) })
+  res.json({ items: sorted.slice(start, start + pageSize).map(safeTorrent), total: filtered.length, page, pageSize, stats: stats(state.torrents) })
 })
 
 torrentsRouter.get('/:id', requireAuth, async (req, res) => {
@@ -187,6 +198,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   }
   try {
     const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id), {
+      savePath: resolvePushSavePath(torrent, downloader),
       category: torrent.sourceTaskName
     })
     torrent.torrentHash = pushed.hash
@@ -244,6 +256,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     }
     try {
       const pushed = await addTorrentUrlToQb(downloader, site, torrent.downloadUrl, torrentFilename(torrent.title, torrent.torrentId ?? torrent.id), {
+        savePath: resolvePushSavePath(torrent, downloader),
         category: torrent.sourceTaskName
       })
       torrent.torrentHash = pushed.hash
@@ -257,6 +270,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     }
     torrent.pushStatus = 'PUSHED'
     torrent.currentState = 'PUSHED'
+    torrent.downloaderId = downloader.id
+    torrent.downloaderName = downloader.name
+    torrent.downloaderType = downloader.type
     torrent.downloaderState = torrent.downloaderState ?? 'added'
     torrent.pushedAt = new Date().toISOString()
     torrent.errorMessage = undefined

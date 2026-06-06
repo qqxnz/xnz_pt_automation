@@ -331,6 +331,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         downloaderType: downloader?.type,
         downloaderState: pushed?.state ?? undefined,
         torrentHash: pushed?.hash,
+        taskSavePath: task.savePathOverride,
         sourceTaskId: task.id,
         sourceTaskName: task.name,
         sourceRunMode: runMode,
