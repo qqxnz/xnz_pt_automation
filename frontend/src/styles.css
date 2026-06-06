@@ -841,6 +841,34 @@ a {
   font-weight: 800;
 }
 
+.downloader-card-status-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.downloader-card-status-grid article {
+  min-width: 0;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.downloader-card-status-grid span {
+  display: block;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.downloader-card-status-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 8px;
+  color: #3f7cff;
+  font-size: 18px;
+}
+
 .downloader-card-message {
   overflow-wrap: anywhere;
   margin: 0;
@@ -1895,6 +1923,10 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .downloader-card-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .downloader-card-actions {
     justify-content: flex-start;
   }
@@ -2123,6 +2155,7 @@ a {
 
   .downloader-status-grid,
   .downloader-card-meta,
+  .downloader-card-status-grid,
   .downloader-torrent-row {
     grid-template-columns: 1fr;
   }

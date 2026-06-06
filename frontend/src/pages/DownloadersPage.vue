@@ -39,7 +39,7 @@
                 <div class="downloader-card-main">
                   <div class="downloader-card-title">
                     <h3>{{ downloader.name }}</h3>
-                    <span class="chip" :class="statusMeta(downloader.status).className">{{ statusMeta(downloader.status).label }}</span>
+                    <span class="chip" :class="statusMeta(displayStatus(downloader)).className">{{ statusMeta(displayStatus(downloader)).label }}</span>
                     <span v-if="!downloader.enabled" class="chip muted-chip">已禁用</span>
                   </div>
                   <dl class="downloader-card-meta">
@@ -57,10 +57,34 @@
                     </div>
                     <div>
                       <dt>最近同步</dt>
-                      <dd>{{ formatDate(downloader.lastSyncedAt) }}</dd>
+                      <dd>{{ formatDate(statusById[downloader.id]?.lastSyncedAt || downloader.lastSyncedAt) }}</dd>
                     </div>
                   </dl>
-                  <p v-if="downloader.statusMessage" class="downloader-card-message">{{ downloader.statusMessage }}</p>
+                  <div class="downloader-card-status-grid">
+                    <article>
+                      <span>上传速度</span>
+                      <strong class="success">{{ formatSpeed(statusById[downloader.id]?.uploadSpeed) }}</strong>
+                    </article>
+                    <article>
+                      <span>下载速度</span>
+                      <strong>{{ formatSpeed(statusById[downloader.id]?.downloadSpeed) }}</strong>
+                    </article>
+                    <article>
+                      <span>总上传</span>
+                      <strong>{{ formatBytes(statusById[downloader.id]?.totalUploaded) }}</strong>
+                    </article>
+                    <article>
+                      <span>总下载</span>
+                      <strong>{{ formatBytes(statusById[downloader.id]?.totalDownloaded) }}</strong>
+                    </article>
+                    <article>
+                      <span>剩余空间</span>
+                      <strong>{{ formatBytes(statusById[downloader.id]?.freeSpace) }}</strong>
+                    </article>
+                  </div>
+                  <p v-if="statusErrors[downloader.id] || downloader.statusMessage" class="downloader-card-message">
+                    {{ statusErrors[downloader.id] || downloader.statusMessage }}
+                  </p>
                 </div>
                 <div class="row-actions downloader-card-actions">
                   <button type="button" @click="testDownloaderItem(downloader)">测试</button>
@@ -143,7 +167,7 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import {
@@ -151,12 +175,14 @@ import {
   deleteDownloader,
   getDownloader,
   getDownloaders,
+  getDownloaderStatus,
   testDownloader,
   testDownloaderDraft,
   updateDownloader,
   type DownloaderFormPayload,
   type DownloaderListItem,
   type DownloaderStats,
+  type DownloaderStatus,
   type DownloaderTestResult
 } from '../api/downloaders'
 
@@ -167,6 +193,8 @@ const testingDraft = ref(false)
 const error = ref('')
 const items = ref<DownloaderListItem[]>([])
 const stats = ref<DownloaderStats>({ total: 0, online: 0, authFailed: 0, offline: 0, unknown: 0 })
+const statusById = ref<Record<string, DownloaderStatus | undefined>>({})
+const statusErrors = ref<Record<string, string | undefined>>({})
 const formVisible = ref(false)
 const editingDownloaderId = ref<string>()
 const detailHasPassword = ref(false)
@@ -174,6 +202,7 @@ const downloaderPasswordVisible = ref(false)
 const originalDownloaderPassword = ref('')
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
+let statusTimer: number | undefined
 
 const form = reactive<DownloaderFormPayload>({
   name: '',
@@ -202,6 +231,27 @@ function statusMeta(status: DownloaderListItem['status']) {
     UNKNOWN: { label: '未检测', className: 'unknown-chip' }
   }
   return map[status]
+}
+
+function displayStatus(downloader: DownloaderListItem) {
+  return statusById.value[downloader.id]?.status ?? downloader.status
+}
+
+function formatBytes(value?: number) {
+  if (value === undefined) return '-'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = value
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: unitIndex === 0 ? 0 : 2 }).format(size)} ${units[unitIndex]}`
+}
+
+function formatSpeed(value?: number) {
+  if (value === undefined) return '-'
+  return `${formatBytes(value)}/s`
 }
 
 function formatDate(value?: string) {
@@ -246,6 +296,10 @@ async function loadDownloaders() {
     const result = await getDownloaders({})
     items.value = result.items
     stats.value = result.stats
+    const ids = new Set(result.items.map((item) => item.id))
+    statusById.value = Object.fromEntries(Object.entries(statusById.value).filter(([id]) => ids.has(id)))
+    statusErrors.value = Object.fromEntries(Object.entries(statusErrors.value).filter(([id]) => ids.has(id)))
+    startStatusPolling()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '下载器列表加载失败'
   } finally {
@@ -334,6 +388,7 @@ async function saveDownloader() {
     }
     formVisible.value = false
     await loadDownloaders()
+    await refreshAllStatuses()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '保存失败')
   } finally {
@@ -349,6 +404,7 @@ async function testDownloaderItem(downloader: DownloaderListItem) {
     Snackbar.error(err instanceof Error ? err.message : '测试失败')
   }
   await loadDownloaders()
+  await refreshDownloaderStatus(downloader)
 }
 
 async function removeDownloader(downloader: DownloaderListItem) {
@@ -356,10 +412,59 @@ async function removeDownloader(downloader: DownloaderListItem) {
   await deleteDownloader(downloader.id)
   Snackbar.success('下载器已删除')
   await loadDownloaders()
+  await refreshAllStatuses()
+}
+
+async function refreshDownloaderStatus(downloader: DownloaderListItem) {
+  if (!downloader.enabled || document.hidden) return
+  try {
+    const status = await getDownloaderStatus(downloader.id)
+    statusById.value = { ...statusById.value, [downloader.id]: status }
+    statusErrors.value = { ...statusErrors.value, [downloader.id]: undefined }
+  } catch (err) {
+    statusErrors.value = {
+      ...statusErrors.value,
+      [downloader.id]: err instanceof Error ? err.message : '状态刷新失败'
+    }
+  }
+}
+
+async function refreshAllStatuses() {
+  for (const downloader of items.value) {
+    await refreshDownloaderStatus(downloader)
+  }
+}
+
+function stopStatusPolling() {
+  if (statusTimer !== undefined) window.clearInterval(statusTimer)
+  statusTimer = undefined
+}
+
+function startStatusPolling() {
+  stopStatusPolling()
+  if (!items.value.length) return
+  statusTimer = window.setInterval(refreshAllStatuses, 5000)
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopStatusPolling()
+  } else {
+    refreshAllStatuses()
+    startStatusPolling()
+  }
 }
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   if (route.query.action === 'create') openCreate()
   await loadDownloaders()
+  await refreshAllStatuses()
+  startStatusPolling()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  stopStatusPolling()
 })
 </script>
