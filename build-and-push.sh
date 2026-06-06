@@ -1,10 +1,11 @@
 #!/bin/bash
+set -euo pipefail
 
 # 配置
 DOCKER_HUB_IMAGE="qqxnz/xnz-pt-automation"
 ALIYUN_REGISTRY="crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com"
 ALIYUN_IMAGE="${ALIYUN_REGISTRY}/qqxnz/xnz-pt-automation"
-VERSION="0.1.8"
+VERSION="${VERSION:-$(node -p "require('./package.json').version")}"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -46,6 +47,7 @@ fi
 # 构建并推送
 echo -e "${GREEN}开始构建多架构镜像...${NC}"
 echo "支持的架构: linux/amd64, linux/arm64"
+echo "版本号: ${VERSION}"
 echo "标签: latest, ${VERSION}"
 echo "目标仓库:"
 echo "  - Docker Hub: ${DOCKER_HUB_IMAGE}"
@@ -54,6 +56,7 @@ echo ""
 
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=${VERSION} \
   --tag ${DOCKER_HUB_IMAGE}:latest \
   --tag ${DOCKER_HUB_IMAGE}:${VERSION} \
   --tag ${ALIYUN_IMAGE}:latest \
@@ -74,7 +77,7 @@ if [ $? -eq 0 ]; then
     echo "  docker pull ${ALIYUN_IMAGE}:${VERSION}"
     echo ""
     echo "=== 运行容器 ==="
-    echo "  docker run -d -p 3180:3180 -v ./data:/data ${DOCKER_HUB_IMAGE}:latest"
+    echo "  docker run -d --restart unless-stopped -p 3180:3180 -v ./data:/data ${DOCKER_HUB_IMAGE}:latest"
     
     # 显示镜像详情
     echo ""
