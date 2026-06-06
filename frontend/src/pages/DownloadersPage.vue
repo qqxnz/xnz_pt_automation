@@ -24,49 +24,50 @@
               <button type="button" @click="loadDownloaders">重试</button>
             </div>
             <div class="panel-title-row">
-              <h2>{{ selectedDownloader?.name || '下载器状态' }}</h2>
-              <div v-if="selectedDownloader" class="row-actions">
-                <button type="button" @click="testSelected">测试</button>
-                <button type="button" @click="openEdit(selectedDownloader)">编辑</button>
-                <button class="danger-text" type="button" @click="removeDownloader(selectedDownloader)">删除</button>
-              </div>
+              <h2>下载器列表</h2>
+              <span>{{ items.length }} 个下载器</span>
             </div>
 
-            <div v-if="loading && !selectedDownloader" class="empty-tip">下载器状态加载中...</div>
-            <div v-else-if="!selectedDownloader" class="sites-empty">
+            <div v-if="loading && !items.length" class="empty-tip">下载器列表加载中...</div>
+            <div v-else-if="!items.length" class="sites-empty">
               <h2>还没有下载器</h2>
               <p>添加 qBittorrent 下载器后，任务就可以推送种子。</p>
               <button class="primary-button compact" type="button" @click="openCreate">新增下载器</button>
             </div>
-            <div v-else>
-              <div class="downloader-status-grid">
-                <article>
-                  <span>上传速度</span>
-                  <strong class="success">{{ formatSpeed(currentStatus?.uploadSpeed) }}</strong>
-                </article>
-                <article>
-                  <span>下载速度</span>
-                  <strong>{{ formatSpeed(currentStatus?.downloadSpeed) }}</strong>
-                </article>
-                <article>
-                  <span>总上传</span>
-                  <strong>{{ formatBytes(currentStatus?.totalUploaded) }}</strong>
-                </article>
-                <article>
-                  <span>总下载</span>
-                  <strong>{{ formatBytes(currentStatus?.totalDownloaded) }}</strong>
-                </article>
-              </div>
-              <div class="downloader-detail-line">
-                <span class="chip" :class="statusMeta(selectedDownloader.status).className">{{ statusMeta(selectedDownloader.status).label }}</span>
-                <span>默认路径：{{ selectedDownloader.savePath || '使用下载器 QB/TR 默认路径' }}</span>
-                <span>剩余空间：{{ formatBytes(currentStatus?.freeSpace) }}</span>
-                <span>最近同步：{{ formatDate(currentStatus?.lastSyncedAt || selectedDownloader.lastSyncedAt) }}</span>
-              </div>
-              <div v-if="statusError" class="error-banner compact-error">
-                {{ statusError }}
-                <button type="button" @click="refreshSelectedStatus">重试</button>
-              </div>
+            <div v-else class="downloader-list-panel">
+              <article v-for="downloader in items" :key="downloader.id" class="downloader-card">
+                <div class="downloader-card-main">
+                  <div class="downloader-card-title">
+                    <h3>{{ downloader.name }}</h3>
+                    <span class="chip" :class="statusMeta(downloader.status).className">{{ statusMeta(downloader.status).label }}</span>
+                    <span v-if="!downloader.enabled" class="chip muted-chip">已禁用</span>
+                  </div>
+                  <dl class="downloader-card-meta">
+                    <div>
+                      <dt>类型</dt>
+                      <dd>qBittorrent</dd>
+                    </div>
+                    <div>
+                      <dt>服务地址</dt>
+                      <dd>{{ downloader.host }}</dd>
+                    </div>
+                    <div>
+                      <dt>默认路径</dt>
+                      <dd>{{ downloader.savePath || '使用下载器默认路径' }}</dd>
+                    </div>
+                    <div>
+                      <dt>最近同步</dt>
+                      <dd>{{ formatDate(downloader.lastSyncedAt) }}</dd>
+                    </div>
+                  </dl>
+                  <p v-if="downloader.statusMessage" class="downloader-card-message">{{ downloader.statusMessage }}</p>
+                </div>
+                <div class="row-actions downloader-card-actions">
+                  <button type="button" @click="testDownloaderItem(downloader)">测试</button>
+                  <button type="button" @click="openEdit(downloader)">编辑</button>
+                  <button class="danger-text" type="button" @click="removeDownloader(downloader)">删除</button>
+                </div>
+              </article>
             </div>
           </section>
         </main>
@@ -142,7 +143,7 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import {
@@ -150,14 +151,12 @@ import {
   deleteDownloader,
   getDownloader,
   getDownloaders,
-  getDownloaderStatus,
   testDownloader,
   testDownloaderDraft,
   updateDownloader,
   type DownloaderFormPayload,
   type DownloaderListItem,
   type DownloaderStats,
-  type DownloaderStatus,
   type DownloaderTestResult
 } from '../api/downloaders'
 
@@ -166,11 +165,8 @@ const loading = ref(false)
 const saving = ref(false)
 const testingDraft = ref(false)
 const error = ref('')
-const statusError = ref('')
 const items = ref<DownloaderListItem[]>([])
 const stats = ref<DownloaderStats>({ total: 0, online: 0, authFailed: 0, offline: 0, unknown: 0 })
-const selectedId = ref<string>()
-const currentStatus = ref<DownloaderStatus>()
 const formVisible = ref(false)
 const editingDownloaderId = ref<string>()
 const detailHasPassword = ref(false)
@@ -178,8 +174,6 @@ const downloaderPasswordVisible = ref(false)
 const originalDownloaderPassword = ref('')
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
-let statusTimer: number | undefined
-let failedStatusRefreshes = 0
 
 const form = reactive<DownloaderFormPayload>({
   name: '',
@@ -191,7 +185,6 @@ const form = reactive<DownloaderFormPayload>({
   savePath: ''
 })
 
-const selectedDownloader = computed(() => items.value.find((item) => item.id === selectedId.value))
 const passwordPlaceholder = computed(() => (editingDownloaderId.value && detailHasPassword.value && !form.password ? '已保存，留空不修改' : '可选'))
 const statCards = computed(() => [
   { label: '全部下载器', value: stats.value.total, className: '' },
@@ -209,23 +202,6 @@ function statusMeta(status: DownloaderListItem['status']) {
     UNKNOWN: { label: '未检测', className: 'unknown-chip' }
   }
   return map[status]
-}
-
-function formatBytes(value?: number) {
-  if (value === undefined) return '-'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = value
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: unitIndex === 0 ? 0 : 2 }).format(size)} ${units[unitIndex]}`
-}
-
-function formatSpeed(value?: number) {
-  if (value === undefined) return '-'
-  return `${formatBytes(value)}/s`
 }
 
 function formatDate(value?: string) {
@@ -270,7 +246,6 @@ async function loadDownloaders() {
     const result = await getDownloaders({})
     items.value = result.items
     stats.value = result.stats
-    if (!selectedId.value || !items.value.some((item) => item.id === selectedId.value)) selectedId.value = items.value[0]?.id
   } catch (err) {
     error.value = err instanceof Error ? err.message : '下载器列表加载失败'
   } finally {
@@ -351,7 +326,6 @@ async function saveDownloader() {
   try {
     const payload = buildPayload()
     const saved = editingDownloaderId.value ? await updateDownloader(editingDownloaderId.value, payload) : await createDownloader(payload)
-    selectedId.value = saved.id
     if (testAfterSave.value) {
       const result = await testDownloader(saved.id)
       Snackbar[result.success ? 'success' : 'error'](result.message)
@@ -360,7 +334,6 @@ async function saveDownloader() {
     }
     formVisible.value = false
     await loadDownloaders()
-    await refreshSelectedStatus()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '保存失败')
   } finally {
@@ -368,78 +341,25 @@ async function saveDownloader() {
   }
 }
 
-async function testSelected() {
-  if (!selectedDownloader.value) return
+async function testDownloaderItem(downloader: DownloaderListItem) {
   try {
-    const result = await testDownloader(selectedDownloader.value.id)
+    const result = await testDownloader(downloader.id)
     Snackbar.success(result.message)
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '测试失败')
   }
   await loadDownloaders()
-  await refreshSelectedStatus()
 }
 
 async function removeDownloader(downloader: DownloaderListItem) {
   if (!window.confirm(`确认删除下载器「${downloader.name}」？`)) return
   await deleteDownloader(downloader.id)
   Snackbar.success('下载器已删除')
-  selectedId.value = undefined
   await loadDownloaders()
 }
-
-async function refreshSelectedStatus() {
-  if (!selectedId.value || document.hidden) {
-    if (!selectedId.value) statusError.value = ''
-    return
-  }
-  try {
-    currentStatus.value = await getDownloaderStatus(selectedId.value)
-    statusError.value = ''
-    failedStatusRefreshes = 0
-  } catch (err) {
-    failedStatusRefreshes += 1
-    statusError.value = err instanceof Error ? err.message : '状态刷新失败'
-    if (failedStatusRefreshes >= 3) stopStatusPolling()
-  }
-}
-
-function stopStatusPolling() {
-  if (statusTimer !== undefined) window.clearInterval(statusTimer)
-  statusTimer = undefined
-}
-
-function startStatusPolling() {
-  stopStatusPolling()
-  if (!selectedId.value) return
-  refreshSelectedStatus()
-  statusTimer = window.setInterval(refreshSelectedStatus, 3000)
-}
-
-function handleVisibilityChange() {
-  if (document.hidden) {
-    stopStatusPolling()
-  } else {
-    startStatusPolling()
-  }
-}
-
-watch(selectedId, () => {
-  currentStatus.value = undefined
-  statusError.value = ''
-  failedStatusRefreshes = 0
-  startStatusPolling()
-})
 
 onMounted(async () => {
-  document.addEventListener('visibilitychange', handleVisibilityChange)
   if (route.query.action === 'create') openCreate()
   await loadDownloaders()
-  startStatusPolling()
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  stopStatusPolling()
 })
 </script>

@@ -724,7 +724,7 @@ a {
 
 .downloader-list-panel {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .downloaders-main {
@@ -782,6 +782,78 @@ a {
   color: #6b7280;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.downloader-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 20px;
+  background: #fff;
+}
+
+.downloader-card-main {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 16px;
+}
+
+.downloader-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.downloader-card-title h3 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+}
+
+.downloader-card-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+
+.downloader-card-meta div {
+  min-width: 0;
+}
+
+.downloader-card-meta dt {
+  margin-bottom: 6px;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.downloader-card-meta dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #111827;
+  font-weight: 800;
+}
+
+.downloader-card-message {
+  overflow-wrap: anywhere;
+  margin: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: #92400e;
+  background: #fffbeb;
+  font-weight: 800;
+}
+
+.downloader-card-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .downloader-status-grid {
@@ -1815,6 +1887,18 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .downloader-card {
+    flex-direction: column;
+  }
+
+  .downloader-card-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .downloader-card-actions {
+    justify-content: flex-start;
+  }
+
   .downloader-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2038,6 +2122,7 @@ a {
   }
 
   .downloader-status-grid,
+  .downloader-card-meta,
   .downloader-torrent-row {
     grid-template-columns: 1fr;
   }
