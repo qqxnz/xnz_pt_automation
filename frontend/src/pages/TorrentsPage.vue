@@ -57,8 +57,8 @@
           <option value="NORMAL">非免费</option>
           <option value="FREE_NO_END">免费但无到期时间</option>
         </select>
-        <button class="secondary-button" type="button" :disabled="loading || syncing" @click="refreshNow">
-          {{ syncing ? '同步中...' : loading ? '刷新中...' : '实时刷新' }}
+        <button class="secondary-button" type="button" :disabled="loading" @click="refreshNow">
+          {{ loading ? '刷新中...' : '刷新列表' }}
         </button>
       </section>
 
@@ -72,7 +72,6 @@
             <span>已选 {{ selectedIds.length }} 个 · 共 {{ total }} 个</span>
           </div>
         </div>
-        <div v-if="syncWarning" class="error-banner compact-error">{{ syncWarning }}<button type="button" @click="refreshNow">重试同步</button></div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadTorrents">重试</button></div>
         <div v-if="!items.length && !loading" class="sites-empty">
           <h2>暂无种子记录</h2>
@@ -256,7 +255,6 @@ import {
   deleteTorrentFromDownloader,
   getTorrents,
   pushTorrent,
-  syncTorrents,
   type TorrentFilter,
   type TorrentItem,
   type TorrentStats
@@ -284,14 +282,12 @@ const selectedIds = ref<string[]>([])
 const detail = ref<TorrentItem>()
 const total = ref(0)
 const loading = ref(false)
-const syncing = ref(false)
 const batchPushing = ref(false)
 const batchDeletingRecords = ref(false)
 const batchDeletingTasks = ref(false)
 const pushingIds = ref<string[]>([])
 const deletingIds = ref<string[]>([])
 const error = ref('')
-const syncWarning = ref('')
 const stats = ref<TorrentStats>({ ...emptyStats })
 const lastSyncAt = ref<string>()
 let refreshTimer: number | undefined
@@ -329,6 +325,10 @@ async function loadTorrents() {
     items.value = result.items
     total.value = result.total
     stats.value = result.stats
+    lastSyncAt.value = result.items
+      .map((item) => item.downloadStatsSyncedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
     selectedIds.value = selectedIds.value.filter((id) => result.items.some((item) => item.id === id))
   } catch (err) {
     error.value = err instanceof Error ? err.message : '种子列表加载失败'
@@ -353,28 +353,8 @@ function resetPageAndLoad() {
   loadTorrents()
 }
 
-async function syncAndLoad(showSnackbar = false) {
-  if (syncing.value) return
-  syncing.value = true
-  syncWarning.value = ''
-  try {
-    const summary = await syncTorrents()
-    lastSyncAt.value = summary.syncedAt
-    if (summary.failedDownloaders) {
-      syncWarning.value = `实时同步失败 ${summary.failedDownloaders} 个下载器，已显示最近记录。`
-    } else if (showSnackbar) {
-      Snackbar.success(`已同步 ${summary.updatedTorrents} 条种子状态`)
-    }
-  } catch (err) {
-    syncWarning.value = err instanceof Error ? `实时同步失败：${err.message}，已显示最近记录。` : '实时同步失败，已显示最近记录。'
-  } finally {
-    syncing.value = false
-    await loadTorrents()
-  }
-}
-
 function refreshNow() {
-  syncAndLoad(true)
+  loadTorrents()
 }
 
 function changePage(page: number) {
@@ -388,7 +368,7 @@ async function pushOne(torrent: TorrentItem) {
   try {
     await pushTorrent(torrent.id)
     Snackbar.success('种子已推送')
-    await syncAndLoad()
+    await loadTorrents()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '推送失败')
   } finally {
@@ -405,7 +385,7 @@ async function batchPush() {
     const result = await batchPushTorrents(ids)
     Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
     selectedIds.value = []
-    await syncAndLoad()
+    await loadTorrents()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '批量推送失败')
   } finally {
@@ -597,8 +577,8 @@ function stopRealtimeRefresh() {
 function startRealtimeRefresh() {
   stopRealtimeRefresh()
   if (document.hidden) return
-  syncAndLoad()
-  refreshTimer = window.setInterval(() => syncAndLoad(), 30000)
+  loadTorrents()
+  refreshTimer = window.setInterval(() => loadTorrents(), 3000)
 }
 
 function handleVisibilityChange() {

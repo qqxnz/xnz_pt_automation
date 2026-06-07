@@ -131,11 +131,6 @@ function matchesFreeStatus(torrent: ReturnType<typeof safeTorrent>, freeStatus: 
   return true
 }
 
-torrentsRouter.post('/sync', requireAuth, async (_req, res) => {
-  const summary = await syncTorrentDownloadStats()
-  res.json(summary)
-})
-
 torrentsRouter.get('/', requireAuth, async (req, res) => {
   const state = await readState()
   const changed = refreshTorrentFreeStates(state)

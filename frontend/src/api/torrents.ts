@@ -54,14 +54,6 @@ export type TorrentStats = {
   bySite: Array<{ siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>
 }
 
-export type TorrentSyncSummary = {
-  successfulDownloaders: number
-  failedDownloaders: number
-  updatedTorrents: number
-  syncedAt: string
-  errors: Array<{ downloaderId: string; downloaderName: string; message: string }>
-}
-
 export type TorrentFilter = {
   keyword?: string
   siteId?: string
@@ -86,10 +78,6 @@ function toQuery(filters: TorrentFilter) {
 export function getTorrents(filters: TorrentFilter) {
   const query = toQuery(filters)
   return apiRequest<{ items: TorrentItem[]; total: number; page: number; pageSize: number; stats: TorrentStats }>(`/api/torrents${query ? `?${query}` : ''}`)
-}
-
-export function syncTorrents() {
-  return apiRequest<TorrentSyncSummary>('/api/torrents/sync', { method: 'POST' })
 }
 
 export function pushTorrent(id: string, downloaderId?: string) {

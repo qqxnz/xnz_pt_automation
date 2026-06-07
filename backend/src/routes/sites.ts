@@ -5,8 +5,6 @@ import { readState, type SiteRecord, writeState } from '../storage.js'
 
 export const sitesRouter = Router()
 
-const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
-let siteTrafficSyncTimer: NodeJS.Timeout | undefined
 let siteTrafficSyncRunning = false
 
 type SiteStrategy = 'MTEAM_API' | 'NEXUSPHP'
@@ -255,15 +253,6 @@ export async function syncSiteTrafficStats() {
   } finally {
     siteTrafficSyncRunning = false
   }
-}
-
-export function startSiteTrafficScheduler() {
-  if (siteTrafficSyncTimer) return
-  siteTrafficSyncTimer = setInterval(() => {
-    syncSiteTrafficStats().catch((error) => {
-      console.error('[site-traffic-sync]', error instanceof Error ? error.message : error)
-    })
-  }, SITE_TRAFFIC_SYNC_INTERVAL_MS)
 }
 
 function listItem(site: SiteRecord, state?: AppState) {

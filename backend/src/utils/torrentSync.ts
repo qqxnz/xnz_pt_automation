@@ -1,9 +1,6 @@
 import { readState, type DownloaderRecord, type TorrentRecord, writeState } from '../storage.js'
 import { getQbTorrentItems, QbittorrentError, type QbTorrentItem } from './qbittorrent.js'
 
-const TORRENT_SYNC_INTERVAL_MS = 15 * 60 * 1000
-
-let syncTimer: NodeJS.Timeout | undefined
 let syncRunning = false
 
 export type TorrentSyncSummary = {
@@ -114,13 +111,4 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
   } finally {
     syncRunning = false
   }
-}
-
-export function startTorrentDownloadStatsScheduler() {
-  if (syncTimer) return
-  syncTimer = setInterval(() => {
-    syncTorrentDownloadStats().catch((error) => {
-      console.error('[torrent-sync]', error instanceof Error ? error.message : error)
-    })
-  }, TORRENT_SYNC_INTERVAL_MS)
 }

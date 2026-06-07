@@ -9,7 +9,6 @@ import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem }
 export const tasksRouter = Router()
 
 const runningTaskIds = new Set<string>()
-let schedulerTimer: NodeJS.Timeout | undefined
 
 type TaskPayload = {
   name?: string
@@ -46,7 +45,6 @@ type CandidateTorrent = {
 
 const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 10
-const TASK_SCHEDULER_INTERVAL_MS = 60_000
 const MB_BYTES = 1024 * 1024
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
@@ -411,24 +409,28 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   }
 }
 
-export async function runDueTasks() {
+export type DueTaskRunSummary = {
+  dueCount: number
+  triggeredCount: number
+  skippedRunningCount: number
+}
+
+export async function runDueTasks(): Promise<DueTaskRunSummary> {
   const state = await readState()
   const now = Date.now()
-  const dueTasks = state.tasks.filter((task) => task.autoRunEnabled && !task.running && task.nextRunAt && new Date(task.nextRunAt).getTime() <= now)
+  const dueTasks = state.tasks.filter((task) => task.autoRunEnabled && task.nextRunAt && new Date(task.nextRunAt).getTime() <= now)
+  const runnableTasks = dueTasks.filter((task) => !task.running)
   for (const task of dueTasks) {
+    if (task.running) continue
     runTaskById(task.id, 'AUTO').catch((error) => {
       console.error(`[task-scheduler] ${task.name}:`, error instanceof Error ? error.message : error)
     })
   }
-}
-
-export function startTaskScheduler() {
-  if (schedulerTimer) return
-  schedulerTimer = setInterval(() => {
-    runDueTasks().catch((error) => {
-      console.error('[task-scheduler]', error instanceof Error ? error.message : error)
-    })
-  }, TASK_SCHEDULER_INTERVAL_MS)
+  return {
+    dueCount: dueTasks.length,
+    triggeredCount: runnableTasks.length,
+    skippedRunningCount: dueTasks.length - runnableTasks.length
+  }
 }
 
 tasksRouter.get('/', requireAuth, async (req, res) => {
