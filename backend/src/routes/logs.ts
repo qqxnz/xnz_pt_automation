@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { clearLogsByType, readState, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
+import { clearLogsByType, queryAllLogs, queryLogs, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
 import { logger, recordOperationLog } from '../utils/logger.js'
 
 export const logsRouter = Router()
@@ -95,51 +95,34 @@ logsRouter.get('/', requireAuth, async (req, res) => {
   const status = String(req.query.status ?? 'ALL')
   const taskId = String(req.query.taskId ?? '')
   const runMode = String(req.query.runMode ?? 'ALL')
-  const state = await readState()
-  const source =
-    type === 'task'
-      ? state.taskLogs.filter((item) => {
-          if (status !== 'ALL' && item.status !== status) return false
-          if (taskId && item.taskId !== taskId) return false
-          if (runMode !== 'ALL' && item.runMode !== runMode) return false
-          if (keyword && !`${item.taskName} ${item.message} ${item.summary ?? ''} ${item.errorMessage ?? ''} ${item.fetchErrorMessage ?? ''} ${(item.pushErrorMessages ?? []).join(' ')} ${(item.failureDetails ?? []).join(' ')}`.toLowerCase().includes(keyword)) return false
-          return true
-        })
-      : type === 'schedule'
-        ? state.scheduleLogs.filter((item) => {
-            if (status !== 'ALL' && item.status !== status) return false
-            if (keyword && !`${item.jobName} ${item.message} ${item.summary ?? ''} ${item.errorMessage ?? ''} ${JSON.stringify(item.details ?? {})}`.toLowerCase().includes(keyword)) return false
-            return true
-          })
-      : state.operationLogs.filter((item) => {
-          if (status !== 'ALL' && item.status !== status) return false
-          if (keyword && !`${item.action} ${item.message} ${item.actorName ?? ''}`.toLowerCase().includes(keyword)) return false
-          return true
-        })
-  const start = (page - 1) * pageSize
-  const items = source.slice(start, start + pageSize)
+  const result = await queryLogs({ type, page, pageSize, keyword, status, taskId, runMode })
 
   logger.info('logs', '查询日志列表', {
     type,
-    page,
-    pageSize,
-    total: source.length,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
     actorName: res.locals.user?.username
   })
 
   res.json({
     type,
-    page,
-    pageSize,
-    total: source.length,
-    items
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    items: result.items
   })
 })
 
 logsRouter.get('/export', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
-  const state = await readState()
-  const source = type === 'task' ? taskRows(state.taskLogs) : type === 'schedule' ? scheduleRows(state.scheduleLogs) : operationRows(state.operationLogs)
+  const items = await queryAllLogs(type)
+  const source =
+    type === 'task'
+      ? taskRows(items as TaskLogRecord[])
+      : type === 'schedule'
+        ? scheduleRows(items as ScheduleLogRecord[])
+        : operationRows(items as OperationLogRecord[])
   const csv = `\uFEFF${toCsv(source.headers, source.rows)}\n`
   const date = new Date().toISOString().slice(0, 10)
   const filename = `${type === 'task' ? 'task-logs' : type === 'schedule' ? 'schedule-logs' : 'operation-logs'}-${date}.csv`

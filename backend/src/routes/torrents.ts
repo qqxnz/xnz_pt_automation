@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, writeState } from '../storage.js'
+import { deleteTorrents, listTorrents, readState, readTorrentStats, refreshStoredTorrentFreeStates, writeState } from '../storage.js'
 import type { TorrentRecord } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { addTorrentUrlToQb, deleteTorrentFromQb } from '../utils/qbittorrent.js'
@@ -132,9 +132,7 @@ function matchesFreeStatus(torrent: ReturnType<typeof safeTorrent>, freeStatus: 
 }
 
 torrentsRouter.get('/', requireAuth, async (req, res) => {
-  const state = await readState()
-  const changed = refreshTorrentFreeStates(state)
-  if (changed) await writeState(state)
+  await refreshStoredTorrentFreeStates()
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const siteId = String(req.query.siteId ?? '')
   const downloaderId = String(req.query.downloaderId ?? '')
@@ -145,23 +143,8 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
   const sourceRunMode = String(req.query.sourceRunMode ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
-  const filtered = state.torrents.filter((item) => {
-    if (keyword && !`${item.title} ${item.siteName} ${item.sourceTaskName ?? ''}`.toLowerCase().includes(keyword)) return false
-    if (siteId && item.siteId !== siteId) return false
-    if (downloaderId && item.downloaderId !== downloaderId) return false
-    if (taskId && item.sourceTaskId !== taskId) return false
-    const safeItem = safeTorrent(item)
-    if (pushStatus !== 'ALL' && safeItem.pushStatus !== pushStatus) return false
-    if (status === 'RUNNING' && safeItem.pushStatus !== 'PUSHED') return false
-    if (status === 'NOT_RUNNING' && safeItem.pushStatus !== 'PUSH_FAILED' && safeItem.pushStatus !== 'DELETED') return false
-    if (status !== 'ALL' && status !== 'RUNNING' && status !== 'NOT_RUNNING' && safeItem.currentState !== status) return false
-    if (!matchesFreeStatus(safeItem, freeStatus)) return false
-    if (sourceRunMode !== 'ALL' && item.sourceRunMode !== sourceRunMode) return false
-    return true
-  })
-  const sorted = [...filtered].sort((a, b) => torrentSortTime(b) - torrentSortTime(a) || b.id.localeCompare(a.id))
-  const start = (page - 1) * pageSize
-  res.json({ items: sorted.slice(start, start + pageSize).map(safeTorrent), total: filtered.length, page, pageSize, stats: stats(state.torrents) })
+  const result = await listTorrents({ keyword, siteId, downloaderId, taskId, pushStatus, status, freeStatus, sourceRunMode, page, pageSize })
+  res.json({ items: result.items.map(safeTorrent), total: result.total, page: result.page, pageSize: result.pageSize, stats: await readTorrentStats() })
 })
 
 torrentsRouter.get('/:id', requireAuth, async (req, res) => {
@@ -289,14 +272,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
 torrentsRouter.post('/batch-delete', requireAuth, async (req, res) => {
   const ids = requestIds(req.body)
   if (!ids.length) return res.status(400).json({ message: '请选择要删除的种子记录' })
-  const state = await readState()
-  const idSet = new Set(ids)
-  const existingIds = new Set(state.torrents.map((torrent) => torrent.id))
-  const beforeCount = state.torrents.length
-  state.torrents = state.torrents.filter((torrent) => !idSet.has(torrent.id))
-  const deletedCount = beforeCount - state.torrents.length
-  const missingIds = ids.filter((id) => !existingIds.has(id))
-  await writeState(state)
+  const { deletedCount, missingIds } = await deleteTorrents(ids)
   await recordOperationLog({
     action: '删除种子记录',
     message: `删除 ${ids.length} 个种子记录，成功 ${deletedCount} 个，缺失 ${missingIds.length} 个`,

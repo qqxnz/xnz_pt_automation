@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { defaultSystemSettings, readState, readStorageMigrationStatus, storagePaths, type SystemSettings, writeState } from '../storage.js'
+import { defaultSystemSettings, readState, readStorageMigrationStatus, readStorageSchemaVersion, storagePaths, type SystemSettings, writeState } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -114,7 +114,7 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
       type: 'sqlite',
       path: storagePaths.dbFile,
       sizeBytes: await fileSize(storagePaths.dbFile),
-      schemaVersion: 'app-state-v1',
+      schemaVersion: await readStorageSchemaVersion(),
       lastMigrationStatus: await readStorageMigrationStatus()
     },
     paths: {
