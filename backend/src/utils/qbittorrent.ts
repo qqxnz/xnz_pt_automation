@@ -109,9 +109,11 @@ async function loginQb(downloader: Pick<DownloaderRecord, 'host' | 'username' | 
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body
   })
+  const cookie = sessionCookie(response)
+  if (response.status === 204 && cookie) return cookie
   const text = await response.text()
   if (!response.ok || text.trim().toLowerCase() !== 'ok.') throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
-  return sessionCookie(response)
+  return cookie
 }
 
 async function listQbTorrents(downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>, cookie?: string) {
