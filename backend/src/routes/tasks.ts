@@ -115,7 +115,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     nextRunAt: autoRunEnabled ? addMinutes(now, intervalMinutes) : undefined,
     intervalMinutes,
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
-    onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? false,
+    onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? true,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,

@@ -136,7 +136,11 @@
             <h3>运行规则</h3>
             <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 自动执行开关</label>
             <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
-            <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载</label>
+            <div class="inline-check-row">
+              <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载</label>
+              <button class="hint-button" type="button" aria-label="仅免费下载说明" @click="showOnlyFreeDownloadHint = !showOnlyFreeDownloadHint">?</button>
+            </div>
+            <p v-if="showOnlyFreeDownloadHint" class="inline-hint">定时检查过了免费时间，就删除下载器任务。</p>
             <div class="check-grid">
               <label v-for="type in discountOptions" :key="type.value" class="inline-check">
                 <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
@@ -228,6 +232,7 @@ const error = ref('')
 const formVisible = ref(false)
 const editingTaskId = ref<string>()
 const testResult = ref<TaskTestResult>()
+const showOnlyFreeDownloadHint = ref(false)
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
 const form = reactive<TaskPayload>({
@@ -237,7 +242,7 @@ const form = reactive<TaskPayload>({
   autoRunEnabled: false,
   intervalMinutes: 30,
   freeOnly: true,
-  onlyFreeDownload: false,
+  onlyFreeDownload: true,
   autoPush: true,
   discountTypes: ['FREE', 'TWO_X_FREE'],
   seederCondition: '',
@@ -283,7 +288,7 @@ function resetForm() {
     autoRunEnabled: false,
     intervalMinutes: 30,
     freeOnly: true,
-    onlyFreeDownload: false,
+    onlyFreeDownload: true,
     autoPush: true,
     discountTypes: ['FREE', 'TWO_X_FREE'],
     seederCondition: '',
@@ -299,11 +304,13 @@ function resetForm() {
 
 function openCreate() {
   resetForm()
+  showOnlyFreeDownloadHint.value = false
   formVisible.value = true
 }
 
 function openEdit(task: TaskItem) {
   editingTaskId.value = task.id
+  showOnlyFreeDownloadHint.value = false
   Object.assign(form, {
     name: task.name,
     siteId: task.siteId,
