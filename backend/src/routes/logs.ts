@@ -1,14 +1,16 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { clearLogsByType, readState, type OperationLogRecord, type TaskLogRecord } from '../storage.js'
+import { clearLogsByType, readState, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
 import { logger, recordOperationLog } from '../utils/logger.js'
 
 export const logsRouter = Router()
 
-type LogType = 'operation' | 'task'
+type LogType = 'operation' | 'task' | 'schedule'
 
 function requestedLogType(value: unknown): LogType {
-  return String(value ?? 'operation') === 'task' ? 'task' : 'operation'
+  const type = String(value ?? 'operation')
+  if (type === 'task' || type === 'schedule') return type
+  return 'operation'
 }
 
 function sanitizeLogText(value: unknown) {
@@ -63,6 +65,26 @@ function taskRows(items: TaskLogRecord[]) {
   return { headers, rows }
 }
 
+function scheduleRows(items: ScheduleLogRecord[]) {
+  const headers = ['ID', '时间', '定时任务', '状态', '消息', '摘要', '错误', '计划时间', '触发时间', '开始时间', '结束时间', '耗时ms', '详情']
+  const rows = items.map((item) => [
+    item.id,
+    item.createdAt,
+    item.jobName,
+    item.status,
+    item.message,
+    item.summary ?? '',
+    item.errorMessage ?? '',
+    item.scheduledAt ?? '',
+    item.triggeredAt ?? '',
+    item.startedAt ?? '',
+    item.finishedAt ?? '',
+    item.durationMs ?? '',
+    item.details ? JSON.stringify(item.details) : ''
+  ])
+  return { headers, rows }
+}
+
 logsRouter.get('/', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
   const rawPage = Number(req.query.page ?? 1)
@@ -83,6 +105,12 @@ logsRouter.get('/', requireAuth, async (req, res) => {
           if (keyword && !`${item.taskName} ${item.message} ${item.summary ?? ''} ${item.errorMessage ?? ''} ${item.fetchErrorMessage ?? ''} ${(item.pushErrorMessages ?? []).join(' ')} ${(item.failureDetails ?? []).join(' ')}`.toLowerCase().includes(keyword)) return false
           return true
         })
+      : type === 'schedule'
+        ? state.scheduleLogs.filter((item) => {
+            if (status !== 'ALL' && item.status !== status) return false
+            if (keyword && !`${item.jobName} ${item.message} ${item.summary ?? ''} ${item.errorMessage ?? ''} ${JSON.stringify(item.details ?? {})}`.toLowerCase().includes(keyword)) return false
+            return true
+          })
       : state.operationLogs.filter((item) => {
           if (status !== 'ALL' && item.status !== status) return false
           if (keyword && !`${item.action} ${item.message} ${item.actorName ?? ''}`.toLowerCase().includes(keyword)) return false
@@ -111,10 +139,10 @@ logsRouter.get('/', requireAuth, async (req, res) => {
 logsRouter.get('/export', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
   const state = await readState()
-  const source = type === 'task' ? taskRows(state.taskLogs) : operationRows(state.operationLogs)
+  const source = type === 'task' ? taskRows(state.taskLogs) : type === 'schedule' ? scheduleRows(state.scheduleLogs) : operationRows(state.operationLogs)
   const csv = `\uFEFF${toCsv(source.headers, source.rows)}\n`
   const date = new Date().toISOString().slice(0, 10)
-  const filename = `${type === 'task' ? 'task-logs' : 'operation-logs'}-${date}.csv`
+  const filename = `${type === 'task' ? 'task-logs' : type === 'schedule' ? 'schedule-logs' : 'operation-logs'}-${date}.csv`
 
   logger.info('logs', '导出日志', {
     type,
@@ -131,9 +159,10 @@ logsRouter.delete('/', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
   const { clearedCount } = await clearLogsByType(type)
   const actor = res.locals.user as { id?: string; username?: string } | undefined
+  const logName = type === 'task' ? '任务日志' : type === 'schedule' ? '定时日志' : '操作日志'
   await recordOperationLog({
-    action: type === 'task' ? '清空任务日志' : '清空操作日志',
-    message: `清空${type === 'task' ? '任务日志' : '操作日志'}，共 ${clearedCount} 条`,
+    action: `清空${logName}`,
+    message: `清空${logName}，共 ${clearedCount} 条`,
     status: 'SUCCESS',
     actorId: actor?.id,
     actorName: actor?.username,

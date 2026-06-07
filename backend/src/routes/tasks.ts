@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { readState, type SiteRecord, type TaskRecord, type TorrentRecord, writeState } from '../storage.js'
-import { recordOperationLog, recordTaskLog } from '../utils/logger.js'
+import { logger, recordOperationLog, recordScheduleLog, recordTaskLog } from '../utils/logger.js'
 import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
 import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
 
@@ -17,6 +17,7 @@ type TaskPayload = {
   autoRunEnabled?: boolean
   intervalMinutes?: number
   freeOnly?: boolean
+  onlyFreeDownload?: boolean
   autoPush?: boolean
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT' | ''
@@ -114,6 +115,7 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     nextRunAt: autoRunEnabled ? addMinutes(now, intervalMinutes) : undefined,
     intervalMinutes,
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
+    onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? false,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,
@@ -266,6 +268,26 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   task.lastSummary = '运行中'
   task.updatedAt = startedAt
   await writeState(state)
+  logger.info('task', `任务【${task.name}】开始执行`, {
+    taskId: task.id,
+    taskName: task.name,
+    runMode,
+    startedAt
+  })
+  if (runMode === 'AUTO') {
+    await recordScheduleLog({
+      jobName: 'task-auto-run',
+      message: `任务【${task.name}】开始执行`,
+      status: 'RUNNING',
+      startedAt,
+      triggeredAt: startedAt,
+      details: {
+        taskId: task.id,
+        taskName: task.name,
+        runMode
+      }
+    })
+  }
 
   try {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
@@ -323,6 +345,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         leechers: item.leechers,
         pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
         linkStatus: item.linkStatus,
+        onlyFreeDownload: task.onlyFreeDownload ?? false,
         detailUrl: item.detailUrl,
         downloaderId: downloader?.id,
         downloaderName: downloader?.name,
@@ -372,6 +395,40 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       pushErrorMessages,
       failureDetails: pushErrorMessages
     })
+    logger.info('task', `任务【${task.name}】执行成功`, {
+      taskId: task.id,
+      taskName: task.name,
+      runMode,
+      durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+      result: {
+        fetchedCount: fetched.length,
+        matchedCount: matched.length,
+        skippedExistingCount,
+        pushedCount,
+        pushFailedCount
+      }
+    })
+    if (runMode === 'AUTO') {
+      await recordScheduleLog({
+        jobName: 'task-auto-run',
+        message: `任务【${task.name}】执行成功`,
+        status: 'SUCCESS',
+        startedAt,
+        finishedAt,
+        durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+        summary,
+        details: {
+          taskId: task.id,
+          taskName: task.name,
+          runMode,
+          fetchedCount: fetched.length,
+          matchedCount: matched.length,
+          skippedExistingCount,
+          pushedCount,
+          pushFailedCount
+        }
+      })
+    }
     return { task, fetchedCount: fetched.length, matchedCount: matched.length, skippedExistingCount, pushedCount, pushFailedCount, summary }
   } catch (error) {
     const finishedAt = new Date().toISOString()
@@ -403,6 +460,30 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       fetchErrorMessage,
       failureDetails: [message]
     })
+    logger.error('task', `任务【${task.name}】执行失败`, {
+      taskId: task.id,
+      taskName: task.name,
+      runMode,
+      durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+      error: message
+    })
+    if (runMode === 'AUTO') {
+      await recordScheduleLog({
+        jobName: 'task-auto-run',
+        message: `任务【${task.name}】执行失败`,
+        status: 'FAILED',
+        startedAt,
+        finishedAt,
+        durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+        summary: message,
+        errorMessage: message,
+        details: {
+          taskId: task.id,
+          taskName: task.name,
+          runMode
+        }
+      })
+    }
     throw error
   } finally {
     runningTaskIds.delete(taskId)
@@ -422,9 +503,7 @@ export async function runDueTasks(): Promise<DueTaskRunSummary> {
   const runnableTasks = dueTasks.filter((task) => !task.running)
   for (const task of dueTasks) {
     if (task.running) continue
-    runTaskById(task.id, 'AUTO').catch((error) => {
-      console.error(`[task-scheduler] ${task.name}:`, error instanceof Error ? error.message : error)
-    })
+    runTaskById(task.id, 'AUTO').catch(() => undefined)
   }
   return {
     dueCount: dueTasks.length,

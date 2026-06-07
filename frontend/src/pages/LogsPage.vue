@@ -33,6 +33,9 @@
           <button type="button" :class="{ active: activeType === 'task' }" @click="switchType('task')">
             任务日志
           </button>
+          <button type="button" :class="{ active: activeType === 'schedule' }" @click="switchType('schedule')">
+            定时日志
+          </button>
         </div>
         <span>{{ total }} 条记录</span>
       </div>
@@ -54,7 +57,7 @@
         </article>
       </div>
       <div v-else class="empty-tip">
-        {{ activeType === 'operation' ? '暂无操作日志。' : '暂无任务日志。' }}
+        {{ emptyText }}
       </div>
 
       <div class="pager">
@@ -70,12 +73,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
-import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type TaskLog } from '../api/logs'
+import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type ScheduleLog, type TaskLog } from '../api/logs'
 
 const route = useRoute()
-const activeType = ref<LogType>(route.query.type === 'task' ? 'task' : 'operation')
+const activeType = ref<LogType>(route.query.type === 'task' ? 'task' : route.query.type === 'schedule' ? 'schedule' : 'operation')
 const operationLogs = ref<OperationLog[]>([])
 const taskLogs = ref<TaskLog[]>([])
+const scheduleLogs = ref<ScheduleLog[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 const clearing = ref(false)
@@ -85,9 +89,10 @@ const page = ref(1)
 const pageSize = 20
 const total = ref(0)
 
-const items = computed(() => (activeType.value === 'operation' ? operationLogs.value : taskLogs.value))
+const items = computed(() => (activeType.value === 'operation' ? operationLogs.value : activeType.value === 'schedule' ? scheduleLogs.value : taskLogs.value))
 const totalPages = computed(() => Math.max(Math.ceil(total.value / pageSize), 1))
-const activeTypeText = computed(() => (activeType.value === 'operation' ? '操作日志' : '任务日志'))
+const activeTypeText = computed(() => (activeType.value === 'operation' ? '操作日志' : activeType.value === 'schedule' ? '定时日志' : '任务日志'))
+const emptyText = computed(() => `暂无${activeTypeText.value}。`)
 
 function switchType(type: LogType) {
   if (activeType.value === type) {
@@ -107,7 +112,7 @@ function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
 }
 
-function statusText(status: OperationLog['status'] | TaskLog['status']) {
+function statusText(status: OperationLog['status'] | TaskLog['status'] | ScheduleLog['status']) {
   const map = {
     SUCCESS: '成功',
     FAILED: '失败',
@@ -116,11 +121,13 @@ function statusText(status: OperationLog['status'] | TaskLog['status']) {
   return map[status]
 }
 
-function primaryText(item: OperationLog | TaskLog) {
-  return item.type === 'OPERATION' ? item.action : item.taskName
+function primaryText(item: OperationLog | TaskLog | ScheduleLog) {
+  if (item.type === 'OPERATION') return item.action
+  if (item.type === 'SCHEDULE') return scheduleJobText(item.jobName)
+  return item.taskName
 }
 
-function secondaryText(item: OperationLog | TaskLog) {
+function secondaryText(item: OperationLog | TaskLog | ScheduleLog) {
   if (item.type === 'TASK') {
     return [
       item.taskId ? `任务 ID：${item.taskId}` : '系统任务',
@@ -132,7 +139,29 @@ function secondaryText(item: OperationLog | TaskLog) {
       .filter(Boolean)
       .join(' / ')
   }
+  if (item.type === 'SCHEDULE') {
+    return [
+      item.startedAt ? `开始：${formatTime(item.startedAt)}` : '',
+      item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : '',
+      item.durationMs === undefined ? '' : `耗时：${item.durationMs}ms`,
+      item.summary ? `摘要：${item.summary}` : '',
+      item.errorMessage ? `错误：${item.errorMessage}` : ''
+    ]
+      .filter(Boolean)
+      .join(' / ')
+  }
   return [item.actorName ? `操作者：${item.actorName}` : '操作者：未知', item.ip ? `IP：${item.ip}` : ''].filter(Boolean).join(' / ')
+}
+
+function scheduleJobText(jobName: string) {
+  const map: Record<string, string> = {
+    'task-auto-run-scan': '自动任务扫描',
+    'task-auto-run': '自动任务执行',
+    'torrent-download-stats-sync': '种子下载器状态同步',
+    'expired-free-download-cleanup': '仅免费下载过期清理',
+    'site-traffic-sync': '站点流量统计同步'
+  }
+  return map[jobName] ?? jobName
 }
 
 function runModeText(mode: NonNullable<TaskLog['runMode']>) {
@@ -153,7 +182,10 @@ function taskResultText(item: TaskLog) {
   return parts.join('，')
 }
 
-function failureDetails(item: OperationLog | TaskLog) {
+function failureDetails(item: OperationLog | TaskLog | ScheduleLog) {
+  if (item.type === 'SCHEDULE') {
+    return item.details ? [JSON.stringify(item.details)] : []
+  }
   if (item.type !== 'TASK') return []
   const details = [...(item.failureDetails ?? []), item.fetchErrorMessage ? `抓取失败：${item.fetchErrorMessage}` : '', ...(item.pushErrorMessages ?? [])].filter(Boolean)
   return [...new Set(details)].slice(0, 4)
@@ -205,6 +237,10 @@ async function loadLogs() {
     if (activeType.value === 'operation') {
       const result = await getLogs('operation', page.value, pageSize)
       operationLogs.value = result.items
+      total.value = result.total
+    } else if (activeType.value === 'schedule') {
+      const result = await getLogs('schedule', page.value, pageSize)
+      scheduleLogs.value = result.items
       total.value = result.total
     } else {
       const result = await getLogs('task', page.value, pageSize)

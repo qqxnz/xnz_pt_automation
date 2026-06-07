@@ -95,7 +95,7 @@
             <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
             <span>
               <strong>{{ torrent.title }}</strong>
-              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
+              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ onlyFreeDownloadText(torrent) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
             </span>
             <span>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
@@ -137,7 +137,7 @@
               </label>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
             </div>
-            <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }}</p>
+            <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ onlyFreeDownloadText(torrent) }}</p>
             <dl class="site-stat-grid">
               <div>
                 <dt>来源</dt>
@@ -226,6 +226,7 @@
           <article><strong>{{ detail.title }}</strong><span>{{ formatBytes(detail.size) }} · {{ discountText(detail.discountType) }}</span></article>
           <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
           <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
+          <article><strong>下载限制</strong><span>{{ onlyFreeDownloadText(detail) }}</span></article>
           <article><strong>下载状态</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
           <article><strong>任务保存位置</strong><span>{{ taskSavePathText(detail) }}</span></article>
           <article><strong>实际保存位置</strong><span>{{ downloaderSavePathText(detail) }}</span></article>
@@ -512,6 +513,10 @@ function discountText(value: TorrentItem['discountType']) {
 
 function runModeText(value: TorrentItem['sourceRunMode']) {
   return value === 'AUTO' ? '自动执行' : '手动运行'
+}
+
+function onlyFreeDownloadText(torrent: Pick<TorrentItem, 'onlyFreeDownload'>) {
+  return torrent.onlyFreeDownload ? '仅免费下载' : '允许非免费继续下载'
 }
 
 function linkText(value: TorrentItem['linkStatus']) {

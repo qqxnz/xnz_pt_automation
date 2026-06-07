@@ -17,6 +17,7 @@ export type TaskItem = {
   nextRunAt?: string
   intervalMinutes: number
   freeOnly: boolean
+  onlyFreeDownload?: boolean
   autoPush: boolean
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition
@@ -45,6 +46,7 @@ export type TaskPayload = {
   autoRunEnabled: boolean
   intervalMinutes: number
   freeOnly: boolean
+  onlyFreeDownload?: boolean
   autoPush: boolean
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition | ''

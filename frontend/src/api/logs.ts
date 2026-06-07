@@ -35,14 +35,31 @@ export type TaskLog = {
   createdAt: string
 }
 
-export type LogType = 'operation' | 'task'
+export type ScheduleLog = {
+  id: string
+  type: 'SCHEDULE'
+  jobName: string
+  message: string
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+  scheduledAt?: string
+  triggeredAt?: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  summary?: string
+  errorMessage?: string
+  details?: Record<string, unknown>
+  createdAt: string
+}
+
+export type LogType = 'operation' | 'task' | 'schedule'
 
 export type LogsResponse<T extends LogType> = {
   type: T
   page: number
   pageSize: number
   total: number
-  items: T extends 'task' ? TaskLog[] : OperationLog[]
+  items: T extends 'task' ? TaskLog[] : T extends 'schedule' ? ScheduleLog[] : OperationLog[]
 }
 
 export function getLogs<T extends LogType>(type: T, page = 1, pageSize = 20) {

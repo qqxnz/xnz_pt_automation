@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express'
-import { appendOperationLog, appendTaskLog, type OperationLogRecord, type TaskLogRecord } from '../storage.js'
+import { appendOperationLog, appendScheduleLog, appendTaskLog, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
 
 type ConsoleLogLevel = 'info' | 'warn' | 'error'
 
@@ -8,6 +8,8 @@ type ConsoleLogMeta = Record<string, unknown>
 type OperationLogPayload = Omit<OperationLogRecord, 'id' | 'type' | 'createdAt'>
 
 type TaskLogPayload = Omit<TaskLogRecord, 'id' | 'type' | 'createdAt'>
+
+type ScheduleLogPayload = Omit<ScheduleLogRecord, 'id' | 'type' | 'createdAt'>
 
 function timestamp() {
   return new Date().toISOString()
@@ -66,6 +68,18 @@ export async function recordTaskLog(payload: TaskLogPayload) {
     taskId: payload.taskId,
     taskName: payload.taskName,
     status: payload.status
+  })
+  return log
+}
+
+export async function recordScheduleLog(payload: ScheduleLogPayload) {
+  const log = await appendScheduleLog(payload).catch((error) => {
+    logger.error('schedule', '定时日志写入失败', {
+      jobName: payload.jobName,
+      status: payload.status,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return undefined
   })
   return log
 }

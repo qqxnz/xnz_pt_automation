@@ -15,6 +15,7 @@ export type TorrentItem = {
   leechers?: number
   pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+  onlyFreeDownload?: boolean
   detailUrl?: string
   downloaderId?: string
   downloaderName?: string

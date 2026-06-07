@@ -50,6 +50,23 @@ export type TaskLogRecord = {
   createdAt: string
 }
 
+export type ScheduleLogRecord = {
+  id: string
+  type: 'SCHEDULE'
+  jobName: string
+  message: string
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+  scheduledAt?: string
+  triggeredAt?: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  summary?: string
+  errorMessage?: string
+  details?: Record<string, unknown>
+  createdAt: string
+}
+
 export type TaskRecord = {
   id: string
   name: string
@@ -60,6 +77,7 @@ export type TaskRecord = {
   nextRunAt?: string
   intervalMinutes: number
   freeOnly: boolean
+  onlyFreeDownload?: boolean
   autoPush: boolean
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT'
@@ -98,6 +116,7 @@ export type TorrentRecord = {
   leechers?: number
   pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+  onlyFreeDownload?: boolean
   detailUrl?: string
   downloaderId?: string
   downloaderName?: string
@@ -204,6 +223,7 @@ type AppState = {
   users: UserRecord[]
   operationLogs: OperationLogRecord[]
   taskLogs: TaskLogRecord[]
+  scheduleLogs: ScheduleLogRecord[]
   sites: SiteRecord[]
   proxies: ProxyRecord[]
   downloaders: DownloaderRecord[]
@@ -250,6 +270,7 @@ async function initialState(): Promise<AppState> {
     ],
     operationLogs: [],
     taskLogs: [],
+    scheduleLogs: [],
     sites: [],
     proxies: [],
     downloaders: [],
@@ -274,6 +295,7 @@ function normalizeState(state: Partial<AppState>): AppState {
       const sizeCondition = ['GT', 'EQ', 'LT'].includes(task.sizeCondition ?? '') ? task.sizeCondition : undefined
       return {
         ...task,
+        onlyFreeDownload: Boolean(task.onlyFreeDownload),
         discountTypes: normalizedDiscountTypes,
         sizeCondition,
         sizeMb: sizeCondition && Number.isFinite(task.sizeMb) && Number(task.sizeMb) >= 0 ? Number(task.sizeMb) : undefined
@@ -284,11 +306,14 @@ function normalizeState(state: Partial<AppState>): AppState {
     users: state.users ?? [],
     operationLogs: state.operationLogs ?? [],
     taskLogs: state.taskLogs ?? [],
+    scheduleLogs: state.scheduleLogs ?? [],
     sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
     proxies: state.proxies ?? [],
     downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
     tasks,
-    torrents: (state.torrents ?? []).filter((torrent) => typeof torrent.title === 'string'),
+    torrents: (state.torrents ?? [])
+      .filter((torrent) => typeof torrent.title === 'string')
+      .map((torrent) => ({ ...torrent, onlyFreeDownload: Boolean(torrent.onlyFreeDownload) })),
     siteTrafficSnapshots: (state.siteTrafficSnapshots ?? []).filter((snapshot) => typeof snapshot.siteId === 'string' && typeof snapshot.date === 'string'),
     systemSettings,
     systemSettingsUpdatedAt: state.systemSettingsUpdatedAt
@@ -413,11 +438,26 @@ export async function appendTaskLog(payload: Omit<TaskLogRecord, 'id' | 'type' |
   return log
 }
 
-export async function clearLogsByType(type: 'operation' | 'task') {
+export async function appendScheduleLog(payload: Omit<ScheduleLogRecord, 'id' | 'type' | 'createdAt'>) {
   const state = await readState()
-  const clearedCount = type === 'task' ? state.taskLogs.length : state.operationLogs.length
+  const log: ScheduleLogRecord = {
+    id: randomUUID(),
+    type: 'SCHEDULE',
+    createdAt: new Date().toISOString(),
+    ...payload
+  }
+  state.scheduleLogs = [log, ...state.scheduleLogs].slice(0, 1000)
+  await writeState(state)
+  return log
+}
+
+export async function clearLogsByType(type: 'operation' | 'task' | 'schedule') {
+  const state = await readState()
+  const clearedCount = type === 'task' ? state.taskLogs.length : type === 'schedule' ? state.scheduleLogs.length : state.operationLogs.length
   if (type === 'task') {
     state.taskLogs = []
+  } else if (type === 'schedule') {
+    state.scheduleLogs = []
   } else {
     state.operationLogs = []
   }

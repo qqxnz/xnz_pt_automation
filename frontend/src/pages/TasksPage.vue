@@ -136,6 +136,7 @@
             <h3>运行规则</h3>
             <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 自动执行开关</label>
             <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
+            <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载</label>
             <div class="check-grid">
               <label v-for="type in discountOptions" :key="type.value" class="inline-check">
                 <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
@@ -236,6 +237,7 @@ const form = reactive<TaskPayload>({
   autoRunEnabled: false,
   intervalMinutes: 30,
   freeOnly: true,
+  onlyFreeDownload: false,
   autoPush: true,
   discountTypes: ['FREE', 'TWO_X_FREE'],
   seederCondition: '',
@@ -281,6 +283,7 @@ function resetForm() {
     autoRunEnabled: false,
     intervalMinutes: 30,
     freeOnly: true,
+    onlyFreeDownload: false,
     autoPush: true,
     discountTypes: ['FREE', 'TWO_X_FREE'],
     seederCondition: '',
@@ -308,6 +311,7 @@ function openEdit(task: TaskItem) {
     autoRunEnabled: task.autoRunEnabled,
     intervalMinutes: task.intervalMinutes,
     freeOnly: task.freeOnly,
+    onlyFreeDownload: task.onlyFreeDownload ?? false,
     autoPush: task.autoPush,
     discountTypes: [...task.discountTypes],
     seederCondition: task.seederCondition ?? '',
@@ -443,6 +447,7 @@ function freeEndText(item: TaskTestResult['items'][number]) {
 
 function rangeText(task: TaskItem) {
   const parts = [task.discountTypes.map(discountText).join(', ')]
+  if (task.onlyFreeDownload) parts.push('仅免费下载')
   if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
   if (task.sizeCondition) parts.push(`大小${sizeConditionText[task.sizeCondition]} ${task.sizeMb ?? 0} MB`)
   return parts.join(' · ')
