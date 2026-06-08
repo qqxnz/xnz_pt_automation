@@ -163,7 +163,16 @@
                 <option value="LT">小于</option>
               </select>
             </label>
-            <label>种子大小（MB）<input v-model.number="form.sizeMb" min="0" step="0.01" type="number" /></label>
+            <label>种子大小（GB）<input v-model.number="form.sizeGb" min="0" step="0.001" type="number" /></label>
+            <label>种子个数条件
+              <select v-model="form.torrentCountCondition">
+                <option value="">不限制</option>
+                <option value="GT">大于</option>
+                <option value="EQ">等于</option>
+                <option value="LT">小于</option>
+              </select>
+            </label>
+            <label>种子个数<input v-model.number="form.torrentCount" min="1" step="1" type="number" /></label>
             <label>即将过期阈值<input v-model.number="form.expiringSoonMinutes" min="1" type="number" /></label>
           </section>
         </div>
@@ -215,6 +224,7 @@ import {
   type DiscountType,
   type SeederCondition,
   type SizeCondition,
+  type TorrentCountCondition,
   type TaskItem,
   type TaskPayload,
   type TaskStats,
@@ -235,7 +245,7 @@ const testResult = ref<TaskTestResult>()
 const showOnlyFreeDownloadHint = ref(false)
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
-const form = reactive<TaskPayload>({
+const form = reactive<TaskPayload & { sizeGb: number; torrentCount: number }>({
   name: '',
   siteId: '',
   downloaderId: '',
@@ -248,7 +258,9 @@ const form = reactive<TaskPayload>({
   seederCondition: '',
   seederCount: 0,
   sizeCondition: '',
-  sizeMb: 0,
+  sizeGb: 0,
+  torrentCountCondition: '',
+  torrentCount: 1,
   expiringSoonMinutes: 120,
   savePathOverride: ''
 })
@@ -267,6 +279,12 @@ const seederConditionText: Record<SeederCondition, string> = {
 }
 
 const sizeConditionText: Record<SizeCondition, string> = {
+  GT: '大于',
+  EQ: '等于',
+  LT: '小于'
+}
+
+const torrentCountConditionText: Record<TorrentCountCondition, string> = {
   GT: '大于',
   EQ: '等于',
   LT: '小于'
@@ -294,7 +312,9 @@ function resetForm() {
     seederCondition: '',
     seederCount: 0,
     sizeCondition: '',
-    sizeMb: 0,
+    sizeGb: 0,
+    torrentCountCondition: '',
+    torrentCount: 1,
     expiringSoonMinutes: 120,
     savePathOverride: '',
     categoryOverride: undefined,
@@ -324,7 +344,9 @@ function openEdit(task: TaskItem) {
     seederCondition: task.seederCondition ?? '',
     seederCount: task.seederCount ?? 0,
     sizeCondition: task.sizeCondition ?? '',
-    sizeMb: task.sizeMb ?? 0,
+    sizeGb: (task.sizeMb ?? 0) / 1024,
+    torrentCountCondition: task.torrentCountCondition ?? '',
+    torrentCount: task.torrentCount ?? 1,
     expiringSoonMinutes: task.expiringSoonMinutes ?? 120,
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
@@ -340,7 +362,8 @@ function validateForm() {
   if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 10) return '执行间隔不能小于 10 分钟'
   if (!form.discountTypes.length) return '请至少选择一种优惠类型'
   if (form.seederCondition && (!Number.isInteger(form.seederCount) || (form.seederCount ?? 0) < 0)) return '做种人数必须是大于等于 0 的整数'
-  if (form.sizeCondition && (!Number.isFinite(Number(form.sizeMb)) || Number(form.sizeMb) < 0)) return '种子大小必须是大于等于 0 的数字'
+  if (form.sizeCondition && (!Number.isFinite(Number(form.sizeGb)) || Number(form.sizeGb) < 0)) return '种子大小必须是大于等于 0 的数字'
+  if (form.torrentCountCondition && (!Number.isInteger(form.torrentCount) || (form.torrentCount ?? 0) < 1)) return '种子个数必须是大于等于 1 的整数'
   return ''
 }
 
@@ -376,8 +399,29 @@ async function saveTask() {
   }
   saving.value = true
   try {
-    if (editingTaskId.value) await updateTask(editingTaskId.value, form)
-    else await createTask(form)
+    const payload: TaskPayload = {
+      name: form.name,
+      siteId: form.siteId,
+      downloaderId: form.downloaderId,
+      autoRunEnabled: form.autoRunEnabled,
+      intervalMinutes: form.intervalMinutes,
+      freeOnly: form.freeOnly,
+      onlyFreeDownload: form.onlyFreeDownload,
+      autoPush: form.autoPush,
+      discountTypes: form.discountTypes,
+      seederCondition: form.seederCondition,
+      seederCount: form.seederCount,
+      sizeCondition: form.sizeCondition,
+      sizeMb: Number(form.sizeGb) * 1024,
+      torrentCountCondition: form.torrentCountCondition,
+      torrentCount: form.torrentCount,
+      expiringSoonMinutes: form.expiringSoonMinutes,
+      savePathOverride: form.savePathOverride,
+      categoryOverride: form.categoryOverride,
+      tagsOverride: form.tagsOverride
+    }
+    if (editingTaskId.value) await updateTask(editingTaskId.value, payload)
+    else await createTask(payload)
     Snackbar.success('任务已保存')
     formVisible.value = false
     await loadTasks()
@@ -456,7 +500,8 @@ function rangeText(task: TaskItem) {
   const parts = [task.discountTypes.map(discountText).join(', ')]
   if (task.onlyFreeDownload) parts.push('仅免费下载')
   if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
-  if (task.sizeCondition) parts.push(`大小${sizeConditionText[task.sizeCondition]} ${task.sizeMb ?? 0} MB`)
+  if (task.sizeCondition) parts.push(`大小${sizeConditionText[task.sizeCondition]} ${((task.sizeMb ?? 0) / 1024).toFixed(3)} GB`)
+  if (task.torrentCountCondition) parts.push(`个数${torrentCountConditionText[task.torrentCountCondition]} ${task.torrentCount ?? 0}`)
   return parts.join(' · ')
 }
 

@@ -24,6 +24,8 @@ type TaskPayload = {
   seederCount?: number
   sizeCondition?: 'GT' | 'EQ' | 'LT' | ''
   sizeMb?: number
+  torrentCountCondition?: 'GT' | 'EQ' | 'LT' | ''
+  torrentCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -83,6 +85,9 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   if (payload.sizeCondition && !['GT', 'EQ', 'LT'].includes(payload.sizeCondition)) return '种子大小条件不合法'
   const sizeMb = Number(payload.sizeMb)
   if (payload.sizeCondition && (!Number.isFinite(sizeMb) || sizeMb < 0)) return '种子大小必须是大于等于 0 的数字'
+  if (payload.torrentCountCondition && !['GT', 'EQ', 'LT'].includes(payload.torrentCountCondition)) return '种子个数条件不合法'
+  const torrentCount = Number(payload.torrentCount)
+  if (payload.torrentCountCondition && (!Number.isInteger(torrentCount) || torrentCount < 1)) return '种子个数必须是大于等于 1 的整数'
   return undefined
 }
 
@@ -105,6 +110,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
   const hasSizeCondition = Object.hasOwn(payload, 'sizeCondition')
   const sizeCondition = hasSizeCondition ? payload.sizeCondition || undefined : existing?.sizeCondition
+  const hasTorrentCountCondition = Object.hasOwn(payload, 'torrentCountCondition')
+  const torrentCountCondition = hasTorrentCountCondition ? payload.torrentCountCondition || undefined : existing?.torrentCountCondition
   return {
     id: existing?.id ?? randomUUID(),
     name: payload.name!.trim(),
@@ -122,6 +129,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
     sizeCondition,
     sizeMb: sizeCondition ? Number(payload.sizeMb ?? existing?.sizeMb ?? 0) : undefined,
+    torrentCountCondition,
+    torrentCount: torrentCountCondition ? Number(payload.torrentCount ?? existing?.torrentCount ?? 1) : undefined,
     expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
     savePathOverride: payload.savePathOverride?.trim() || undefined,
     categoryOverride: payload.categoryOverride?.trim() || undefined,
@@ -207,6 +216,16 @@ function knownTorrentKeys(torrents: TorrentRecord[]) {
 function newCandidatesForSite(site: SiteRecord, items: CandidateTorrent[], torrents: TorrentRecord[]) {
   const existingKeys = knownTorrentKeys(torrents)
   return items.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
+}
+
+function applyTorrentCountCondition(task: TaskRecord, items: CandidateTorrent[]) {
+  if (!task.torrentCountCondition) return items
+  const target = task.torrentCount ?? 1
+  const actual = items.length
+  if (task.torrentCountCondition === 'GT' && !(actual > target)) return []
+  if (task.torrentCountCondition === 'EQ' && !(actual === target)) return []
+  if (task.torrentCountCondition === 'LT' && !(actual < target)) return []
+  return items
 }
 
 function torrentFilename(title: string, fallback: string) {
@@ -298,8 +317,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
     }
     const ruleMatched = matchedCandidates(task, fetched)
-    const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
-    const skippedExistingCount = ruleMatched.length - matched.length
+    const deduped = newCandidatesForSite(site, ruleMatched, state.torrents)
+    const matched = applyTorrentCountCondition(task, deduped)
+    const skippedExistingCount = ruleMatched.length - deduped.length
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
@@ -602,8 +622,9 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   try {
     const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
     const ruleMatched = matchedCandidates(task, fetched)
-    const matched = newCandidatesForSite(site, ruleMatched, state.torrents)
-    const skippedExistingCount = ruleMatched.length - matched.length
+    const deduped = newCandidatesForSite(site, ruleMatched, state.torrents)
+    const matched = applyTorrentCountCondition(task, deduped)
+    const skippedExistingCount = ruleMatched.length - deduped.length
     await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，规则命中 ${matched.length} 个，测试列表展示全部抓取种子`)
     return res.json({
       taskId: task.id,

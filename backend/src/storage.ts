@@ -84,6 +84,8 @@ export type TaskRecord = {
   seederCount?: number
   sizeCondition?: 'GT' | 'EQ' | 'LT'
   sizeMb?: number
+  torrentCountCondition?: 'GT' | 'EQ' | 'LT'
+  torrentCount?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -277,7 +279,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 2
+const schemaVersion = 3
 
 export const storagePaths = {
   root,
@@ -333,12 +335,17 @@ function normalizeState(state: Partial<AppState>): AppState {
       const normalizedDiscountTypes: TaskRecord['discountTypes'] =
         task.freeOnly === false && !discountTypes.includes('NORMAL') ? [...discountTypes, 'NORMAL'] : discountTypes
       const sizeCondition = ['GT', 'EQ', 'LT'].includes(task.sizeCondition ?? '') ? task.sizeCondition : undefined
+      const torrentCountCondition = ['GT', 'EQ', 'LT'].includes(task.torrentCountCondition ?? '') ? task.torrentCountCondition : undefined
       return {
         ...task,
         onlyFreeDownload: Boolean(task.onlyFreeDownload),
         discountTypes: normalizedDiscountTypes,
         sizeCondition,
-        sizeMb: sizeCondition && Number.isFinite(task.sizeMb) && Number(task.sizeMb) >= 0 ? Number(task.sizeMb) : undefined
+        sizeMb: sizeCondition && Number.isFinite(task.sizeMb) && Number(task.sizeMb) >= 0 ? Number(task.sizeMb) : undefined,
+        torrentCountCondition,
+        torrentCount: torrentCountCondition && Number.isInteger(task.torrentCount) && Number(task.torrentCount) >= 1
+          ? Number(task.torrentCount)
+          : undefined
       }
     })
 
@@ -489,6 +496,8 @@ function createStructuredTables(db: DatabaseSync) {
       seeder_count INTEGER,
       size_condition TEXT,
       size_mb REAL,
+      torrent_count_condition TEXT,
+      torrent_count INTEGER,
       expiring_soon_minutes INTEGER,
       save_path_override TEXT,
       category_override TEXT,
@@ -657,7 +666,15 @@ async function ensureStorage() {
     await mkdir(storagePaths.cacheDir, { recursive: true })
     const db = openDatabase()
     createStructuredTables(db)
-    if (userVersion(db) >= schemaVersion && tableHasRows(db, 'users')) return
+
+    const currentVersion = userVersion(db)
+    if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) return
+
+    if (currentVersion === 2 && tableHasRows(db, 'tasks')) {
+      migrateV2ToV3(db)
+      db.exec('COMMIT')
+      return
+    }
 
     const stateFromDb = readDbState(db)
     const stateFromFile = !stateFromDb && existsSync(legacyStateFile) ? JSON.parse(readFileSync(legacyStateFile, 'utf8')) as Partial<AppState> : undefined
@@ -681,6 +698,32 @@ async function ensureStorage() {
     }
   })()
   return storageReady
+}
+
+function tableHasColumn(db: DatabaseSync, table: string, column: string) {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  return rows.some((row) => row.name === column)
+}
+
+function migrateV2ToV3(db: DatabaseSync) {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    if (!tableHasColumn(db, 'tasks', 'torrent_count_condition')) {
+      db.exec('ALTER TABLE tasks ADD COLUMN torrent_count_condition TEXT')
+    }
+    if (!tableHasColumn(db, 'tasks', 'torrent_count')) {
+      db.exec('ALTER TABLE tasks ADD COLUMN torrent_count INTEGER')
+    }
+    setMeta(db, 'schema_version', String(schemaVersion))
+    setMeta(db, 'last_migration_status', 'SUCCESS')
+    setMeta(db, 'migrated_at', new Date().toISOString())
+    setMeta(db, 'migrated_from', 'v2-additive')
+    db.exec(`PRAGMA user_version = ${schemaVersion}`)
+  } catch (error) {
+    db.exec('ROLLBACK')
+    setMeta(db, 'last_migration_status', 'FAILED')
+    throw error
+  }
 }
 
 function tableHasRows(db: DatabaseSync, table: string) {
@@ -753,10 +796,10 @@ function upsertDownloader(db: DatabaseSync, item: DownloaderRecord) {
 }
 
 function upsertTask(db: DatabaseSync, item: TaskRecord) {
-  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, free_only, only_free_download, auto_push, discount_types_json, seeder_condition, seeder_count, size_condition, size_mb, expiring_soon_minutes, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, free_only = excluded.free_only, only_free_download = excluded.only_free_download, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_condition = excluded.seeder_condition, seeder_count = excluded.seeder_count, size_condition = excluded.size_condition, size_mb = excluded.size_mb, expiring_soon_minutes = excluded.expiring_soon_minutes, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.freeOnly), bool(item.onlyFreeDownload), bool(item.autoPush), json(item.discountTypes), optional(item.seederCondition), optional(item.seederCount), optional(item.sizeCondition), optional(item.sizeMb), optional(item.expiringSoonMinutes), optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
+  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, free_only, only_free_download, auto_push, discount_types_json, seeder_condition, seeder_count, size_condition, size_mb, torrent_count_condition, torrent_count, expiring_soon_minutes, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, free_only = excluded.free_only, only_free_download = excluded.only_free_download, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_condition = excluded.seeder_condition, seeder_count = excluded.seeder_count, size_condition = excluded.size_condition, size_mb = excluded.size_mb, torrent_count_condition = excluded.torrent_count_condition, torrent_count = excluded.torrent_count, expiring_soon_minutes = excluded.expiring_soon_minutes, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.freeOnly), bool(item.onlyFreeDownload), bool(item.autoPush), json(item.discountTypes), optional(item.seederCondition), optional(item.seederCount), optional(item.sizeCondition), optional(item.sizeMb), optional(item.torrentCountCondition), optional(item.torrentCount), optional(item.expiringSoonMinutes), optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
 }
 
 function upsertTorrent(db: DatabaseSync, item: TorrentRecord) {
@@ -880,6 +923,8 @@ function tasksFromDb(db: DatabaseSync): TaskRecord[] {
     seederCount: row.seeder_count ?? undefined,
     sizeCondition: row.size_condition ?? undefined,
     sizeMb: row.size_mb ?? undefined,
+    torrentCountCondition: row.torrent_count_condition ?? undefined,
+    torrentCount: row.torrent_count ?? undefined,
     expiringSoonMinutes: row.expiring_soon_minutes ?? undefined,
     savePathOverride: row.save_path_override ?? undefined,
     categoryOverride: row.category_override ?? undefined,
