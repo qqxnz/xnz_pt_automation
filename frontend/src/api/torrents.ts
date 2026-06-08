@@ -81,10 +81,23 @@ export function getTorrents(filters: TorrentFilter) {
   return apiRequest<{ items: TorrentItem[]; total: number; page: number; pageSize: number; stats: TorrentStats }>(`/api/torrents${query ? `?${query}` : ''}`)
 }
 
-export function pushTorrent(id: string, downloaderId?: string) {
+export function pushTorrent(id: string, options?: { downloaderId?: string; taskSavePath?: string }) {
+  const body: { downloaderId?: string; taskSavePath?: string } = {}
+  if (options?.downloaderId !== undefined) body.downloaderId = options.downloaderId
+  if (options?.taskSavePath !== undefined) body.taskSavePath = options.taskSavePath
   return apiRequest<TorrentItem>(`/api/torrents/${id}/push`, {
     method: 'POST',
-    body: JSON.stringify({ downloaderId })
+    body: JSON.stringify(body)
+  })
+}
+
+export function updateTorrentSettings(id: string, options: { downloaderId?: string; taskSavePath?: string }) {
+  const body: { downloaderId?: string; taskSavePath?: string } = {}
+  if (options.downloaderId !== undefined) body.downloaderId = options.downloaderId
+  if (options.taskSavePath !== undefined) body.taskSavePath = options.taskSavePath
+  return apiRequest<TorrentItem>(`/api/torrents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body)
   })
 }
 

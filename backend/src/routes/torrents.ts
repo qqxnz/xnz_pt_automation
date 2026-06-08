@@ -156,15 +156,77 @@ torrentsRouter.get('/:id', requireAuth, async (req, res) => {
   res.json(safeTorrent(torrent))
 })
 
+torrentsRouter.patch('/:id', requireAuth, async (req, res) => {
+  const state = await readState()
+  const torrent = state.torrents.find((item) => item.id === String(req.params.id))
+  if (!torrent) return res.status(404).json({ message: '种子不存在' })
+  const body = (req.body ?? {}) as { downloaderId?: string | null; taskSavePath?: string | null }
+  let changed = false
+  let downloaderNameSnapshot: string | undefined
+  let savePathSnapshot: string | undefined
+  if (Object.prototype.hasOwnProperty.call(body, 'taskSavePath')) {
+    if (body.taskSavePath !== null && typeof body.taskSavePath !== 'string') {
+      return res.status(400).json({ message: '保存位置格式不正确' })
+    }
+    const next = body.taskSavePath === null ? '' : (body.taskSavePath as string).trim()
+    const current = torrent.taskSavePath ?? ''
+    if (next !== current) {
+      torrent.taskSavePath = next || undefined
+      savePathSnapshot = torrent.taskSavePath
+      changed = true
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'downloaderId')) {
+    if (body.downloaderId === null || body.downloaderId === '') {
+      return res.status(400).json({ message: '请选择下载器' })
+    }
+    if (typeof body.downloaderId !== 'string') {
+      return res.status(400).json({ message: '下载器 ID 格式不正确' })
+    }
+    const downloader = state.downloaders.find((item) => item.id === body.downloaderId)
+    if (!downloader) return res.status(400).json({ message: '下载器不存在' })
+    if (!downloader.enabled) return res.status(400).json({ message: '下载器已禁用' })
+    if (torrent.downloaderId !== downloader.id || torrent.downloaderName !== downloader.name) {
+      torrent.downloaderId = downloader.id
+      torrent.downloaderName = downloader.name
+      torrent.downloaderType = downloader.type
+      downloaderNameSnapshot = downloader.name
+      changed = true
+    }
+  }
+  if (!changed) return res.json(safeTorrent(torrent))
+  await writeState(state)
+  const summary: string[] = []
+  if (downloaderNameSnapshot) summary.push(`下载器改为「${downloaderNameSnapshot}」`)
+  if (Object.prototype.hasOwnProperty.call(body, 'taskSavePath')) {
+    summary.push(savePathSnapshot ? `保存位置改为「${savePathSnapshot}」` : '保存位置已清空')
+  }
+  await recordOperationLog({
+    action: '修改种子设置',
+    message: `修改种子「${torrent.title}」${summary.join('，')}`,
+    status: 'SUCCESS',
+    ...operationActor(res, req)
+  })
+  res.json(safeTorrent(torrent))
+})
+
 torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   const state = await readState()
   const torrent = state.torrents.find((item) => item.id === String(req.params.id))
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
-  const downloader = state.downloaders.find((item) => item.id === (String((req.body as { downloaderId?: string }).downloaderId ?? '') || torrent.downloaderId))
+  const body = (req.body ?? {}) as { downloaderId?: string | null; taskSavePath?: string | null }
+  const requestedDownloaderId = typeof body.downloaderId === 'string' ? body.downloaderId.trim() : ''
+  if (Object.prototype.hasOwnProperty.call(body, 'taskSavePath') && body.taskSavePath !== null && typeof body.taskSavePath !== 'string') {
+    return res.status(400).json({ message: '保存位置格式不正确' })
+  }
+  const hasSavePathOverride = Object.prototype.hasOwnProperty.call(body, 'taskSavePath') && body.taskSavePath !== null
+  const savePathOverride = hasSavePathOverride ? (body.taskSavePath as string).trim() : undefined
+  const downloader = state.downloaders.find((item) => item.id === (requestedDownloaderId || torrent.downloaderId))
   const site = state.sites.find((item) => item.id === torrent.siteId)
   if (!downloader) return res.status(400).json({ message: '请选择下载器' })
   if (!downloader.enabled) return res.status(400).json({ message: '下载器已禁用' })
   if (!site) return res.status(400).json({ message: '种子来源站点不存在' })
+  if (hasSavePathOverride) torrent.taskSavePath = savePathOverride
   if (torrent.linkStatus !== 'SAVED' || !torrent.downloadUrl) {
     torrent.pushStatus = 'PUSH_FAILED'
     torrent.currentState = 'PUSH_FAILED'
@@ -205,7 +267,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   const syncedTorrent = syncedState.torrents.find((item) => item.id === torrent.id) ?? torrent
   await recordOperationLog({
     action: '推送种子',
-    message: `推送种子「${torrent.title}」到「${downloader.name}」`,
+    message: `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`,
     status: 'SUCCESS',
     ...operationActor(res, req)
   })
