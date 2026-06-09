@@ -189,17 +189,17 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
 function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
   return items.filter((item) => {
     if (!task.discountTypes.includes(item.discountType)) return false
-    if (task.seederCondition) {
-      const target = task.seederCount ?? 0
-      if (task.seederCondition === 'GT' && item.seeders <= target) return false
-      if (task.seederCondition === 'EQ' && item.seeders !== target) return false
-      if (task.seederCondition === 'LT' && item.seeders >= target) return false
-    }
     if (task.sizeCondition) {
       const target = (task.sizeMb ?? 0) * MB_BYTES
       if (task.sizeCondition === 'GT' && item.size <= target) return false
       if (task.sizeCondition === 'EQ' && item.size !== target) return false
       if (task.sizeCondition === 'LT' && item.size >= target) return false
+    }
+    if (task.seederCondition) {
+      const target = task.seederCount ?? 0
+      if (task.seederCondition === 'GT' && item.seeders <= target) return false
+      if (task.seederCondition === 'EQ' && item.seeders !== target) return false
+      if (task.seederCondition === 'LT' && item.seeders >= target) return false
     }
     return true
   })
