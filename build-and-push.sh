@@ -7,6 +7,12 @@ ALIYUN_REGISTRY="crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com"
 ALIYUN_IMAGE="${ALIYUN_REGISTRY}/qqxnz/xnz-pt-automation"
 VERSION="${VERSION:-$(node -p "require('./package.json').version")}"
 
+# 登录凭据（如需修改可在此处直接覆盖）
+DOCKER_HUB_USERNAME="${DOCKER_HUB_USERNAME:-qqxnz}"
+DOCKER_HUB_PASSWORD="${DOCKER_HUB_PASSWORD:-&bPTME9q%zS3}"
+ALIYUN_USERNAME="${ALIYUN_USERNAME:-lsm164@126.com}"
+ALIYUN_PASSWORD="${ALIYUN_PASSWORD:-x3sF2@xpmJ4HnzQ}"
+
 # 颜色输出
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -15,23 +21,13 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== 多架构镜像构建和推送脚本 ===${NC}"
 
-# 检查是否登录
-echo -e "${YELLOW}检查 Docker Hub 登录状态...${NC}"
-if ! docker system info | grep -q "Username"; then
-    echo -e "${YELLOW}请先登录 Docker Hub:${NC}"
-    docker login
-fi
+# 自动登录 Docker Hub
+echo -e "${YELLOW}登录 Docker Hub...${NC}"
+echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
 
-echo -e "${YELLOW}检查阿里云镜像仓库登录状态...${NC}"
-echo -e "${YELLOW}如果需要登录阿里云，请执行:${NC}"
-echo "docker login --username=你的用户名 ${ALIYUN_REGISTRY}"
-
-# 询问是否继续
-read -p "是否已登录两个仓库？(y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 1
-fi
+# 自动登录阿里云
+echo -e "${YELLOW}登录阿里云镜像仓库...${NC}"
+echo "${ALIYUN_PASSWORD}" | docker login --username="${ALIYUN_USERNAME}" --password-stdin "${ALIYUN_REGISTRY}"
 
 # 创建或使用构建器
 BUILDER_NAME="multiarch-builder"
