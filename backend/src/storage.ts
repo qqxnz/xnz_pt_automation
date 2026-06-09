@@ -144,6 +144,11 @@ export type TorrentRecord = {
   pushedAt?: string
   downloadUrlHash?: string
   downloadUrl?: string
+  hasIpv6Peers?: boolean
+  ipv6PeerCount?: number
+  totalPeerCount?: number
+  peerSyncRid?: number
+  peerSyncedAt?: string
 }
 
 export type ProxyRecord = {
@@ -217,6 +222,9 @@ export type DownloaderRecord = {
   statusMessage?: string
   lastTestedAt?: string
   lastSyncedAt?: string
+  hasIpv6Peers?: boolean
+  ipv6TorrentCount?: number
+  ipv6SyncedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -279,7 +287,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 3
+const schemaVersion = 4
 
 export const storagePaths = {
   root,
@@ -476,6 +484,9 @@ function createStructuredTables(db: DatabaseSync) {
       status_message TEXT,
       last_tested_at TEXT,
       last_synced_at TEXT,
+      has_ipv6_peers INTEGER,
+      ipv6_torrent_count INTEGER,
+      ipv6_synced_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -553,7 +564,12 @@ function createStructuredTables(db: DatabaseSync) {
       last_seen_at TEXT NOT NULL,
       pushed_at TEXT,
       download_url_hash TEXT,
-      download_url TEXT
+      download_url TEXT,
+      has_ipv6_peers INTEGER,
+      ipv6_peer_count INTEGER,
+      total_peer_count INTEGER,
+      peer_sync_rid INTEGER,
+      peer_synced_at TEXT
     );
     CREATE TABLE IF NOT EXISTS operation_logs (
       id TEXT PRIMARY KEY,
@@ -670,6 +686,12 @@ async function ensureStorage() {
     const currentVersion = userVersion(db)
     if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) return
 
+    if (currentVersion === 3 && tableHasRows(db, 'users')) {
+      migrateV3ToV4(db)
+      db.exec('COMMIT')
+      return
+    }
+
     if (currentVersion === 2 && tableHasRows(db, 'tasks')) {
       migrateV2ToV3(db)
       db.exec('COMMIT')
@@ -718,6 +740,45 @@ function migrateV2ToV3(db: DatabaseSync) {
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', new Date().toISOString())
     setMeta(db, 'migrated_from', 'v2-additive')
+    db.exec(`PRAGMA user_version = ${schemaVersion}`)
+  } catch (error) {
+    db.exec('ROLLBACK')
+    setMeta(db, 'last_migration_status', 'FAILED')
+    throw error
+  }
+}
+
+function migrateV3ToV4(db: DatabaseSync) {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    if (!tableHasColumn(db, 'torrents', 'has_ipv6_peers')) {
+      db.exec('ALTER TABLE torrents ADD COLUMN has_ipv6_peers INTEGER')
+    }
+    if (!tableHasColumn(db, 'torrents', 'ipv6_peer_count')) {
+      db.exec('ALTER TABLE torrents ADD COLUMN ipv6_peer_count INTEGER')
+    }
+    if (!tableHasColumn(db, 'torrents', 'total_peer_count')) {
+      db.exec('ALTER TABLE torrents ADD COLUMN total_peer_count INTEGER')
+    }
+    if (!tableHasColumn(db, 'torrents', 'peer_sync_rid')) {
+      db.exec('ALTER TABLE torrents ADD COLUMN peer_sync_rid INTEGER')
+    }
+    if (!tableHasColumn(db, 'torrents', 'peer_synced_at')) {
+      db.exec('ALTER TABLE torrents ADD COLUMN peer_synced_at TEXT')
+    }
+    if (!tableHasColumn(db, 'downloaders', 'has_ipv6_peers')) {
+      db.exec('ALTER TABLE downloaders ADD COLUMN has_ipv6_peers INTEGER')
+    }
+    if (!tableHasColumn(db, 'downloaders', 'ipv6_torrent_count')) {
+      db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_torrent_count INTEGER')
+    }
+    if (!tableHasColumn(db, 'downloaders', 'ipv6_synced_at')) {
+      db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_synced_at TEXT')
+    }
+    setMeta(db, 'schema_version', String(schemaVersion))
+    setMeta(db, 'last_migration_status', 'SUCCESS')
+    setMeta(db, 'migrated_at', new Date().toISOString())
+    setMeta(db, 'migrated_from', 'v3-additive-ipv6')
     db.exec(`PRAGMA user_version = ${schemaVersion}`)
   } catch (error) {
     db.exec('ROLLBACK')
@@ -789,10 +850,10 @@ function upsertProxy(db: DatabaseSync, item: ProxyRecord) {
 }
 
 function upsertDownloader(db: DatabaseSync, item: DownloaderRecord) {
-  db.prepare(`INSERT INTO downloaders (id, name, type, enabled, host, username, password, save_path, status, status_message, last_tested_at, last_synced_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, enabled = excluded.enabled, host = excluded.host, username = excluded.username, password = excluded.password, save_path = excluded.save_path, status = excluded.status, status_message = excluded.status_message, last_tested_at = excluded.last_tested_at, last_synced_at = excluded.last_synced_at, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.name, item.type, bool(item.enabled), item.host, optional(item.username), optional(item.password), optional(item.savePath), item.status, optional(item.statusMessage), optional(item.lastTestedAt), optional(item.lastSyncedAt), item.createdAt, item.updatedAt)
+  db.prepare(`INSERT INTO downloaders (id, name, type, enabled, host, username, password, save_path, status, status_message, last_tested_at, last_synced_at, has_ipv6_peers, ipv6_torrent_count, ipv6_synced_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, type = excluded.type, enabled = excluded.enabled, host = excluded.host, username = excluded.username, password = excluded.password, save_path = excluded.save_path, status = excluded.status, status_message = excluded.status_message, last_tested_at = excluded.last_tested_at, last_synced_at = excluded.last_synced_at, has_ipv6_peers = excluded.has_ipv6_peers, ipv6_torrent_count = excluded.ipv6_torrent_count, ipv6_synced_at = excluded.ipv6_synced_at, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.type, bool(item.enabled), item.host, optional(item.username), optional(item.password), optional(item.savePath), item.status, optional(item.statusMessage), optional(item.lastTestedAt), optional(item.lastSyncedAt), item.hasIpv6Peers === undefined ? null : bool(item.hasIpv6Peers), optional(item.ipv6TorrentCount), optional(item.ipv6SyncedAt), item.createdAt, item.updatedAt)
 }
 
 function upsertTask(db: DatabaseSync, item: TaskRecord) {
@@ -803,10 +864,10 @@ function upsertTask(db: DatabaseSync, item: TaskRecord) {
 }
 
 function upsertTorrent(db: DatabaseSync, item: TorrentRecord) {
-  db.prepare(`INSERT INTO torrents (id, site_id, site_name, torrent_id, title, title_lc, size, discount_type, is_free_now, current_state, free_end_at, seeders, leechers, push_status, link_status, only_free_download, detail_url, downloader_id, downloader_name, downloader_type, downloader_state, torrent_hash, download_progress, download_state, ratio, upload_speed, download_speed, uploaded, downloaded, task_save_path, downloader_save_path, download_stats_synced_at, source_task_id, source_task_name, source_run_mode, error_message, first_seen_at, last_seen_at, pushed_at, download_url_hash, download_url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, torrent_id = excluded.torrent_id, title = excluded.title, title_lc = excluded.title_lc, size = excluded.size, discount_type = excluded.discount_type, is_free_now = excluded.is_free_now, current_state = excluded.current_state, free_end_at = excluded.free_end_at, seeders = excluded.seeders, leechers = excluded.leechers, push_status = excluded.push_status, link_status = excluded.link_status, only_free_download = excluded.only_free_download, detail_url = excluded.detail_url, downloader_id = excluded.downloader_id, downloader_name = excluded.downloader_name, downloader_type = excluded.downloader_type, downloader_state = excluded.downloader_state, torrent_hash = excluded.torrent_hash, download_progress = excluded.download_progress, download_state = excluded.download_state, ratio = excluded.ratio, upload_speed = excluded.upload_speed, download_speed = excluded.download_speed, uploaded = excluded.uploaded, downloaded = excluded.downloaded, task_save_path = excluded.task_save_path, downloader_save_path = excluded.downloader_save_path, download_stats_synced_at = excluded.download_stats_synced_at, source_task_id = excluded.source_task_id, source_task_name = excluded.source_task_name, source_run_mode = excluded.source_run_mode, error_message = excluded.error_message, first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at, pushed_at = excluded.pushed_at, download_url_hash = excluded.download_url_hash, download_url = excluded.download_url`)
-    .run(item.id, item.siteId, item.siteName, optional(item.torrentId), item.title, item.title.toLowerCase(), item.size, item.discountType, bool(item.isFreeNow), item.currentState, optional(item.freeEndAt), optional(item.seeders), optional(item.leechers), item.pushStatus, item.linkStatus, bool(item.onlyFreeDownload), optional(item.detailUrl), optional(item.downloaderId), optional(item.downloaderName), optional(item.downloaderType), optional(item.downloaderState), optional(item.torrentHash), optional(item.downloadProgress), optional(item.downloadState), optional(item.ratio), optional(item.uploadSpeed), optional(item.downloadSpeed), optional(item.uploaded), optional(item.downloaded), optional(item.taskSavePath), optional(item.downloaderSavePath), optional(item.downloadStatsSyncedAt), optional(item.sourceTaskId), optional(item.sourceTaskName), item.sourceRunMode, optional(item.errorMessage), item.firstSeenAt, item.lastSeenAt, optional(item.pushedAt), optional(item.downloadUrlHash), optional(item.downloadUrl))
+  db.prepare(`INSERT INTO torrents (id, site_id, site_name, torrent_id, title, title_lc, size, discount_type, is_free_now, current_state, free_end_at, seeders, leechers, push_status, link_status, only_free_download, detail_url, downloader_id, downloader_name, downloader_type, downloader_state, torrent_hash, download_progress, download_state, ratio, upload_speed, download_speed, uploaded, downloaded, task_save_path, downloader_save_path, download_stats_synced_at, source_task_id, source_task_name, source_run_mode, error_message, first_seen_at, last_seen_at, pushed_at, download_url_hash, download_url, has_ipv6_peers, ipv6_peer_count, total_peer_count, peer_sync_rid, peer_synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, torrent_id = excluded.torrent_id, title = excluded.title, title_lc = excluded.title_lc, size = excluded.size, discount_type = excluded.discount_type, is_free_now = excluded.is_free_now, current_state = excluded.current_state, free_end_at = excluded.free_end_at, seeders = excluded.seeders, leechers = excluded.leechers, push_status = excluded.push_status, link_status = excluded.link_status, only_free_download = excluded.only_free_download, detail_url = excluded.detail_url, downloader_id = excluded.downloader_id, downloader_name = excluded.downloader_name, downloader_type = excluded.downloader_type, downloader_state = excluded.downloader_state, torrent_hash = excluded.torrent_hash, download_progress = excluded.download_progress, download_state = excluded.download_state, ratio = excluded.ratio, upload_speed = excluded.upload_speed, download_speed = excluded.download_speed, uploaded = excluded.uploaded, downloaded = excluded.downloaded, task_save_path = excluded.task_save_path, downloader_save_path = excluded.downloader_save_path, download_stats_synced_at = excluded.download_stats_synced_at, source_task_id = excluded.source_task_id, source_task_name = excluded.source_task_name, source_run_mode = excluded.source_run_mode, error_message = excluded.error_message, first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at, pushed_at = excluded.pushed_at, download_url_hash = excluded.download_url_hash, download_url = excluded.download_url, has_ipv6_peers = excluded.has_ipv6_peers, ipv6_peer_count = excluded.ipv6_peer_count, total_peer_count = excluded.total_peer_count, peer_sync_rid = excluded.peer_sync_rid, peer_synced_at = excluded.peer_synced_at`)
+    .run(item.id, item.siteId, item.siteName, optional(item.torrentId), item.title, item.title.toLowerCase(), item.size, item.discountType, bool(item.isFreeNow), item.currentState, optional(item.freeEndAt), optional(item.seeders), optional(item.leechers), item.pushStatus, item.linkStatus, bool(item.onlyFreeDownload), optional(item.detailUrl), optional(item.downloaderId), optional(item.downloaderName), optional(item.downloaderType), optional(item.downloaderState), optional(item.torrentHash), optional(item.downloadProgress), optional(item.downloadState), optional(item.ratio), optional(item.uploadSpeed), optional(item.downloadSpeed), optional(item.uploaded), optional(item.downloaded), optional(item.taskSavePath), optional(item.downloaderSavePath), optional(item.downloadStatsSyncedAt), optional(item.sourceTaskId), optional(item.sourceTaskName), item.sourceRunMode, optional(item.errorMessage), item.firstSeenAt, item.lastSeenAt, optional(item.pushedAt), optional(item.downloadUrlHash), optional(item.downloadUrl), item.hasIpv6Peers === undefined ? null : bool(item.hasIpv6Peers), optional(item.ipv6PeerCount), optional(item.totalPeerCount), optional(item.peerSyncRid), optional(item.peerSyncedAt))
 }
 
 function upsertOperationLog(db: DatabaseSync, item: OperationLogRecord) {
@@ -900,6 +961,9 @@ function downloadersFromDb(db: DatabaseSync): DownloaderRecord[] {
     statusMessage: row.status_message ?? undefined,
     lastTestedAt: row.last_tested_at ?? undefined,
     lastSyncedAt: row.last_synced_at ?? undefined,
+    hasIpv6Peers: row.has_ipv6_peers === null || row.has_ipv6_peers === undefined ? undefined : fromBool(row.has_ipv6_peers),
+    ipv6TorrentCount: row.ipv6_torrent_count ?? undefined,
+    ipv6SyncedAt: row.ipv6_synced_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }))
@@ -982,7 +1046,12 @@ function torrentFromRow(row: any): TorrentRecord {
     lastSeenAt: row.last_seen_at,
     pushedAt: row.pushed_at ?? undefined,
     downloadUrlHash: row.download_url_hash ?? undefined,
-    downloadUrl: row.download_url ?? undefined
+    downloadUrl: row.download_url ?? undefined,
+    hasIpv6Peers: row.has_ipv6_peers === null || row.has_ipv6_peers === undefined ? undefined : fromBool(row.has_ipv6_peers),
+    ipv6PeerCount: row.ipv6_peer_count ?? undefined,
+    totalPeerCount: row.total_peer_count ?? undefined,
+    peerSyncRid: row.peer_sync_rid ?? undefined,
+    peerSyncedAt: row.peer_synced_at ?? undefined
   }
 }
 

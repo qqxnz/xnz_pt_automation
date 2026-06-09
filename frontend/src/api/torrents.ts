@@ -39,6 +39,10 @@ export type TorrentItem = {
   firstSeenAt: string
   lastSeenAt: string
   pushedAt?: string
+  hasIpv6Peers?: boolean
+  ipv6PeerCount?: number
+  totalPeerCount?: number
+  peerSyncedAt?: string
 }
 
 export type TorrentStats = {

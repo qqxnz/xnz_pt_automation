@@ -40,6 +40,14 @@ export type QbTorrentItem = {
   addedAt?: string
 }
 
+export type QbTorrentPeersSnapshot = {
+  rid: number
+  fullUpdate: boolean
+  ipv4PeerCount: number
+  ipv6PeerCount: number
+  totalPeerCount: number
+}
+
 type QbTransferResponse = {
   up_info_speed?: number
   dl_info_speed?: number
@@ -187,6 +195,42 @@ export async function getQbTorrentItems(config: Pick<DownloaderRecord, 'host' | 
     savePath: item.save_path,
     addedAt: item.added_on ? new Date(item.added_on * 1000).toISOString() : undefined
   }))
+}
+
+function isIpv6Address(value: string) {
+  return value.includes(':')
+}
+
+export async function getQbTorrentPeers(
+  config: Pick<DownloaderRecord, 'host' | 'username' | 'password'>,
+  hash: string,
+  lastRid = 0
+): Promise<QbTorrentPeersSnapshot> {
+  if (!hash.trim()) throw new QbittorrentError('缺少种子 Hash，无法查询 peer')
+  const cookie = await loginQb(config)
+  const response = await qbFetch(
+    config.host,
+    `/api/v2/sync/torrentPeers?hash=${encodeURIComponent(hash)}&rid=${encodeURIComponent(String(lastRid))}`,
+    { headers: cookieHeader(cookie) },
+    10000
+  )
+  if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
+  if (!response.ok) throw new QbittorrentError(`下载器 peer 查询失败：HTTP ${response.status}`)
+  const body = (await response.json()) as { rid?: number; full_update?: boolean; peers?: Record<string, unknown> }
+  const peers = body.peers ?? {}
+  let ipv4PeerCount = 0
+  let ipv6PeerCount = 0
+  for (const ip of Object.keys(peers)) {
+    if (isIpv6Address(ip)) ipv6PeerCount += 1
+    else ipv4PeerCount += 1
+  }
+  return {
+    rid: Number(body.rid ?? lastRid),
+    fullUpdate: Boolean(body.full_update),
+    ipv4PeerCount,
+    ipv6PeerCount,
+    totalPeerCount: ipv4PeerCount + ipv6PeerCount
+  }
 }
 
 function looksLikeTorrentFile(bytes: Uint8Array) {

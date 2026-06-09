@@ -40,6 +40,7 @@
                   <div class="downloader-card-title">
                     <h3>{{ downloader.name }}</h3>
                     <span class="chip" :class="statusMeta(displayStatus(downloader)).className">{{ statusMeta(displayStatus(downloader)).label }}</span>
+                    <span v-if="downloader.hasIpv6Peers" class="chip ipv6-chip" :title="`${downloader.ipv6TorrentCount ?? 0} 个种子有 IPV6 peer 连接`">IPv6</span>
                     <span v-if="!downloader.enabled" class="chip muted-chip">已禁用</span>
                   </div>
                   <dl class="downloader-card-meta">

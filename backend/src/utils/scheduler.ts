@@ -2,11 +2,13 @@ import { syncSiteTrafficStats } from '../routes/sites.js'
 import { runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
+import { syncTorrentIpv6Peers } from './peerSync.js'
 import { syncTorrentDownloadStats } from './torrentSync.js'
 
 const SCHEDULER_TICK_INTERVAL_MS = 1000
 const TASK_SCAN_INTERVAL_MS = 1000
 const TORRENT_DOWNLOAD_STATS_SYNC_INTERVAL_MS = 3000
+const TORRENT_IPV6_PEER_SYNC_INTERVAL_MS = 30 * 1000
 const EXPIRED_FREE_DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 1000
 const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 
@@ -31,6 +33,7 @@ function readableJobName(name: string) {
   const map: Record<string, string> = {
     'task-auto-run-scan': '自动任务扫描',
     'torrent-download-stats-sync': '种子下载器状态同步',
+    'torrent-ipv6-peer-sync': '种子 IPV6 peer 同步',
     'expired-free-download-cleanup': '仅免费下载过期清理',
     'site-traffic-sync': '站点流量统计同步'
   }
@@ -58,6 +61,24 @@ const jobs: SchedulerJob[] = [
         successfulDownloaders: summary.successfulDownloaders,
         failedDownloaders: summary.failedDownloaders,
         updatedTorrents: summary.updatedTorrents,
+        errorCount: summary.errors.length
+      }
+    }
+  },
+  {
+    name: 'torrent-ipv6-peer-sync',
+    intervalMs: TORRENT_IPV6_PEER_SYNC_INTERVAL_MS,
+    nextRunAt: Date.now() + TORRENT_IPV6_PEER_SYNC_INTERVAL_MS,
+    running: false,
+    logStart: false,
+    shouldLogSuccess: (result) => Number(result.scannedTorrents ?? 0) > 0 || Number(result.ipv6TorrentCount ?? 0) > 0 || Number(result.clearedDownloaders ?? 0) > 0 || Number(result.errorCount ?? 0) > 0,
+    run: async () => {
+      const summary = await syncTorrentIpv6Peers()
+      return {
+        scannedDownloaders: summary.scannedDownloaders,
+        scannedTorrents: summary.scannedTorrents,
+        ipv6TorrentCount: summary.ipv6TorrentCount,
+        clearedDownloaders: summary.clearedDownloaders,
         errorCount: summary.errors.length
       }
     }

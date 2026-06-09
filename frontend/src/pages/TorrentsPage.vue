@@ -99,6 +99,7 @@
             </span>
             <span>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
+              <span v-if="torrent.hasIpv6Peers" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
               <small>{{ torrent.errorMessage || freeText(torrent) }}</small>
             </span>
             <span>
@@ -137,6 +138,7 @@
                 <strong>{{ torrent.title }}</strong>
               </label>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
+              <span v-if="torrent.hasIpv6Peers" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
             </div>
             <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ onlyFreeDownloadText(torrent) }}</p>
             <dl class="site-stat-grid">

@@ -1,5 +1,6 @@
 import { readState, type DownloaderRecord, type TorrentRecord, writeState } from '../storage.js'
 import { getQbTorrentItems, QbittorrentError, type QbTorrentItem } from './qbittorrent.js'
+import { syncTorrentIpv6Peers } from './peerSync.js'
 
 let syncRunning = false
 
@@ -73,9 +74,11 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
     errors: []
   }
   let changed = false
+  const recoveredDownloaderIds: string[] = []
 
   try {
     for (const downloader of enabledDownloaders) {
+      const previousStatus = downloader.status
       const pushedTorrents = state.torrents.filter((torrent) => torrent.pushStatus === 'PUSHED' && torrent.downloaderId === downloader.id && torrent.torrentHash)
       if (!pushedTorrents.length) continue
 
@@ -96,6 +99,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
         downloader.updatedAt = syncedAt
         summary.successfulDownloaders += 1
         changed = true
+        if (previousStatus !== 'ONLINE') recoveredDownloaderIds.push(downloader.id)
       } catch (error) {
         downloader.status = statusFromError(error)
         downloader.statusMessage = errorMessage(error)
@@ -110,5 +114,12 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
     return summary
   } finally {
     syncRunning = false
+    for (const id of recoveredDownloaderIds) {
+      void syncTorrentIpv6Peers(id).catch((err) => {
+        // 静默失败：定时任务每 30 秒会兜底
+        // eslint-disable-next-line no-console
+        console.warn('[torrentSync] recovered downloader ipv6 sync failed', id, err)
+      })
+    }
   }
 }

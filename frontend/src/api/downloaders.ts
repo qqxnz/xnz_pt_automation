@@ -15,6 +15,9 @@ export type DownloaderListItem = {
   statusMessage?: string
   lastTestedAt?: string
   lastSyncedAt?: string
+  hasIpv6Peers?: boolean
+  ipv6TorrentCount?: number
+  ipv6SyncedAt?: string
   createdAt: string
   updatedAt: string
 }
