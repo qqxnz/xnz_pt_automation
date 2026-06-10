@@ -1,5 +1,5 @@
 import { syncSiteTrafficStats } from '../routes/sites.js'
-import { runDueTasks } from '../routes/tasks.js'
+import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
@@ -7,6 +7,7 @@ import { syncTorrentDownloadStats } from './torrentSync.js'
 
 const SCHEDULER_TICK_INTERVAL_MS = 1000
 const TASK_SCAN_INTERVAL_MS = 1000
+const TASK_STUCK_CHECK_INTERVAL_MS = 60 * 1000
 const TORRENT_DOWNLOAD_STATS_SYNC_INTERVAL_MS = 3000
 const TORRENT_IPV6_PEER_SYNC_INTERVAL_MS = 30 * 1000
 const EXPIRED_FREE_DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 1000
@@ -32,6 +33,7 @@ function iso(value: number) {
 function readableJobName(name: string) {
   const map: Record<string, string> = {
     'task-auto-run-scan': '自动任务扫描',
+    'task-stuck-check': '卡死任务巡检',
     'torrent-download-stats-sync': '种子下载器状态同步',
     'torrent-ipv6-peer-sync': '种子 IPV6 peer 同步',
     'expired-free-download-cleanup': '仅免费下载过期清理',
@@ -49,6 +51,18 @@ const jobs: SchedulerJob[] = [
     logStart: false,
     shouldLogSuccess: (result) => Number(result.dueCount ?? 0) > 0 || Number(result.triggeredCount ?? 0) > 0 || Number(result.skippedRunningCount ?? 0) > 0,
     run: async () => runDueTasks()
+  },
+  {
+    name: 'task-stuck-check',
+    intervalMs: TASK_STUCK_CHECK_INTERVAL_MS,
+    nextRunAt: Date.now() + TASK_STUCK_CHECK_INTERVAL_MS,
+    running: false,
+    logStart: false,
+    shouldLogSuccess: (result) => Number(result.resetCount ?? 0) > 0,
+    run: async () => {
+      const summary = await resetStuckRunningTasks({ source: 'scheduler' })
+      return { resetCount: summary.resetCount, resetTaskIds: summary.resetTaskIds }
+    }
   },
   {
     name: 'torrent-download-stats-sync',

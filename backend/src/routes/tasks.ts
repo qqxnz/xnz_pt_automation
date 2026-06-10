@@ -49,6 +49,7 @@ type CandidateTorrent = {
 const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 10
 const GB_BYTES = 1024 * 1024 * 1024
+const STUCK_TASK_THRESHOLD_MS = 10 * 60 * 1000
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
@@ -263,6 +264,37 @@ async function logOperation(req: Parameters<typeof operationActor>[1], res: Para
   })
 }
 
+async function persistTaskUpdate(state: Awaited<ReturnType<typeof readState>>, task: TaskRecord) {
+  try {
+    await writeState(state)
+  } catch (error) {
+    logger.error('task', `任务状态写盘失败，尝试仅复位 running 字段`, {
+      taskId: task.id,
+      taskName: task.name,
+      error: errorMessage(error, '写盘失败')
+    })
+    try {
+      const fallback = await readState()
+      const target = fallback.tasks.find((item) => item.id === task.id)
+      if (target && target.running) {
+        target.running = false
+        target.lastFinishedAt = new Date().toISOString()
+        target.lastStatus = 'FAILED'
+        target.lastError = '任务状态写盘失败，已回退为失败状态'
+        target.lastSummary = '任务状态写盘失败'
+        target.updatedAt = new Date().toISOString()
+        await writeState(fallback)
+      }
+    } catch (fallbackError) {
+      logger.error('task', `任务状态写盘二次回退失败`, {
+        taskId: task.id,
+        taskName: task.name,
+        error: errorMessage(fallbackError, '写盘失败')
+      })
+    }
+  }
+}
+
 async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRunResult> {
   if (runningTaskIds.has(taskId)) throw new Error('任务正在运行')
   runningTaskIds.add(taskId)
@@ -398,7 +430,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastError = undefined
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
-    await writeState(state)
+    await persistTaskUpdate(state, task)
     await recordTaskLog({
       taskId: task.id,
       taskName: task.name,
@@ -463,7 +495,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastSummary = message
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
-    await writeState(state)
+    await persistTaskUpdate(state, task)
     await recordTaskLog({
       taskId: task.id,
       taskName: task.name,
@@ -510,6 +542,76 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   } finally {
     runningTaskIds.delete(taskId)
   }
+}
+
+export type StuckTaskResetSummary = {
+  resetCount: number
+  resetTaskIds: string[]
+}
+
+export type ResetStuckTasksOptions = {
+  thresholdMs?: number
+  source: 'startup' | 'scheduler'
+}
+
+export async function resetStuckRunningTasks(options: ResetStuckTasksOptions): Promise<StuckTaskResetSummary> {
+  const thresholdMs = options.thresholdMs ?? STUCK_TASK_THRESHOLD_MS
+  const nowMs = Date.now()
+  const state = await readState()
+  const stuck: TaskRecord[] = []
+  for (const task of state.tasks) {
+    if (!task.running) continue
+    const startedMs = task.lastStartedAt ? new Date(task.lastStartedAt).getTime() : 0
+    const isStuck = !startedMs || Number.isNaN(startedMs) || nowMs - startedMs >= thresholdMs
+    if (!isStuck) continue
+    if (runningTaskIds.has(task.id)) continue
+    stuck.push(task)
+  }
+  if (!stuck.length) {
+    return { resetCount: 0, resetTaskIds: [] }
+  }
+  const finishedAt = new Date().toISOString()
+  const resetTaskIds: string[] = []
+  for (const task of stuck) {
+    const wasAutoEnabled = task.autoRunEnabled
+    const reason = options.source === 'startup'
+      ? '进程启动时检测到运行中状态残留，已自动重置'
+      : '运行时间超过阈值未结束，已自动重置为失败'
+    task.running = false
+    task.lastFinishedAt = finishedAt
+    task.lastStatus = 'FAILED'
+    task.lastError = reason
+    task.lastSummary = reason
+    task.nextRunAt = wasAutoEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
+    task.updatedAt = finishedAt
+    resetTaskIds.push(task.id)
+    await recordTaskLog({
+      taskId: task.id,
+      taskName: task.name,
+      runMode: task.lastRunMode,
+      message: reason,
+      status: 'FAILED',
+      startedAt: task.lastStartedAt,
+      finishedAt,
+      fetchedCount: 0,
+      matchedCount: 0,
+      skippedExistingCount: 0,
+      pushedCount: 0,
+      pushFailedCount: 0,
+      summary: reason,
+      errorMessage: reason,
+      failureDetails: [reason]
+    })
+    logger.warn('task', `任务【${task.name}】运行状态已重置`, {
+      taskId: task.id,
+      taskName: task.name,
+      source: options.source,
+      lastStartedAt: task.lastStartedAt,
+      thresholdMs
+    })
+  }
+  await writeState(state)
+  return { resetCount: resetTaskIds.length, resetTaskIds }
 }
 
 export type DueTaskRunSummary = {
