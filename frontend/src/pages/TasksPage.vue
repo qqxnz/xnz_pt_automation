@@ -187,8 +187,8 @@
             <p class="test-summary-title">{{ testResult.taskName }} · {{ testResult.siteName }}</p>
             <p class="test-summary-stats">
               <span class="stat">抓取 {{ testResult.fetchedCount }} 个</span>
-              <span class="stat">命中 {{ testResult.matchedCount }} 个</span>
               <span v-if="(testResult.skippedExistingCount ?? 0) > 0" class="stat">去重 {{ testResult.skippedExistingCount }} 个</span>
+              <span class="stat">命中 {{ testResult.matchedCount }} 个</span>
               <span class="stat stat-pushable">推送候选 {{ testResult.pushableCount }} 个</span>
             </p>
           </div>
