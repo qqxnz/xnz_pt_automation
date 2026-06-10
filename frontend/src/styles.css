@@ -1295,6 +1295,47 @@ a {
   text-align: right;
 }
 
+.test-summary-title {
+  margin: 0 0 4px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.test-summary-stats {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.test-summary-stats .stat {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.test-summary-stats .stat-pushable {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.test-result-list article.is-matched {
+  border-color: #a5d6a7;
+  background: #f1f8e9;
+}
+
+.test-result-list article .match-badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 .site-row {
   display: grid;
   grid-template-columns: minmax(150px, 1.3fr) 92px minmax(92px, 0.8fr) 74px 94px 94px 112px 112px 84px minmax(210px, 1.2fr);

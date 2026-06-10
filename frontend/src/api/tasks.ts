@@ -83,6 +83,7 @@ export type TaskTestResult = {
   fetchedCount: number
   matchedCount: number
   skippedExistingCount?: number
+  pushableCount: number
   total: number
   items: Array<{
     torrentId: string
@@ -94,6 +95,7 @@ export type TaskTestResult = {
     seeders?: number
     leechers?: number
     linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+    matched: boolean
   }>
 }
 

@@ -25,6 +25,7 @@ export type TaskLog = {
   finishedAt?: string
   fetchedCount?: number
   matchedCount?: number
+  skippedExistingCount?: number
   pushedCount?: number
   pushFailedCount?: number
   summary?: string

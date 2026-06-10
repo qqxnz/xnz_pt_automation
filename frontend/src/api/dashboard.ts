@@ -36,6 +36,7 @@ export type DashboardOverview = {
     finishedAt?: string
     fetchedCount?: number
     matchedCount?: number
+    skippedExistingCount?: number
     pushedCount?: number
     pushFailedCount?: number
   }>

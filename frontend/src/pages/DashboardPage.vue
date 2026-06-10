@@ -170,6 +170,7 @@ function taskResultText(job: DashboardOverview['recentJobs'][number]) {
   const parts = [
     job.fetchedCount === undefined ? '' : `抓取：${job.fetchedCount}`,
     job.matchedCount === undefined ? '' : `命中：${job.matchedCount}`,
+    job.skippedExistingCount === undefined ? '' : `去重：${job.skippedExistingCount}`,
     job.pushedCount === undefined ? '' : `推送成功：${job.pushedCount}`,
     job.pushFailedCount === undefined ? '' : `推送失败：${job.pushFailedCount}`
   ].filter(Boolean)

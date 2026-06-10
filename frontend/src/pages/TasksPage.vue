@@ -184,16 +184,26 @@
         <div class="form-head">
           <div>
             <h2>测试结果</h2>
-            <p>{{ testResult.taskName }} · 抓取 {{ testResult.fetchedCount }} 个，命中 {{ testResult.matchedCount }} 个，跳过已存在 {{ testResult.skippedExistingCount ?? 0 }} 个</p>
+            <p class="test-summary-title">{{ testResult.taskName }} · {{ testResult.siteName }}</p>
+            <p class="test-summary-stats">
+              <span class="stat">抓取 {{ testResult.fetchedCount }} 个</span>
+              <span class="stat">命中 {{ testResult.matchedCount }} 个</span>
+              <span v-if="(testResult.skippedExistingCount ?? 0) > 0" class="stat">去重 {{ testResult.skippedExistingCount }} 个</span>
+              <span class="stat stat-pushable">推送候选 {{ testResult.pushableCount }} 个</span>
+            </p>
           </div>
           <button type="button" @click="testResult = undefined">×</button>
         </div>
         <div class="test-result-list">
-          <article v-for="item in testResult.items" :key="item.torrentId">
-            <strong>{{ item.title }}</strong>
+          <article v-for="item in testResult.items" :key="item.torrentId" :class="{ 'is-matched': item.matched }">
+            <strong>
+              <span v-if="item.matched" class="match-badge">✓ 命中</span>
+              {{ item.title }}
+            </strong>
             <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · {{ freeEndText(item) }} · 做种 {{ item.seeders ?? 0 }}</span>
           </article>
-          <div v-if="!testResult.items.length" class="empty-tip">没有命中当前任务规则的种子。</div>
+          <div v-if="testResult.fetchedCount === 0" class="empty-tip">未抓到任何种子，无法匹配。</div>
+          <div v-else-if="testResult.pushableCount === 0" class="empty-tip">没有命中当前任务规则的种子。</div>
         </div>
       </section>
     </div>

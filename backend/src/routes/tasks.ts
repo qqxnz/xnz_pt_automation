@@ -420,7 +420,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       state.torrents.unshift(record)
     }
     const finishedAt = new Date().toISOString()
-    const baseSummary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，跳过已存在 ${skippedExistingCount} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const baseSummary = `抓取 ${fetched.length} 个，命中 ${matched.length} 个，去重 ${skippedExistingCount} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     const failureSummary = pushErrorMessages.length ? `；失败原因：${pushErrorMessages.slice(0, 3).join('；')}${pushErrorMessages.length > 3 ? `；另有 ${pushErrorMessages.length - 3} 条失败` : ''}` : ''
     const summary = `${baseSummary}${failureSummary}`
     task.running = false
@@ -729,7 +729,10 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
     const deduped = newCandidatesForSite(site, ruleMatched, state.torrents)
     const matched = applyTorrentCountCondition(task, deduped)
     const skippedExistingCount = ruleMatched.length - deduped.length
-    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，规则命中 ${matched.length} 个，测试列表展示全部抓取种子`)
+    const pushableCount = matched.length
+    const matchedTorrentIds = new Set(matched.map((item) => item.torrentId))
+    const items = fetched.map((item) => ({ ...item, matched: matchedTorrentIds.has(item.torrentId) }))
+    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，命中 ${matched.length} 个，测试列表展示全部抓取种子`)
     return res.json({
       taskId: task.id,
       taskName: task.name,
@@ -738,7 +741,8 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
       fetchedCount: fetched.length,
       matchedCount: matched.length,
       skippedExistingCount,
-      items: fetched,
+      pushableCount,
+      items,
       total: fetched.length
     })
   } catch (error) {

@@ -176,6 +176,7 @@ function taskResultText(item: TaskLog) {
   const parts = [
     item.fetchedCount === undefined ? '' : `抓取：${item.fetchedCount}`,
     item.matchedCount === undefined ? '' : `命中：${item.matchedCount}`,
+    item.skippedExistingCount === undefined ? '' : `去重：${item.skippedExistingCount}`,
     item.pushedCount === undefined ? '' : `推送成功：${item.pushedCount}`,
     item.pushFailedCount === undefined ? '' : `推送失败：${item.pushFailedCount}`
   ].filter(Boolean)
