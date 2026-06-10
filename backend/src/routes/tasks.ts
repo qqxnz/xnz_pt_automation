@@ -22,8 +22,8 @@ type TaskPayload = {
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT' | ''
   seederCount?: number
-  sizeCondition?: 'GT' | 'EQ' | 'LT' | ''
-  sizeMb?: number
+  sizeMinGb?: number
+  sizeMaxGb?: number
   torrentCountCondition?: 'GT' | 'EQ' | 'LT' | ''
   torrentCount?: number
   expiringSoonMinutes?: number
@@ -48,7 +48,7 @@ type CandidateTorrent = {
 
 const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 10
-const MB_BYTES = 1024 * 1024
+const GB_BYTES = 1024 * 1024 * 1024
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
@@ -82,9 +82,11 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   if (payload.seederCondition && !['GT', 'EQ', 'LT'].includes(payload.seederCondition)) return '做种人数条件不合法'
   const seederCount = payload.seederCount
   if (payload.seederCondition && (!Number.isInteger(seederCount) || Number(seederCount) < 0)) return '做种人数必须是大于等于 0 的整数'
-  if (payload.sizeCondition && !['GT', 'EQ', 'LT'].includes(payload.sizeCondition)) return '种子大小条件不合法'
-  const sizeMb = Number(payload.sizeMb)
-  if (payload.sizeCondition && (!Number.isFinite(sizeMb) || sizeMb < 0)) return '种子大小必须是大于等于 0 的数字'
+  const sizeMinGb = Number(payload.sizeMinGb)
+  const sizeMaxGb = Number(payload.sizeMaxGb)
+  if (!Number.isFinite(sizeMinGb) || !Number.isInteger(sizeMinGb) || sizeMinGb < 0) return '种子最小体积必须是大于等于 0 的整数'
+  if (!Number.isFinite(sizeMaxGb) || !Number.isInteger(sizeMaxGb) || sizeMaxGb < 0) return '种子最大体积必须是大于等于 0 的整数'
+  if (sizeMinGb > 0 && sizeMaxGb > 0 && sizeMinGb > sizeMaxGb) return '种子最小体积不能大于种子最大体积'
   if (payload.torrentCountCondition && !['GT', 'EQ', 'LT'].includes(payload.torrentCountCondition)) return '种子个数条件不合法'
   const torrentCount = Number(payload.torrentCount)
   if (payload.torrentCountCondition && (!Number.isInteger(torrentCount) || torrentCount < 1)) return '种子个数必须是大于等于 1 的整数'
@@ -108,8 +110,10 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
   const autoRunStartedAt = autoRunEnabled ? now : undefined
   const hasSeederCondition = Object.hasOwn(payload, 'seederCondition')
   const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
-  const hasSizeCondition = Object.hasOwn(payload, 'sizeCondition')
-  const sizeCondition = hasSizeCondition ? payload.sizeCondition || undefined : existing?.sizeCondition
+  const hasSizeMinGb = Object.hasOwn(payload, 'sizeMinGb')
+  const hasSizeMaxGb = Object.hasOwn(payload, 'sizeMaxGb')
+  const sizeMinGb = hasSizeMinGb ? Number(payload.sizeMinGb ?? 0) : existing?.sizeMinGb ?? 0
+  const sizeMaxGb = hasSizeMaxGb ? Number(payload.sizeMaxGb ?? 0) : existing?.sizeMaxGb ?? 0
   const hasTorrentCountCondition = Object.hasOwn(payload, 'torrentCountCondition')
   const torrentCountCondition = hasTorrentCountCondition ? payload.torrentCountCondition || undefined : existing?.torrentCountCondition
   return {
@@ -127,8 +131,8 @@ function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readSt
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,
     seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
-    sizeCondition,
-    sizeMb: sizeCondition ? Number(payload.sizeMb ?? existing?.sizeMb ?? 0) : undefined,
+    sizeMinGb,
+    sizeMaxGb,
     torrentCountCondition,
     torrentCount: torrentCountCondition ? Number(payload.torrentCount ?? existing?.torrentCount ?? 1) : undefined,
     expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
@@ -189,12 +193,10 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
 function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
   return items.filter((item) => {
     if (!task.discountTypes.includes(item.discountType)) return false
-    if (task.sizeCondition) {
-      const target = (task.sizeMb ?? 0) * MB_BYTES
-      if (task.sizeCondition === 'GT' && item.size <= target) return false
-      if (task.sizeCondition === 'EQ' && item.size !== target) return false
-      if (task.sizeCondition === 'LT' && item.size >= target) return false
-    }
+    const minBytes = (task.sizeMinGb ?? 0) * GB_BYTES
+    const maxBytes = (task.sizeMaxGb ?? 0) * GB_BYTES
+    if (minBytes > 0 && item.size < minBytes) return false
+    if (maxBytes > 0 && item.size > maxBytes) return false
     if (task.seederCondition) {
       const target = task.seederCount ?? 0
       if (task.seederCondition === 'GT' && item.seeders <= target) return false

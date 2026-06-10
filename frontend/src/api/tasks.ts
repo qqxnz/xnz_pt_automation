@@ -2,7 +2,6 @@ import { apiRequest } from './client'
 
 export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
 export type SeederCondition = 'GT' | 'EQ' | 'LT'
-export type SizeCondition = 'GT' | 'EQ' | 'LT'
 export type TorrentCountCondition = 'GT' | 'EQ' | 'LT'
 export type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
@@ -23,8 +22,8 @@ export type TaskItem = {
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition
   seederCount?: number
-  sizeCondition?: SizeCondition
-  sizeMb?: number
+  sizeMinGb?: number
+  sizeMaxGb?: number
   torrentCountCondition?: TorrentCountCondition
   torrentCount?: number
   expiringSoonMinutes?: number
@@ -54,8 +53,8 @@ export type TaskPayload = {
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition | ''
   seederCount?: number
-  sizeCondition?: SizeCondition | ''
-  sizeMb?: number
+  sizeMinGb?: number
+  sizeMaxGb?: number
   torrentCountCondition?: TorrentCountCondition | ''
   torrentCount?: number
   expiringSoonMinutes?: number
