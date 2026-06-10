@@ -61,7 +61,7 @@
               <small>{{ task.lastSummary || '-' }}</small>
             </span>
             <span class="row-actions">
-              <button type="button" :disabled="task.running" @click="testExistingTask(task)">测试</button>
+              <button type="button" :disabled="task.running || testingTaskId === task.id" @click="testExistingTask(task)">{{ testingTaskId === task.id ? '测试中...' : '测试' }}</button>
               <button type="button" :disabled="task.running" @click="runExistingTask(task)">{{ task.running ? '运行中...' : '运行' }}</button>
               <button type="button" @click="openEdit(task)">编辑</button>
               <router-link :to="{ path: '/logs', query: { type: 'task' } }">日志</router-link>
@@ -103,7 +103,7 @@
               </button>
             </div>
             <div class="row-actions">
-              <button type="button" :disabled="task.running" @click="testExistingTask(task)">测试</button>
+              <button type="button" :disabled="task.running || testingTaskId === task.id" @click="testExistingTask(task)">{{ testingTaskId === task.id ? '测试中...' : '测试' }}</button>
               <button type="button" :disabled="task.running" @click="runExistingTask(task)">{{ task.running ? '运行中...' : '运行' }}</button>
               <button type="button" @click="openEdit(task)">编辑</button>
               <router-link :to="{ path: '/logs', query: { type: 'task' } }">日志</router-link>
@@ -244,6 +244,7 @@ const error = ref('')
 const formVisible = ref(false)
 const editingTaskId = ref<string>()
 const testResult = ref<TaskTestResult>()
+const testingTaskId = ref<string>()
 const showOnlyFreeDownloadHint = ref(false)
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
@@ -441,10 +442,14 @@ async function toggleAutoRun(task: TaskItem) {
 }
 
 async function testExistingTask(task: TaskItem) {
+  if (testingTaskId.value) return
+  testingTaskId.value = task.id
   try {
     testResult.value = await testTask(task.id)
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '测试失败')
+  } finally {
+    testingTaskId.value = undefined
   }
 }
 

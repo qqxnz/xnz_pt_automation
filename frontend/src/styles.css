@@ -1539,6 +1539,22 @@ a {
   box-shadow: 0 24px 80px rgb(17 24 39 / 22%);
 }
 
+.site-form.test-result-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.site-form.test-result-dialog .form-head {
+  flex-shrink: 0;
+}
+
+.site-form.test-result-dialog .test-result-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .form-head,
 .form-foot {
   display: flex;
