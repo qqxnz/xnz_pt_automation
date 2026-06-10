@@ -322,13 +322,19 @@ export async function addTorrentFileToQb(
     30000
   )
   if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
-  if (!response.ok) throw new QbittorrentError(`下载器添加任务失败：HTTP ${response.status}`)
+  if (!response.ok && response.status !== 409) throw new QbittorrentError(`下载器添加任务失败：HTTP ${response.status}`)
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
   const after = await listQbTorrents(downloader, cookie)
   const filenameKey = normalizeTorrentName(filename)
+  const preexisting =
+    before.find((item) => {
+      const itemKey = normalizeTorrentName(item.name)
+      return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
+    }) ?? null
   const added =
     after.find((item) => item.hash && !beforeHashes.has(item.hash)) ??
+    preexisting ??
     after.find((item) => {
       const itemKey = normalizeTorrentName(item.name)
       return itemKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
@@ -338,7 +344,8 @@ export async function addTorrentFileToQb(
   return {
     hash: added.hash,
     name: added.name,
-    state: added.state
+    state: added.state,
+    alreadyAdded: Boolean(preexisting) && !after.some((item) => item.hash && !beforeHashes.has(item.hash))
   }
 }
 
