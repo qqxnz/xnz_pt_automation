@@ -1656,3 +1656,209 @@ export async function deleteTorrents(ids: string[]) {
   db.prepare(`DELETE FROM torrents WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids)
   return { deletedCount: existingIds.size, missingIds: ids.filter((id) => !existingIds.has(id)) }
 }
+
+// ============================================================================
+// Independent sites repository (operates only on `sites` and
+// `site_traffic_snapshots` tables, never touches other tables or the global
+// in-memory `state` object). Use this from site routes and the
+// `site-traffic-sync` scheduler so concurrent writes from torrent / task
+// modules cannot clobber site data via the global `writeState` path.
+// ============================================================================
+
+export async function listSitesFromDb(): Promise<SiteRecord[]> {
+  const db = await readyDb()
+  return sitesFromDb(db)
+}
+
+export async function getSiteFromDb(id: string): Promise<SiteRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM sites WHERE id = ?').get(id) as any
+  if (!row) return undefined
+  return sitesFromDbFromRow(row)
+}
+
+export async function insertSiteToDb(site: SiteRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertSite(db, site)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function updateSiteInDb(site: SiteRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertSite(db, site)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function deleteSiteFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare('DELETE FROM sites WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function saveSiteTrafficSnapshotToDb(snapshot: SiteTrafficSnapshotRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertSnapshot(db, snapshot)
+    db.exec(`
+      DELETE FROM site_traffic_snapshots
+      WHERE id NOT IN (
+        SELECT id FROM site_traffic_snapshots
+        ORDER BY date DESC, synced_at DESC
+        LIMIT 3660
+      )
+    `)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function listSiteTrafficSnapshotsFromDb(): Promise<SiteTrafficSnapshotRecord[]> {
+  const db = await readyDb()
+  return snapshotsFromDb(db)
+}
+
+export async function findLatestSiteSnapshotFromDb(siteId: string, date: string): Promise<SiteTrafficSnapshotRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare(
+    'SELECT * FROM site_traffic_snapshots WHERE site_id = ? AND date = ? ORDER BY synced_at DESC LIMIT 1'
+  ).get(siteId, date) as any
+  return row ? snapshotFromRow(row) : undefined
+}
+
+function snapshotFromRow(row: any): SiteTrafficSnapshotRecord {
+  return {
+    id: row.id,
+    siteId: row.site_id,
+    siteName: row.site_name,
+    date: row.date,
+    uploaded: row.uploaded ?? undefined,
+    downloaded: row.downloaded ?? undefined,
+    ratio: row.ratio ?? undefined,
+    ratioInfinite: row.ratio_infinite === null ? undefined : fromBool(row.ratio_infinite),
+    syncedAt: row.synced_at
+  }
+}
+
+function sitesFromDbFromRow(row: any): SiteRecord {
+  return {
+    id: row.id,
+    domain: row.domain,
+    enabled: fromBool(row.enabled),
+    apiKey: row.api_key ?? undefined,
+    cookie: row.cookie ?? undefined,
+    userAgent: row.user_agent ?? undefined,
+    proxyId: row.proxy_id ?? undefined,
+    connectivityStatus: row.connectivity_status,
+    currentCredential: row.current_credential ?? undefined,
+    userLevel: row.user_level ?? undefined,
+    ratio: row.ratio ?? undefined,
+    ratioInfinite: row.ratio_infinite === null ? undefined : fromBool(row.ratio_infinite),
+    uploaded: row.uploaded ?? undefined,
+    downloaded: row.downloaded ?? undefined,
+    trafficSyncedAt: row.traffic_synced_at ?? undefined,
+    lastConnectedAt: row.last_connected_at ?? undefined,
+    lastConnectError: row.last_connect_error ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+// ============================================================================
+// Independent downloaders repository (operates only on the `downloaders` table,
+// never touches other tables or the global in-memory `state` object). Use this
+// from downloader routes so concurrent writes from torrent / task modules
+// cannot clobber downloader data via the global `writeState` path.
+// ============================================================================
+
+export async function listDownloadersFromDb(): Promise<DownloaderRecord[]> {
+  const db = await readyDb()
+  return downloadersFromDb(db)
+}
+
+export async function getDownloaderFromDb(id: string): Promise<DownloaderRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM downloaders WHERE id = ?').get(id) as any
+  if (!row) return undefined
+  return downloaderFromRow(row)
+}
+
+export async function insertDownloaderToDb(downloader: DownloaderRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertDownloader(db, downloader)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function updateDownloaderInDb(downloader: DownloaderRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertDownloader(db, downloader)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function deleteDownloaderFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare('DELETE FROM downloaders WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+function downloaderFromRow(row: any): DownloaderRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    enabled: fromBool(row.enabled),
+    host: row.host,
+    username: row.username ?? undefined,
+    password: row.password ?? undefined,
+    savePath: row.save_path ?? undefined,
+    status: row.status,
+    statusMessage: row.status_message ?? undefined,
+    lastTestedAt: row.last_tested_at ?? undefined,
+    lastSyncedAt: row.last_synced_at ?? undefined,
+    hasIpv6Peers: row.has_ipv6_peers === null ? undefined : fromBool(row.has_ipv6_peers),
+    ipv6TorrentCount: row.ipv6_torrent_count ?? undefined,
+    ipv6SyncedAt: row.ipv6_synced_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}

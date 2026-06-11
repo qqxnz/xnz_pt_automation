@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, type DownloaderRecord, writeState } from '../storage.js'
+import {
+  type DownloaderRecord,
+  deleteDownloaderFromDb,
+  getDownloaderFromDb,
+  insertDownloaderToDb,
+  listDownloadersFromDb,
+  updateDownloaderInDb
+} from '../storage.js'
 import { getQbTorrentItems, getQbTransferInfo, QbittorrentError, testQbConnection } from '../utils/qbittorrent.js'
 
 export const downloadersRouter = Router()
@@ -108,32 +115,31 @@ async function getQbStatus(config: DownloaderRecord) {
 }
 
 downloadersRouter.get('/', requireAuth, async (req, res) => {
-  const state = await readState()
+  const downloaders = await listDownloadersFromDb()
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const status = String(req.query.status ?? 'ALL')
   const enabled = String(req.query.enabled ?? 'ALL')
-  const filtered = state.downloaders.filter((downloader) => {
+  const filtered = downloaders.filter((downloader) => {
     if (keyword && !`${downloader.name} ${downloader.host}`.toLowerCase().includes(keyword)) return false
     if (status !== 'ALL' && downloader.status !== status) return false
     if (enabled === 'ENABLED' && !downloader.enabled) return false
     if (enabled === 'DISABLED' && downloader.enabled) return false
     return true
   })
-  res.json({ items: filtered.map(listItem), total: filtered.length, stats: stats(state.downloaders) })
+  res.json({ items: filtered.map(listItem), total: filtered.length, stats: stats(downloaders) })
 })
 
 downloadersRouter.get('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const downloader = state.downloaders.find((item) => item.id === id)
+  const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
   return res.json(detailItem(downloader))
 })
 
 downloadersRouter.post('/', requireAuth, async (req, res) => {
   const payload = req.body as DownloaderPayload
-  const state = await readState()
-  const validation = validatePayload(payload, state.downloaders)
+  const downloaders = await listDownloadersFromDb()
+  const validation = validatePayload(payload, downloaders)
   if (validation) return res.status(400).json({ message: validation })
 
   const now = new Date().toISOString()
@@ -150,21 +156,20 @@ downloadersRouter.post('/', requireAuth, async (req, res) => {
     createdAt: now,
     updatedAt: now
   }
-  state.downloaders.unshift(downloader)
-  await writeState(state)
+  await insertDownloaderToDb(downloader)
   return res.status(201).json(listItem(downloader))
 })
 
 downloadersRouter.put('/:id', requireAuth, async (req, res) => {
   const payload = req.body as DownloaderPayload
-  const state = await readState()
   const id = String(req.params.id)
-  const index = state.downloaders.findIndex((item) => item.id === id)
-  if (index < 0) return res.status(404).json({ message: '下载器不存在' })
-  const validation = validatePayload(payload, state.downloaders, id)
+  const existing = await getDownloaderFromDb(id)
+  if (!existing) return res.status(404).json({ message: '下载器不存在' })
+
+  const downloaders = await listDownloadersFromDb()
+  const validation = validatePayload(payload, downloaders, id)
   if (validation) return res.status(400).json({ message: validation })
 
-  const existing = state.downloaders[index]
   const passwordAction = payload.passwordAction ?? 'KEEP'
   if (passwordAction === 'UPDATE' && !payload.password) return res.status(400).json({ message: '请输入新密码或改为保持原密码' })
   const password = passwordAction === 'CLEAR' ? undefined : passwordAction === 'UPDATE' ? payload.password : existing.password
@@ -179,18 +184,14 @@ downloadersRouter.put('/:id', requireAuth, async (req, res) => {
     savePath: payload.savePath?.trim() || undefined,
     updatedAt: new Date().toISOString()
   }
-  state.downloaders[index] = updated
-  await writeState(state)
+  await updateDownloaderInDb(updated)
   return res.json(listItem(updated))
 })
 
 downloadersRouter.delete('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const nextDownloaders = state.downloaders.filter((downloader) => downloader.id !== id)
-  if (nextDownloaders.length === state.downloaders.length) return res.status(404).json({ message: '下载器不存在' })
-  state.downloaders = nextDownloaders
-  await writeState(state)
+  const deleted = await deleteDownloaderFromDb(id)
+  if (!deleted) return res.status(404).json({ message: '下载器不存在' })
   return res.status(204).send()
 })
 
@@ -216,9 +217,8 @@ downloadersRouter.post('/test', requireAuth, async (req, res) => {
 })
 
 downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const downloader = state.downloaders.find((item) => item.id === id)
+  const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
 
   try {
@@ -228,7 +228,7 @@ downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
     downloader.lastTestedAt = result.testedAt
     downloader.lastSyncedAt = result.testedAt
     downloader.updatedAt = result.testedAt
-    await writeState(state)
+    await updateDownloaderInDb(downloader)
     return res.json(result)
   } catch (error) {
     const testedAt = new Date().toISOString()
@@ -236,7 +236,7 @@ downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
     downloader.statusMessage = errorMessage(error)
     downloader.lastTestedAt = testedAt
     downloader.updatedAt = testedAt
-    await writeState(state)
+    await updateDownloaderInDb(downloader)
     return res.status(400).json({
       success: false,
       status: downloader.status,
@@ -247,9 +247,8 @@ downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
 })
 
 downloadersRouter.get('/:id/status', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const downloader = state.downloaders.find((item) => item.id === id)
+  const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
   try {
     const result = await getQbStatus(downloader)
@@ -257,14 +256,14 @@ downloadersRouter.get('/:id/status', requireAuth, async (req, res) => {
     downloader.statusMessage = undefined
     downloader.lastSyncedAt = result.lastSyncedAt
     downloader.updatedAt = result.lastSyncedAt
-    await writeState(state)
+    await updateDownloaderInDb(downloader)
     return res.json(result)
   } catch (error) {
     const now = new Date().toISOString()
     downloader.status = statusFromError(error)
     downloader.statusMessage = errorMessage(error)
     downloader.updatedAt = now
-    await writeState(state)
+    await updateDownloaderInDb(downloader)
     return res.status(400).json({
       downloaderId: downloader.id,
       uploadSpeed: 0,
@@ -277,9 +276,8 @@ downloadersRouter.get('/:id/status', requireAuth, async (req, res) => {
 })
 
 downloadersRouter.get('/:id/torrents', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const downloader = state.downloaders.find((item) => item.id === id)
+  const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
   try {
     const items = await getQbTorrentItems(downloader)
@@ -290,9 +288,8 @@ downloadersRouter.get('/:id/torrents', requireAuth, async (req, res) => {
 })
 
 downloadersRouter.get('/:id/task-references', requireAuth, async (req, res) => {
-  const state = await readState()
   const id = String(req.params.id)
-  const downloader = state.downloaders.find((item) => item.id === id)
+  const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
   return res.json({ items: [], total: 0 })
 })

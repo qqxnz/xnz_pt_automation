@@ -1,7 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, type SiteRecord, writeState } from '../storage.js'
+import {
+  type SiteRecord,
+  type SiteTrafficSnapshotRecord,
+  listSitesFromDb,
+  getSiteFromDb,
+  insertSiteToDb,
+  updateSiteInDb,
+  deleteSiteFromDb,
+  saveSiteTrafficSnapshotToDb,
+  listSiteTrafficSnapshotsFromDb
+} from '../storage.js'
 
 export const sitesRouter = Router()
 
@@ -35,7 +45,10 @@ type TrafficStats = {
   downloaded?: number
 }
 
-type AppState = Awaited<ReturnType<typeof readState>>
+type AppState = {
+  sites: SiteRecord[]
+  siteTrafficSnapshots: SiteTrafficSnapshotRecord[]
+}
 
 export type TorrentListItem = {
   id: string
@@ -160,11 +173,12 @@ function shiftDateKey(date: string, offsetDays: number) {
   return dateKey(value)
 }
 
-function recordSiteTrafficSnapshot(state: AppState, site: SiteRecord, syncedAt: string) {
+async function recordSiteTrafficSnapshot(site: SiteRecord, syncedAt: string) {
   if (site.uploaded === undefined && site.downloaded === undefined) return
   const date = dateKey(new Date(syncedAt))
-  const existing = state.siteTrafficSnapshots.find((item) => item.siteId === site.id && item.date === date)
-  const snapshot = {
+  const snapshots = await listSiteTrafficSnapshotsFromDb()
+  const existing = snapshots.find((item) => item.siteId === site.id && item.date === date)
+  const snapshot: SiteTrafficSnapshotRecord = {
     id: existing?.id ?? randomUUID(),
     siteId: site.id,
     siteName: siteDisplayName(site),
@@ -175,32 +189,27 @@ function recordSiteTrafficSnapshot(state: AppState, site: SiteRecord, syncedAt: 
     ratioInfinite: site.ratioInfinite,
     syncedAt
   }
-  if (existing) {
-    Object.assign(existing, snapshot)
-  } else {
-    state.siteTrafficSnapshots.push(snapshot)
-  }
-  state.siteTrafficSnapshots = state.siteTrafficSnapshots
-    .sort((a, b) => b.date.localeCompare(a.date) || b.syncedAt.localeCompare(a.syncedAt))
-    .slice(0, 3660)
+  await saveSiteTrafficSnapshotToDb(snapshot)
 }
 
-function uploadedDelta(state: AppState, siteId: string, date: string) {
-  const current = state.siteTrafficSnapshots.find((item) => item.siteId === siteId && item.date === date)
+async function uploadedDelta(siteId: string, date: string): Promise<number | undefined> {
+  const snapshots = await listSiteTrafficSnapshotsFromDb()
+  const current = snapshots.find((item) => item.siteId === siteId && item.date === date)
   if (current?.uploaded === undefined) return undefined
-  const previous = state.siteTrafficSnapshots
+  const previous = snapshots
     .filter((item) => item.siteId === siteId && item.date < date && item.uploaded !== undefined)
     .sort((a, b) => b.date.localeCompare(a.date))[0]
-  if (previous?.uploaded === undefined) return undefined
+  if (!previous) return Math.max(current.uploaded ?? 0, 0)
+  if (previous.uploaded === undefined) return undefined
   return Math.max(current.uploaded - previous.uploaded, 0)
 }
 
-function trafficDeltas(state: AppState, site: SiteRecord) {
+async function trafficDeltas(site: SiteRecord) {
   const today = dateKey()
   const yesterday = shiftDateKey(today, -1)
   return {
-    todayUploaded: uploadedDelta(state, site.id, today),
-    yesterdayUploaded: uploadedDelta(state, site.id, yesterday)
+    todayUploaded: await uploadedDelta(site.id, today),
+    yesterdayUploaded: await uploadedDelta(site.id, yesterday)
   }
 }
 
@@ -215,14 +224,15 @@ export async function syncSiteTrafficStats() {
   }
 
   siteTrafficSyncRunning = true
-  const state = await readState()
+  const sites = await listSitesFromDb()
   const syncedAt = new Date().toISOString()
   let successCount = 0
   let failedCount = 0
   const errors: Array<{ siteId: string; siteName: string; message: string }> = []
 
   try {
-    for (const site of state.sites.filter((item) => item.enabled)) {
+    for (const original of sites.filter((item) => item.enabled)) {
+      const site: SiteRecord = { ...original }
       try {
         const result = await testSite(site)
         site.connectivityStatus = 'ONLINE'
@@ -236,27 +246,28 @@ export async function syncSiteTrafficStats() {
         site.lastConnectedAt = site.trafficSyncedAt
         site.lastConnectError = undefined
         site.updatedAt = site.trafficSyncedAt
-        recordSiteTrafficSnapshot(state, site, site.trafficSyncedAt)
+        await recordSiteTrafficSnapshot(site, site.trafficSyncedAt)
+        await updateSiteInDb(site)
         successCount += 1
       } catch (error) {
         site.connectivityStatus = 'AUTH_FAILED'
         site.currentCredential = undefined
         site.lastConnectError = error instanceof Error ? error.message : '站点同步失败'
         site.updatedAt = new Date().toISOString()
+        await updateSiteInDb(site)
         errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: site.lastConnectError })
         failedCount += 1
       }
     }
 
-    await writeState(state)
     return { successCount, failedCount, syncedAt, errors }
   } finally {
     siteTrafficSyncRunning = false
   }
 }
 
-function listItem(site: SiteRecord, state?: AppState) {
-  const deltas = state ? trafficDeltas(state, site) : { todayUploaded: undefined, yesterdayUploaded: undefined }
+async function listItem(site: SiteRecord) {
+  const deltas = await trafficDeltas(site)
   return {
     id: site.id,
     displayName: siteDisplayName(site),
@@ -280,9 +291,9 @@ function listItem(site: SiteRecord, state?: AppState) {
   }
 }
 
-function detailItem(site: SiteRecord) {
+async function detailItem(site: SiteRecord) {
   return {
-    ...listItem(site),
+    ...(await listItem(site)),
     apiKey: site.apiKey,
     cookie: site.cookie,
     userAgent: site.userAgent
@@ -748,14 +759,14 @@ export async function browseTorrents(site: SiteRecord, keyword: string, page: nu
 }
 
 sitesRouter.get('/', requireAuth, async (req, res) => {
-  const state = await readState()
+  const sites = await listSitesFromDb()
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const connectivityStatus = String(req.query.connectivityStatus ?? 'ALL')
   const enabled = String(req.query.enabled ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
 
-  const filtered = state.sites.filter((site) => {
+  const filtered = sites.filter((site) => {
     if (keyword && !`${siteDisplayName(site)} ${site.domain}`.toLowerCase().includes(keyword)) return false
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
     if (enabled === 'ENABLED' && !site.enabled) return false
@@ -764,31 +775,28 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   })
 
   const start = (page - 1) * pageSize
-  const items = filtered.slice(start, start + pageSize).map((site) => listItem(site, state))
+  const items = await Promise.all(filtered.slice(start, start + pageSize).map((site) => listItem(site)))
   const stats = {
-    total: state.sites.length,
-    online: state.sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
-    authFailed: state.sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
-    offline: state.sites.filter((site) => site.connectivityStatus === 'OFFLINE').length,
-    unknown: state.sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
+    total: sites.length,
+    online: sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
+    authFailed: sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
+    offline: sites.filter((site) => site.connectivityStatus === 'OFFLINE').length,
+    unknown: sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
   }
 
   res.json({ items, total: filtered.length, stats })
 })
 
 sitesRouter.get('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
-  const site = state.sites.find((item) => item.id === req.params.id)
+  const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
-  return res.json(detailItem(site))
+  return res.json(await detailItem(site))
 })
 
 sitesRouter.post('/', requireAuth, async (req, res) => {
   const payload = req.body as SitePayload
   const error = validatePayload(payload)
   if (error) return res.status(400).json({ message: error })
-
-  const state = await readState()
 
   const now = new Date().toISOString()
   const site: SiteRecord = {
@@ -802,18 +810,15 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
     createdAt: now,
     updatedAt: now
   }
-  state.sites.unshift(site)
-  await writeState(state)
-  return res.status(201).json(detailItem(site))
+  await insertSiteToDb(site)
+  return res.status(201).json(await detailItem(site))
 })
 
 sitesRouter.put('/:id', requireAuth, async (req, res) => {
   const payload = req.body as SitePayload
-  const state = await readState()
-  const index = state.sites.findIndex((site) => site.id === req.params.id)
-  if (index < 0) return res.status(404).json({ message: '站点不存在' })
+  const existing = await getSiteFromDb(String(req.params.id))
+  if (!existing) return res.status(404).json({ message: '站点不存在' })
 
-  const existing = state.sites[index]
   const error = validatePayload(payload, existing)
   if (error) return res.status(400).json({ message: error })
 
@@ -826,23 +831,18 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
     userAgent: payload.userAgent?.trim() || undefined,
     updatedAt: new Date().toISOString()
   }
-  state.sites[index] = updated
-  await writeState(state)
-  return res.json(detailItem(updated))
+  await updateSiteInDb(updated)
+  return res.json(await detailItem(updated))
 })
 
 sitesRouter.delete('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
-  const nextSites = state.sites.filter((site) => site.id !== req.params.id)
-  if (nextSites.length === state.sites.length) return res.status(404).json({ message: '站点不存在' })
-  state.sites = nextSites
-  await writeState(state)
+  const deleted = await deleteSiteFromDb(String(req.params.id))
+  if (!deleted) return res.status(404).json({ message: '站点不存在' })
   return res.status(204).send()
 })
 
 sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
-  const state = await readState()
-  const site = state.sites.find((item) => item.id === req.params.id)
+  const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
 
   try {
@@ -858,15 +858,15 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
     site.lastConnectedAt = site.trafficSyncedAt
     site.lastConnectError = undefined
     site.updatedAt = site.trafficSyncedAt
-    recordSiteTrafficSnapshot(state, site, site.trafficSyncedAt)
-    await writeState(state)
+    await recordSiteTrafficSnapshot(site, site.trafficSyncedAt)
+    await updateSiteInDb(site)
     return res.json({ ok: true, status: site.connectivityStatus, credential: site.currentCredential, ...result.stats })
   } catch (error) {
     site.connectivityStatus = 'AUTH_FAILED'
     site.currentCredential = undefined
     site.lastConnectError = error instanceof Error ? error.message : '站点测试失败'
     site.updatedAt = new Date().toISOString()
-    await writeState(state)
+    await updateSiteInDb(site)
     return res.status(400).json({ ok: false, status: site.connectivityStatus, message: site.lastConnectError, errorMessage: site.lastConnectError })
   }
 })
@@ -876,8 +876,7 @@ sitesRouter.post('/sync-traffic', requireAuth, async (_req, res) => {
 })
 
 sitesRouter.post('/:id/browse-torrents', requireAuth, async (req, res) => {
-  const state = await readState()
-  const site = state.sites.find((item) => item.id === req.params.id)
+  const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
   const keyword = String(req.body?.keyword ?? '').trim()
   const page = Math.max(Number(req.body?.page ?? 1), 1)

@@ -3,7 +3,7 @@
     <section class="feature-page statistics-page">
       <div class="dashboard-head">
         <div>
-          <h1>站点统计</h1>
+          <h1>流量</h1>
           <p>按来源站点和日期统计 qBittorrent 种子的实际上传、下载增量。</p>
         </div>
       </div>
@@ -32,12 +32,31 @@
         </button>
       </section>
 
+      <section class="panel statistics-chart-panel">
+        <div class="panel-title-row">
+          <h2>流量趋势</h2>
+          <div class="statistics-granularity" role="tablist" aria-label="流量粒度">
+            <button
+              v-for="option in granularityOptions"
+              :key="option.value"
+              type="button"
+              role="tab"
+              :aria-selected="filters.granularity === option.value"
+              :class="{ active: filters.granularity === option.value }"
+              :disabled="loading"
+              @click="setGranularity(option.value)"
+            >{{ option.label }}</button>
+          </div>
+        </div>
+        <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadStatistics">重试</button></div>
+        <StatisticsBarChart :buckets="chartBuckets" />
+      </section>
+
       <section class="panel statistics-list-panel">
         <div class="panel-title-row">
           <h2>站点流量</h2>
           <span>共 {{ result.total }} 个站点</span>
         </div>
-        <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadStatistics">重试</button></div>
         <div v-if="!result.items.length && !loading" class="sites-empty">
           <h2>当前区间暂无流量</h2>
           <p>种子同步产生上传或下载增量后，会在这里按日期累计。</p>
@@ -75,7 +94,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
+import StatisticsBarChart, { type ChartBucket } from '../components/StatisticsBarChart.vue'
 import { getSiteStatistics, type SiteStatisticsResponse } from '../api/siteStatistics'
+
+type Granularity = 'day' | 'week' | 'month'
+
+const granularityOptions: Array<{ value: Granularity; label: string }> = [
+  { value: 'day', label: '按日' },
+  { value: 'week', label: '按周' },
+  { value: 'month', label: '按月' }
+]
 
 function dateKey(value: Date) {
   const year = value.getFullYear()
@@ -84,10 +112,39 @@ function dateKey(value: Date) {
   return `${year}-${month}-${day}`
 }
 
+function parseDateKey(value: string) {
+  const [y, m, d] = value.split('-').map(Number)
+  return new Date(y, (m ?? 1) - 1, d ?? 1)
+}
+
+function isoWeekKey(value: Date) {
+  const target = new Date(value.getFullYear(), value.getMonth(), value.getDate())
+  const dayOfWeek = (target.getDay() + 6) % 7
+  target.setDate(target.getDate() - dayOfWeek)
+  const startKey = dateKey(target)
+  const end = new Date(target)
+  end.setDate(end.getDate() + 6)
+  const endKey = dateKey(end)
+  return { key: startKey, label: `${startKey.slice(5)} ~ ${endKey.slice(5)}` }
+}
+
+function monthKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
+}
+
+const MAX_BUCKETS = 180
+
 const today = new Date()
 const start = new Date(today)
 start.setDate(start.getDate() - 29)
-const filters = reactive({ startDate: dateKey(start), endDate: dateKey(today), siteId: '', page: 1, pageSize: 20 })
+const filters = reactive({
+  startDate: dateKey(start),
+  endDate: dateKey(today),
+  siteId: '',
+  page: 1,
+  pageSize: 20,
+  granularity: 'day' as Granularity
+})
 const result = reactive<SiteStatisticsResponse>({
   startDate: filters.startDate,
   endDate: filters.endDate,
@@ -110,7 +167,7 @@ async function loadStatistics() {
   try {
     Object.assign(result, await getSiteStatistics(filters))
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '站点统计加载失败'
+    error.value = err instanceof Error ? err.message : '流量加载失败'
   } finally {
     loading.value = false
   }
@@ -126,6 +183,11 @@ function changePage(page: number) {
   void loadStatistics()
 }
 
+function setGranularity(value: Granularity) {
+  if (filters.granularity === value) return
+  filters.granularity = value
+}
+
 function formatBytes(value = 0) {
   if (value === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
@@ -137,6 +199,66 @@ function formatShare(value: number) {
   const total = result.totalUploaded + result.totalDownloaded
   return total > 0 ? `${((value / total) * 100).toFixed(1)}%` : '0%'
 }
+
+type BucketAccumulator = { label: string; uploaded: number; downloaded: number }
+
+const chartBuckets = computed<ChartBucket[]>(() => {
+  const granularity = filters.granularity
+  const buckets: BucketAccumulator[] = []
+
+  if (granularity === 'day') {
+    const map = new Map<string, BucketAccumulator>()
+    for (const site of result.items) {
+      for (const day of site.daily) {
+        const existing = map.get(day.date) ?? { label: day.date.slice(5), uploaded: 0, downloaded: 0 }
+        existing.uploaded += day.uploaded
+        existing.downloaded += day.downloaded
+        map.set(day.date, existing)
+      }
+    }
+    for (const [key, value] of map.entries()) {
+      buckets.push({ ...value, label: key.slice(5) })
+    }
+    buckets.sort((a, b) => a.label.localeCompare(b.label))
+  } else if (granularity === 'week') {
+    const map = new Map<string, BucketAccumulator>()
+    for (const site of result.items) {
+      for (const day of site.daily) {
+        const date = parseDateKey(day.date)
+        const { key, label } = isoWeekKey(date)
+        const existing = map.get(key) ?? { label, uploaded: 0, downloaded: 0 }
+        existing.uploaded += day.uploaded
+        existing.downloaded += day.downloaded
+        map.set(key, existing)
+      }
+    }
+    for (const [key, value] of map.entries()) {
+      buckets.push({ ...value, label: `${key.slice(5)} 周` })
+    }
+    buckets.sort((a, b) => a.label.localeCompare(b.label))
+  } else {
+    const map = new Map<string, BucketAccumulator>()
+    for (const site of result.items) {
+      for (const day of site.daily) {
+        const date = parseDateKey(day.date)
+        const key = monthKey(date)
+        const existing = map.get(key) ?? { label: key, uploaded: 0, downloaded: 0 }
+        existing.uploaded += day.uploaded
+        existing.downloaded += day.downloaded
+        map.set(key, existing)
+      }
+    }
+    for (const [key, value] of map.entries()) {
+      buckets.push({ ...value, label: key })
+    }
+    buckets.sort((a, b) => a.label.localeCompare(b.label))
+  }
+
+  if (buckets.length > MAX_BUCKETS) {
+    return buckets.slice(buckets.length - MAX_BUCKETS)
+  }
+  return buckets
+})
 
 onMounted(loadStatistics)
 </script>
