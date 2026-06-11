@@ -10,8 +10,11 @@ import {
   updateSiteInDb,
   deleteSiteFromDb,
   saveSiteTrafficSnapshotToDb,
-  listSiteTrafficSnapshotsFromDb
+  listSiteTrafficSnapshotsFromDb,
+  listLatestSigninLogBySiteAndDate
 } from '../storage.js'
+import { logger, recordOperationLog } from '../utils/logger.js'
+import { isSiteSigninRunning, signinSiteById } from './signin/index.js'
 
 export const sitesRouter = Router()
 
@@ -35,6 +38,8 @@ type SitePayload = {
   apiKey?: string
   cookie?: string
   userAgent?: string
+  signinEnabled?: boolean
+  signinTime?: string
 }
 
 type TrafficStats = {
@@ -88,6 +93,70 @@ const SITE_DEFINITIONS: SiteDefinition[] = [
     displayName: '麒麟',
     domains: ['hdkyl.in', 'www.hdkyl.in'],
     canonicalDomain: 'www.hdkyl.in',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '听听歌',
+    domains: ['totheglory.im', 'www.totheglory.im'],
+    canonicalDomain: 'totheglory.im',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '朋友',
+    domains: ['pt.keepfrds.com', 'keepfrds.com'],
+    canonicalDomain: 'pt.keepfrds.com',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '彩虹岛',
+    domains: ['ptchdbits.co', 'www.ptchdbits.co'],
+    canonicalDomain: 'ptchdbits.co',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '猫站',
+    domains: ['pterclub.net', 'pterclub.com', 'www.pterclub.com'],
+    canonicalDomain: 'pterclub.com',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '我堡',
+    domains: ['ourbits.club', 'www.ourbits.club'],
+    canonicalDomain: 'ourbits.club',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '铂金家',
+    domains: ['pthome.net', 'www.pthome.net'],
+    canonicalDomain: 'pthome.net',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '优堡',
+    domains: ['ubits.club', 'www.ubits.club'],
+    canonicalDomain: 'ubits.club',
+    strategy: 'NEXUSPHP',
+    profilePath: '/userdetails.php',
+    torrentPath: '/torrents.php'
+  },
+  {
+    displayName: '时间',
+    domains: ['pttime.org', 'www.pttime.org'],
+    canonicalDomain: 'pttime.org',
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
@@ -268,6 +337,8 @@ export async function syncSiteTrafficStats() {
 
 async function listItem(site: SiteRecord) {
   const deltas = await trafficDeltas(site)
+  const today = dateKey()
+  const latest = await listLatestSigninLogBySiteAndDate(site.id, today)
   return {
     id: site.id,
     displayName: siteDisplayName(site),
@@ -287,7 +358,14 @@ async function listItem(site: SiteRecord) {
     lastConnectedAt: site.lastConnectedAt,
     lastConnectError: site.lastConnectError,
     hasApiKey: Boolean(site.apiKey),
-    hasCookie: Boolean(site.cookie)
+    hasCookie: Boolean(site.cookie),
+    signinEnabled: site.signinEnabled,
+    signinTime: site.signinTime,
+    todaySigninStatus: latest?.status,
+    lastSigninAt: site.lastSigninAt,
+    lastSigninStatus: site.lastSigninStatus,
+    lastSigninMessage: site.lastSigninMessage,
+    signinRunning: isSiteSigninRunning(site.id)
   }
 }
 
@@ -310,6 +388,11 @@ function validatePayload(payload: SitePayload, existing?: SiteRecord) {
   const hasApiKey = Boolean(payload.apiKey?.trim() || existing?.apiKey)
   const hasCookie = Boolean(payload.cookie?.trim() || existing?.cookie)
   if (!hasApiKey && !hasCookie) return 'API Key 和 Cookie 至少填写一个'
+  const signinEnabled = payload.signinEnabled ?? existing?.signinEnabled ?? false
+  const signinTime = payload.signinTime?.trim() || existing?.signinTime || '09:00'
+  if (signinEnabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(signinTime)) {
+    return '签到时间必须是 HH:mm 格式'
+  }
   return undefined
 }
 
@@ -763,6 +846,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const connectivityStatus = String(req.query.connectivityStatus ?? 'ALL')
   const enabled = String(req.query.enabled ?? 'ALL')
+  const signinEnabled = String(req.query.signinEnabled ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
 
@@ -771,6 +855,8 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
     if (enabled === 'ENABLED' && !site.enabled) return false
     if (enabled === 'DISABLED' && site.enabled) return false
+    if (signinEnabled === 'ENABLED' && !site.signinEnabled) return false
+    if (signinEnabled === 'DISABLED' && site.signinEnabled) return false
     return true
   })
 
@@ -807,6 +893,8 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
     cookie: payload.cookie?.trim() || undefined,
     userAgent: payload.userAgent?.trim() || undefined,
     connectivityStatus: 'UNKNOWN',
+    signinEnabled: payload.signinEnabled ?? false,
+    signinTime: payload.signinTime?.trim() || '09:00',
     createdAt: now,
     updatedAt: now
   }
@@ -829,6 +917,8 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
     apiKey: payload.apiKey?.trim() || existing.apiKey,
     cookie: payload.cookie?.trim() || existing.cookie,
     userAgent: payload.userAgent?.trim() || undefined,
+    signinEnabled: payload.signinEnabled ?? existing.signinEnabled,
+    signinTime: payload.signinTime?.trim() || existing.signinTime,
     updatedAt: new Date().toISOString()
   }
   await updateSiteInDb(updated)
@@ -873,6 +963,94 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
 
 sitesRouter.post('/sync-traffic', requireAuth, async (_req, res) => {
   res.json(await syncSiteTrafficStats())
+})
+
+sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
+  const siteId = String(req.params.id)
+  const site = await getSiteFromDb(siteId)
+  if (!site) return res.status(404).json({ message: '站点不存在' })
+
+  const actor = res.locals.user as { id?: string; username?: string } | undefined
+  try {
+    const result = await signinSiteById(siteId, {
+      runMode: 'MANUAL',
+      triggerSource: 'manual-button',
+      now: new Date()
+    })
+    await recordOperationLog({
+      action: '站点签到',
+      message: `${result.siteName} 手动签到：${result.message}`,
+      status: result.status === 'SUCCESS' ? 'SUCCESS' : result.status === 'SKIPPED' ? 'SUCCESS' : 'FAILED',
+      actorId: actor?.id,
+      actorName: actor?.username,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    })
+    const ok = result.status !== 'FAILED'
+    return res.json({
+      ok,
+      status: result.status,
+      message: result.message,
+      errorMessage: result.errorMessage,
+      siteId: result.siteId,
+      siteName: result.siteName,
+      logId: result.logId,
+      durationMs: result.durationMs
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '签到失败'
+    logger.error('site', 'manual signin failed', { siteId, error: message })
+    await recordOperationLog({
+      action: '站点签到',
+      message: `${siteDisplayName(site)} 手动签到失败：${message}`,
+      status: 'FAILED',
+      actorId: actor?.id,
+      actorName: actor?.username,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    })
+    return res.status(400).json({ ok: false, status: 'FAILED', message, errorMessage: message })
+  }
+})
+
+sitesRouter.post('/signin-all', requireAuth, async (req, res) => {
+  const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled)
+  const actor = res.locals.user as { id?: string; username?: string } | undefined
+  const results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED'; message: string; durationMs: number }> = []
+  for (const site of sites) {
+    try {
+      const result = await signinSiteById(site.id, {
+        runMode: 'MANUAL',
+        triggerSource: 'manual-button',
+        now: new Date()
+      })
+      results.push({
+        siteId: result.siteId,
+        siteName: result.siteName,
+        status: result.status,
+        message: result.message,
+        durationMs: result.durationMs
+      })
+    } catch (error) {
+      results.push({
+        siteId: site.id,
+        siteName: siteDisplayName(site),
+        status: 'FAILED',
+        message: error instanceof Error ? error.message : '签到失败',
+        durationMs: 0
+      })
+    }
+  }
+  await recordOperationLog({
+    action: '批量站点签到',
+    message: `批量签到 ${results.length} 个站点，成功 ${results.filter((item) => item.status === 'SUCCESS').length}`,
+    status: 'SUCCESS',
+    actorId: actor?.id,
+    actorName: actor?.username,
+    ip: req.ip,
+    userAgent: req.get('user-agent')
+  })
+  res.json({ total: results.length, results })
 })
 
 sitesRouter.post('/:id/browse-torrents', requireAuth, async (req, res) => {

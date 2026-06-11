@@ -23,6 +23,13 @@ export type SiteListItem = {
   lastConnectError?: string
   hasApiKey: boolean
   hasCookie: boolean
+  signinEnabled: boolean
+  signinTime: string
+  todaySigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  lastSigninAt?: string
+  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  lastSigninMessage?: string
+  signinRunning: boolean
 }
 
 export type SiteDetail = SiteListItem & {
@@ -37,12 +44,15 @@ export type SiteFormPayload = {
   apiKey?: string
   cookie?: string
   userAgent?: string
+  signinEnabled?: boolean
+  signinTime?: string
 }
 
 export type SiteFilter = {
   keyword?: string
   connectivityStatus?: 'ALL' | ConnectivityStatus
   enabled?: 'ALL' | 'ENABLED' | 'DISABLED'
+  signinEnabled?: 'ALL' | 'ENABLED' | 'DISABLED'
   page?: number
   pageSize?: number
 }
@@ -130,6 +140,28 @@ export function syncSiteTraffic() {
   return apiRequest<{ successCount: number; failedCount: number; syncedAt: string; errors: Array<{ siteId: string; siteName: string; message: string }> }>('/api/sites/sync-traffic', {
     method: 'POST'
   })
+}
+
+export type TriggerSigninResponse = {
+  ok: boolean
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  message: string
+  errorMessage?: string
+  siteId: string
+  siteName: string
+  logId: string
+  durationMs: number
+}
+
+export function triggerSiteSignin(id: string) {
+  return apiRequest<TriggerSigninResponse>(`/api/sites/${id}/signin`, { method: 'POST' })
+}
+
+export function signinAllEnabledSites() {
+  return apiRequest<{
+    total: number
+    results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED'; message: string; durationMs: number }>
+  }>('/api/sites/signin-all', { method: 'POST' })
 }
 
 export function browseSiteTorrents(id: string, payload: { keyword?: string; category?: string; page?: number; pageSize?: number }) {

@@ -1,3 +1,5 @@
+import { listSitesFromDb } from '../storage.js'
+import { performSiteSignin } from '../routes/signin/index.js'
 import { syncSiteTrafficStats } from '../routes/sites.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
@@ -12,6 +14,7 @@ const TORRENT_DOWNLOAD_STATS_SYNC_INTERVAL_MS = 3000
 const TORRENT_IPV6_PEER_SYNC_INTERVAL_MS = 30 * 1000
 const EXPIRED_FREE_DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 1000
 const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
+const SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS = 60 * 1000
 
 type SchedulerJob = {
   name: string
@@ -37,7 +40,8 @@ function readableJobName(name: string) {
     'torrent-download-stats-sync': '种子下载器状态同步',
     'torrent-ipv6-peer-sync': '种子 IPV6 peer 同步',
     'expired-free-download-cleanup': '仅免费下载过期清理',
-    'site-traffic-sync': '站点流量统计同步'
+    'site-traffic-sync': '站点流量统计同步',
+    'site-auto-signin': '站点自动签到'
   }
   return map[name] ?? name
 }
@@ -130,6 +134,15 @@ const jobs: SchedulerJob[] = [
         errorCount: summary.errors.length
       }
     }
+  },
+  {
+    name: 'site-auto-signin',
+    intervalMs: SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS,
+    nextRunAt: Date.now() + SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS,
+    running: false,
+    logStart: false,
+    shouldLogSuccess: (result) => Number(result.scheduledCount ?? 0) > 0,
+    run: async () => runDueSignins()
   }
 ]
 
@@ -211,6 +224,62 @@ function tick() {
     if (job.running || now < job.nextRunAt) continue
     void runJob(job, job.nextRunAt)
   }
+}
+
+export async function runDueSignins() {
+  const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled)
+  const now = new Date()
+  const todayKey = now.toISOString().slice(0, 10)
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+  const due = sites.filter((site) => {
+    const match = /^(2[0-3]|[01]\d):([0-5]\d)$/.exec(site.signinTime)
+    if (!match) return false
+    const targetMinutes = Number(match[1]) * 60 + Number(match[2])
+    if (currentMinutes < targetMinutes) return false
+    if (site.lastSigninAt && site.lastSigninAt.slice(0, 10) === todayKey) return false
+    return true
+  })
+
+  if (!due.length) {
+    return { scheduledCount: 0, successCount: 0, failedCount: 0, skippedCount: 0, details: [] }
+  }
+
+  let successCount = 0
+  let failedCount = 0
+  let skippedCount = 0
+  const details: Array<{ siteId: string; siteName: string; status: string; message: string; durationMs: number }> = []
+
+  for (const site of due) {
+    try {
+      const result = await performSiteSignin(site, {
+        runMode: 'AUTO',
+        triggerSource: 'scheduler',
+        now
+      })
+      details.push({
+        siteId: result.siteId,
+        siteName: result.siteName,
+        status: result.status,
+        message: result.message,
+        durationMs: result.durationMs
+      })
+      if (result.status === 'SUCCESS') successCount += 1
+      else if (result.status === 'SKIPPED') skippedCount += 1
+      else failedCount += 1
+    } catch (error) {
+      failedCount += 1
+      details.push({
+        siteId: site.id,
+        siteName: site.domain,
+        status: 'FAILED',
+        message: error instanceof Error ? error.message : '签到失败',
+        durationMs: 0
+      })
+    }
+  }
+
+  return { scheduledCount: due.length, successCount, failedCount, skippedCount, details }
 }
 
 export function startScheduler() {

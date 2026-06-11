@@ -1,15 +1,23 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { clearLogsByType, queryAllLogs, queryLogs, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
+import {
+  clearLogsByType,
+  queryAllLogs,
+  queryLogs,
+  type OperationLogRecord,
+  type ScheduleLogRecord,
+  type SigninLogRecord,
+  type TaskLogRecord
+} from '../storage.js'
 import { logger, recordOperationLog } from '../utils/logger.js'
 
 export const logsRouter = Router()
 
-type LogType = 'operation' | 'task' | 'schedule'
+type LogType = 'operation' | 'task' | 'schedule' | 'signin'
 
 function requestedLogType(value: unknown): LogType {
   const type = String(value ?? 'operation')
-  if (type === 'task' || type === 'schedule') return type
+  if (type === 'task' || type === 'schedule' || type === 'signin') return type
   return 'operation'
 }
 
@@ -85,6 +93,25 @@ function scheduleRows(items: ScheduleLogRecord[]) {
   return { headers, rows }
 }
 
+function signinRows(items: SigninLogRecord[]) {
+  const headers = ['ID', '时间', '站点', '站点ID', '状态', '来源', '触发方式', '消息', '错误', '开始时间', '结束时间', '耗时ms']
+  const rows = items.map((item) => [
+    item.id,
+    item.createdAt,
+    item.siteName,
+    item.siteId,
+    item.status,
+    item.runMode,
+    item.triggerSource,
+    item.message,
+    item.errorMessage ?? '',
+    item.startedAt,
+    item.finishedAt ?? '',
+    item.durationMs ?? ''
+  ])
+  return { headers, rows }
+}
+
 logsRouter.get('/', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
   const rawPage = Number(req.query.page ?? 1)
@@ -122,10 +149,12 @@ logsRouter.get('/export', requireAuth, async (req, res) => {
       ? taskRows(items as TaskLogRecord[])
       : type === 'schedule'
         ? scheduleRows(items as ScheduleLogRecord[])
-        : operationRows(items as OperationLogRecord[])
+        : type === 'signin'
+          ? signinRows(items as SigninLogRecord[])
+          : operationRows(items as OperationLogRecord[])
   const csv = `\uFEFF${toCsv(source.headers, source.rows)}\n`
   const date = new Date().toISOString().slice(0, 10)
-  const filename = `${type === 'task' ? 'task-logs' : type === 'schedule' ? 'schedule-logs' : 'operation-logs'}-${date}.csv`
+  const filename = `${type === 'task' ? 'task-logs' : type === 'schedule' ? 'schedule-logs' : type === 'signin' ? 'signin-logs' : 'operation-logs'}-${date}.csv`
 
   logger.info('logs', '导出日志', {
     type,
@@ -142,7 +171,7 @@ logsRouter.delete('/', requireAuth, async (req, res) => {
   const type = requestedLogType(req.query.type)
   const { clearedCount } = await clearLogsByType(type)
   const actor = res.locals.user as { id?: string; username?: string } | undefined
-  const logName = type === 'task' ? '任务日志' : type === 'schedule' ? '定时日志' : '操作日志'
+  const logName = type === 'task' ? '任务日志' : type === 'schedule' ? '定时日志' : type === 'signin' ? '签到日志' : '操作日志'
   await recordOperationLog({
     action: `清空${logName}`,
     message: `清空${logName}，共 ${clearedCount} 条`,

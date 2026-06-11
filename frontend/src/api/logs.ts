@@ -53,14 +53,36 @@ export type ScheduleLog = {
   createdAt: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule'
+export type SigninLog = {
+  id: string
+  type: 'SIGNIN'
+  siteId: string
+  siteName: string
+  runMode: 'AUTO' | 'MANUAL'
+  triggerSource: 'scheduler' | 'manual-button'
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  message: string
+  errorMessage?: string
+  startedAt: string
+  finishedAt?: string
+  durationMs?: number
+  createdAt: string
+}
+
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin'
 
 export type LogsResponse<T extends LogType> = {
   type: T
   page: number
   pageSize: number
   total: number
-  items: T extends 'task' ? TaskLog[] : T extends 'schedule' ? ScheduleLog[] : OperationLog[]
+  items: T extends 'task'
+    ? TaskLog[]
+    : T extends 'schedule'
+      ? ScheduleLog[]
+      : T extends 'signin'
+        ? SigninLog[]
+        : OperationLog[]
 }
 
 export function getLogs<T extends LogType>(type: T, page = 1, pageSize = 20) {

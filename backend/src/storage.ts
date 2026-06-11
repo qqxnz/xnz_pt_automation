@@ -67,6 +67,22 @@ export type ScheduleLogRecord = {
   createdAt: string
 }
 
+export type SigninLogRecord = {
+  id: string
+  type: 'SIGNIN'
+  siteId: string
+  siteName: string
+  runMode: 'AUTO' | 'MANUAL'
+  triggerSource: 'scheduler' | 'manual-button'
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  message: string
+  errorMessage?: string
+  startedAt: string
+  finishedAt?: string
+  durationMs?: number
+  createdAt: string
+}
+
 export type TaskRecord = {
   id: string
   name: string
@@ -182,6 +198,11 @@ export type SiteRecord = {
   trafficSyncedAt?: string
   lastConnectedAt?: string
   lastConnectError?: string
+  signinEnabled: boolean
+  signinTime: string
+  lastSigninAt?: string
+  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  lastSigninMessage?: string
   createdAt: string
   updatedAt: string
 }
@@ -244,7 +265,7 @@ type AppStateMigrationPayload = {
   systemSettingsUpdatedAt?: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule'
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin'
 
 export type LogQuery = {
   type: LogType
@@ -254,6 +275,7 @@ export type LogQuery = {
   status?: string
   taskId?: string
   runMode?: string
+  siteId?: string
 }
 
 export type TorrentQuery = {
@@ -302,7 +324,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 7
+const schemaVersion = 9
 
 export const storagePaths = {
   root,
@@ -475,6 +497,11 @@ function createStructuredTables(db: DatabaseSync) {
       traffic_synced_at TEXT,
       last_connected_at TEXT,
       last_connect_error TEXT,
+      signin_enabled INTEGER NOT NULL DEFAULT 0,
+      signin_time TEXT NOT NULL DEFAULT '09:00',
+      last_signin_at TEXT,
+      last_signin_status TEXT,
+      last_signin_message TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -637,6 +664,20 @@ function createStructuredTables(db: DatabaseSync) {
       details_json TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS site_signin_logs (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      site_name TEXT NOT NULL,
+      run_mode TEXT NOT NULL,
+      trigger_source TEXT NOT NULL,
+      status TEXT NOT NULL,
+      message TEXT NOT NULL,
+      error_message TEXT,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      duration_ms INTEGER,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS site_traffic_snapshots (
       id TEXT PRIMARY KEY,
       site_id TEXT NOT NULL,
@@ -684,6 +725,8 @@ function createStructuredTables(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_task_logs_created ON task_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_task_logs_task_created ON task_logs(task_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_schedule_logs_created ON schedule_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_site_signin_logs_created ON site_signin_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_site_signin_logs_site ON site_signin_logs(site_id, created_at DESC);
   `)
 }
 
@@ -827,6 +870,40 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
       dropLegacyStateTable(db)
       tryRemoveLegacyStateFile()
     }
+    if (currentVersion < 8) {
+      // v8 站点签到：扩展 sites 表并新建 site_signin_logs
+      if (!tableHasColumn(db, 'sites', 'signin_enabled')) db.exec('ALTER TABLE sites ADD COLUMN signin_enabled INTEGER NOT NULL DEFAULT 0')
+      if (!tableHasColumn(db, 'sites', 'signin_time')) db.exec("ALTER TABLE sites ADD COLUMN signin_time TEXT NOT NULL DEFAULT '09:00'")
+      if (!tableHasColumn(db, 'sites', 'last_signin_at')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_at TEXT')
+      if (!tableHasColumn(db, 'sites', 'last_signin_status')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_status TEXT')
+      if (!tableHasColumn(db, 'sites', 'last_signin_message')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_message TEXT')
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS site_signin_logs (
+          id TEXT PRIMARY KEY,
+          site_id TEXT NOT NULL,
+          site_name TEXT NOT NULL,
+          run_mode TEXT NOT NULL,
+          trigger_source TEXT NOT NULL,
+          status TEXT NOT NULL,
+          message TEXT NOT NULL,
+          error_message TEXT,
+          started_at TEXT NOT NULL,
+          finished_at TEXT,
+          duration_ms INTEGER,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_site_signin_logs_created ON site_signin_logs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_site_signin_logs_site ON site_signin_logs(site_id, created_at DESC);
+      `)
+    }
+    if (currentVersion < 9) {
+      // v9 自我修复：之前 v8 在某些情况下只创建了 site_signin_logs 表，但 sites 的签到列未添加
+      if (!tableHasColumn(db, 'sites', 'signin_enabled')) db.exec('ALTER TABLE sites ADD COLUMN signin_enabled INTEGER NOT NULL DEFAULT 0')
+      if (!tableHasColumn(db, 'sites', 'signin_time')) db.exec("ALTER TABLE sites ADD COLUMN signin_time TEXT NOT NULL DEFAULT '09:00'")
+      if (!tableHasColumn(db, 'sites', 'last_signin_at')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_at TEXT')
+      if (!tableHasColumn(db, 'sites', 'last_signin_status')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_status TEXT')
+      if (!tableHasColumn(db, 'sites', 'last_signin_message')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_message TEXT')
+    }
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', migratedAt)
@@ -855,10 +932,10 @@ function upsertUser(db: DatabaseSync, item: UserRecord) {
 }
 
 function upsertSite(db: DatabaseSync, item: SiteRecord) {
-  db.prepare(`INSERT INTO sites (id, domain, enabled, api_key, cookie, user_agent, proxy_id, connectivity_status, current_credential, user_level, ratio, ratio_infinite, uploaded, downloaded, traffic_synced_at, last_connected_at, last_connect_error, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET domain = excluded.domain, enabled = excluded.enabled, api_key = excluded.api_key, cookie = excluded.cookie, user_agent = excluded.user_agent, proxy_id = excluded.proxy_id, connectivity_status = excluded.connectivity_status, current_credential = excluded.current_credential, user_level = excluded.user_level, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, uploaded = excluded.uploaded, downloaded = excluded.downloaded, traffic_synced_at = excluded.traffic_synced_at, last_connected_at = excluded.last_connected_at, last_connect_error = excluded.last_connect_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.domain, bool(item.enabled), optional(item.apiKey), optional(item.cookie), optional(item.userAgent), optional(item.proxyId), item.connectivityStatus, optional(item.currentCredential), optional(item.userLevel), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), optional(item.uploaded), optional(item.downloaded), optional(item.trafficSyncedAt), optional(item.lastConnectedAt), optional(item.lastConnectError), item.createdAt, item.updatedAt)
+  db.prepare(`INSERT INTO sites (id, domain, enabled, api_key, cookie, user_agent, proxy_id, connectivity_status, current_credential, user_level, ratio, ratio_infinite, uploaded, downloaded, traffic_synced_at, last_connected_at, last_connect_error, signin_enabled, signin_time, last_signin_at, last_signin_status, last_signin_message, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET domain = excluded.domain, enabled = excluded.enabled, api_key = excluded.api_key, cookie = excluded.cookie, user_agent = excluded.user_agent, proxy_id = excluded.proxy_id, connectivity_status = excluded.connectivity_status, current_credential = excluded.current_credential, user_level = excluded.user_level, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, uploaded = excluded.uploaded, downloaded = excluded.downloaded, traffic_synced_at = excluded.traffic_synced_at, last_connected_at = excluded.last_connected_at, last_connect_error = excluded.last_connect_error, signin_enabled = excluded.signin_enabled, signin_time = excluded.signin_time, last_signin_at = excluded.last_signin_at, last_signin_status = excluded.last_signin_status, last_signin_message = excluded.last_signin_message, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.domain, bool(item.enabled), optional(item.apiKey), optional(item.cookie), optional(item.userAgent), optional(item.proxyId), item.connectivityStatus, optional(item.currentCredential), optional(item.userLevel), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), optional(item.uploaded), optional(item.downloaded), optional(item.trafficSyncedAt), optional(item.lastConnectedAt), optional(item.lastConnectError), bool(item.signinEnabled), item.signinTime, optional(item.lastSigninAt), optional(item.lastSigninStatus), optional(item.lastSigninMessage), item.createdAt, item.updatedAt)
 }
 
 function upsertProxy(db: DatabaseSync, item: ProxyRecord) {
@@ -910,6 +987,13 @@ function upsertScheduleLog(db: DatabaseSync, item: ScheduleLogRecord) {
     .run(item.id, item.jobName, item.message, item.status, optional(item.scheduledAt), optional(item.triggeredAt), optional(item.startedAt), optional(item.finishedAt), optional(item.durationMs), optional(item.summary), optional(item.errorMessage), item.details ? json(item.details) : null, item.createdAt)
 }
 
+function upsertSigninLog(db: DatabaseSync, item: SigninLogRecord) {
+  db.prepare(`INSERT INTO site_signin_logs (id, site_id, site_name, run_mode, trigger_source, status, message, error_message, started_at, finished_at, duration_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, run_mode = excluded.run_mode, trigger_source = excluded.trigger_source, status = excluded.status, message = excluded.message, error_message = excluded.error_message, started_at = excluded.started_at, finished_at = excluded.finished_at, duration_ms = excluded.duration_ms, created_at = excluded.created_at`)
+    .run(item.id, item.siteId, item.siteName, item.runMode, item.triggerSource, item.status, item.message, optional(item.errorMessage), item.startedAt, optional(item.finishedAt), optional(item.durationMs), item.createdAt)
+}
+
 function upsertSnapshot(db: DatabaseSync, item: SiteTrafficSnapshotRecord) {
   db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, uploaded, downloaded, ratio, ratio_infinite, synced_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -946,6 +1030,11 @@ function sitesFromDb(db: DatabaseSync): SiteRecord[] {
     trafficSyncedAt: row.traffic_synced_at ?? undefined,
     lastConnectedAt: row.last_connected_at ?? undefined,
     lastConnectError: row.last_connect_error ?? undefined,
+    signinEnabled: row.signin_enabled === undefined ? false : fromBool(row.signin_enabled),
+    signinTime: row.signin_time ?? '09:00',
+    lastSigninAt: row.last_signin_at ?? undefined,
+    lastSigninStatus: row.last_signin_status ?? undefined,
+    lastSigninMessage: row.last_signin_message ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }))
@@ -1137,6 +1226,24 @@ function scheduleLogFromRow(row: any): ScheduleLogRecord {
   }
 }
 
+function signinLogFromRow(row: any): SigninLogRecord {
+  return {
+    id: row.id,
+    type: 'SIGNIN',
+    siteId: row.site_id,
+    siteName: row.site_name,
+    runMode: row.run_mode,
+    triggerSource: row.trigger_source,
+    status: row.status,
+    message: row.message,
+    errorMessage: row.error_message ?? undefined,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    createdAt: row.created_at
+  }
+}
+
 function snapshotsFromDb(db: DatabaseSync): SiteTrafficSnapshotRecord[] {
   return (db.prepare('SELECT * FROM site_traffic_snapshots ORDER BY date DESC, id').all() as any[]).map((row) => ({
     id: row.id,
@@ -1164,7 +1271,13 @@ function pruneLogTable(db: DatabaseSync, table: string) {
 }
 
 function logTable(type: LogType) {
-  return type === 'task' ? 'task_logs' : type === 'schedule' ? 'schedule_logs' : 'operation_logs'
+  return type === 'task'
+    ? 'task_logs'
+    : type === 'schedule'
+      ? 'schedule_logs'
+      : type === 'signin'
+        ? 'site_signin_logs'
+        : 'operation_logs'
 }
 
 function logWhere(query: LogQuery) {
@@ -1192,6 +1305,19 @@ function logWhere(query: LogQuery) {
   } else if (query.type === 'schedule') {
     if (keyword) {
       clauses.push("lower(job_name || ' ' || message || ' ' || coalesce(summary, '') || ' ' || coalesce(error_message, '') || ' ' || coalesce(details_json, '')) LIKE ?")
+      params.push(`%${keyword}%`)
+    }
+  } else if (query.type === 'signin') {
+    if (query.siteId) {
+      clauses.push('site_id = ?')
+      params.push(query.siteId)
+    }
+    if (query.runMode && query.runMode !== 'ALL') {
+      clauses.push('run_mode = ?')
+      params.push(query.runMode)
+    }
+    if (keyword) {
+      clauses.push("lower(site_name || ' ' || message || ' ' || coalesce(error_message, '')) LIKE ?")
       params.push(`%${keyword}%`)
     }
   } else if (keyword) {
@@ -1328,6 +1454,27 @@ export async function appendScheduleLog(payload: Omit<ScheduleLogRecord, 'id' | 
   return log
 }
 
+export async function appendSigninLog(payload: Omit<SigninLogRecord, 'id' | 'type' | 'createdAt'>) {
+  const db = await readyDb()
+  const log: SigninLogRecord = {
+    id: randomUUID(),
+    type: 'SIGNIN',
+    createdAt: new Date().toISOString(),
+    ...payload
+  }
+  upsertSigninLog(db, log)
+  pruneLogTable(db, 'site_signin_logs')
+  return log
+}
+
+export async function listLatestSigninLogBySiteAndDate(siteId: string, dateKey: string): Promise<SigninLogRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare(
+    'SELECT * FROM site_signin_logs WHERE site_id = ? AND substr(created_at, 1, 10) = ? ORDER BY created_at DESC, id DESC LIMIT 1'
+  ).get(siteId, dateKey) as any
+  return row ? signinLogFromRow(row) : undefined
+}
+
 export async function clearLogsByType(type: LogType) {
   const db = await readyDb()
   const table = logTable(type)
@@ -1336,7 +1483,7 @@ export async function clearLogsByType(type: LogType) {
   return { clearedCount: Number(row.total ?? 0) }
 }
 
-export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord>(query: LogQuery) {
+export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord>(query: LogQuery) {
   const db = await readyDb()
   const table = logTable(query.type)
   const where = logWhere(query)
@@ -1350,11 +1497,13 @@ export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | S
       ? rows.map(taskLogFromRow)
       : query.type === 'schedule'
         ? rows.map(scheduleLogFromRow)
-        : rows.map(operationLogFromRow)
+        : query.type === 'signin'
+          ? rows.map(signinLogFromRow)
+          : rows.map(operationLogFromRow)
   return { items: items as T[], total: Number(totalRow.total ?? 0), page, pageSize }
 }
 
-export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord>(type: LogType) {
+export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord>(type: LogType) {
   const db = await readyDb()
   const rows = db.prepare(`SELECT * FROM ${logTable(type)} ORDER BY created_at DESC, id DESC`).all() as any[]
   const items =
@@ -1362,7 +1511,9 @@ export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord 
       ? rows.map(taskLogFromRow)
       : type === 'schedule'
         ? rows.map(scheduleLogFromRow)
-        : rows.map(operationLogFromRow)
+        : type === 'signin'
+          ? rows.map(signinLogFromRow)
+          : rows.map(operationLogFromRow)
   return items as T[]
 }
 
@@ -1996,6 +2147,11 @@ function sitesFromDbFromRow(row: any): SiteRecord {
     trafficSyncedAt: row.traffic_synced_at ?? undefined,
     lastConnectedAt: row.last_connected_at ?? undefined,
     lastConnectError: row.last_connect_error ?? undefined,
+    signinEnabled: row.signin_enabled === undefined ? false : fromBool(row.signin_enabled),
+    signinTime: row.signin_time ?? '09:00',
+    lastSigninAt: row.last_signin_at ?? undefined,
+    lastSigninStatus: row.last_signin_status ?? undefined,
+    lastSigninMessage: row.last_signin_message ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

@@ -36,6 +36,9 @@
           <button type="button" :class="{ active: activeType === 'schedule' }" @click="switchType('schedule')">
             定时日志
           </button>
+          <button type="button" :class="{ active: activeType === 'signin' }" @click="switchType('signin')">
+            签到日志
+          </button>
         </div>
         <span>{{ total }} 条记录</span>
       </div>
@@ -73,13 +76,22 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
-import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type ScheduleLog, type TaskLog } from '../api/logs'
+import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type ScheduleLog, type SigninLog, type TaskLog } from '../api/logs'
 
 const route = useRoute()
-const activeType = ref<LogType>(route.query.type === 'task' ? 'task' : route.query.type === 'schedule' ? 'schedule' : 'operation')
+const initialType: LogType =
+  route.query.type === 'task'
+    ? 'task'
+    : route.query.type === 'schedule'
+      ? 'schedule'
+      : route.query.type === 'signin'
+        ? 'signin'
+        : 'operation'
+const activeType = ref<LogType>(initialType)
 const operationLogs = ref<OperationLog[]>([])
 const taskLogs = ref<TaskLog[]>([])
 const scheduleLogs = ref<ScheduleLog[]>([])
+const signinLogs = ref<SigninLog[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 const clearing = ref(false)
@@ -89,9 +101,19 @@ const page = ref(1)
 const pageSize = 20
 const total = ref(0)
 
-const items = computed(() => (activeType.value === 'operation' ? operationLogs.value : activeType.value === 'schedule' ? scheduleLogs.value : taskLogs.value))
+const items = computed(() => {
+  if (activeType.value === 'operation') return operationLogs.value
+  if (activeType.value === 'schedule') return scheduleLogs.value
+  if (activeType.value === 'signin') return signinLogs.value
+  return taskLogs.value
+})
 const totalPages = computed(() => Math.max(Math.ceil(total.value / pageSize), 1))
-const activeTypeText = computed(() => (activeType.value === 'operation' ? '操作日志' : activeType.value === 'schedule' ? '定时日志' : '任务日志'))
+const activeTypeText = computed(() => {
+  if (activeType.value === 'operation') return '操作日志'
+  if (activeType.value === 'schedule') return '定时日志'
+  if (activeType.value === 'signin') return '签到日志'
+  return '任务日志'
+})
 const emptyText = computed(() => `暂无${activeTypeText.value}。`)
 
 function switchType(type: LogType) {
@@ -112,22 +134,24 @@ function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
 }
 
-function statusText(status: OperationLog['status'] | TaskLog['status'] | ScheduleLog['status']) {
+function statusText(status: OperationLog['status'] | TaskLog['status'] | ScheduleLog['status'] | SigninLog['status']) {
   const map = {
     SUCCESS: '成功',
     FAILED: '失败',
-    RUNNING: '运行中'
-  }
-  return map[status]
+    RUNNING: '运行中',
+    SKIPPED: '已跳过'
+  } as const
+  return map[status as keyof typeof map] ?? status
 }
 
-function primaryText(item: OperationLog | TaskLog | ScheduleLog) {
+function primaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
   if (item.type === 'OPERATION') return item.action
   if (item.type === 'SCHEDULE') return scheduleJobText(item.jobName)
+  if (item.type === 'SIGNIN') return item.siteName
   return item.taskName
 }
 
-function secondaryText(item: OperationLog | TaskLog | ScheduleLog) {
+function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
   if (item.type === 'TASK') {
     return [
       item.taskId ? `任务 ID：${item.taskId}` : '系统任务',
@@ -150,6 +174,18 @@ function secondaryText(item: OperationLog | TaskLog | ScheduleLog) {
       .filter(Boolean)
       .join(' / ')
   }
+  if (item.type === 'SIGNIN') {
+    return [
+      `来源：${item.runMode === 'AUTO' ? '自动' : '手动'}`,
+      item.triggerSource === 'manual-button' ? '触发：手动按钮' : '触发：调度器',
+      `开始：${formatTime(item.startedAt)}`,
+      item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : '',
+      item.durationMs === undefined ? '' : `耗时：${item.durationMs}ms`,
+      item.errorMessage ? `错误：${item.errorMessage}` : ''
+    ]
+      .filter(Boolean)
+      .join(' / ')
+  }
   return [item.actorName ? `操作者：${item.actorName}` : '操作者：未知', item.ip ? `IP：${item.ip}` : ''].filter(Boolean).join(' / ')
 }
 
@@ -159,7 +195,8 @@ function scheduleJobText(jobName: string) {
     'task-auto-run': '自动任务执行',
     'torrent-download-stats-sync': '种子下载器状态同步',
     'expired-free-download-cleanup': '仅免费下载过期清理',
-    'site-traffic-sync': '站点流量统计同步'
+    'site-traffic-sync': '站点流量统计同步',
+    'site-auto-signin': '站点自动签到'
   }
   return map[jobName] ?? jobName
 }
@@ -183,9 +220,12 @@ function taskResultText(item: TaskLog) {
   return parts.join('，')
 }
 
-function failureDetails(item: OperationLog | TaskLog | ScheduleLog) {
+function failureDetails(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
   if (item.type === 'SCHEDULE') {
     return item.details ? [JSON.stringify(item.details)] : []
+  }
+  if (item.type === 'SIGNIN') {
+    return item.errorMessage ? [`签到失败：${item.errorMessage}`] : []
   }
   if (item.type !== 'TASK') return []
   const details = [...(item.failureDetails ?? []), item.fetchErrorMessage ? `抓取失败：${item.fetchErrorMessage}` : '', ...(item.pushErrorMessages ?? [])].filter(Boolean)
@@ -242,6 +282,10 @@ async function loadLogs() {
     } else if (activeType.value === 'schedule') {
       const result = await getLogs('schedule', page.value, pageSize)
       scheduleLogs.value = result.items
+      total.value = result.total
+    } else if (activeType.value === 'signin') {
+      const result = await getLogs('signin', page.value, pageSize)
+      signinLogs.value = result.items
       total.value = result.total
     } else {
       const result = await getLogs('task', page.value, pageSize)

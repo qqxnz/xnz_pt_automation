@@ -30,6 +30,11 @@
           <option value="ENABLED">已启用</option>
           <option value="DISABLED">已禁用</option>
         </select>
+        <select v-model="filters.signinEnabled" @change="loadSites">
+          <option value="ALL">签到：全部</option>
+          <option value="ENABLED">已开启</option>
+          <option value="DISABLED">已关闭</option>
+        </select>
         <button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
           {{ loading ? '刷新中...' : '刷新' }}
         </button>
@@ -59,6 +64,7 @@
             <span>昨日上传量</span>
             <span>今日上传量</span>
             <span>凭证</span>
+            <span>签到</span>
             <span>操作</span>
           </div>
           <div v-for="site in items" :key="site.id" class="site-row">
@@ -76,7 +82,9 @@
             <span>{{ formatBytes(site.yesterdayUploaded) }}</span>
             <span>{{ formatBytes(site.todayUploaded) }}</span>
             <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
+            <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
             <div class="row-actions">
+              <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
               <button type="button" @click="testSite(site)">测试</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
@@ -119,9 +127,11 @@
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>
+            <p>签到：{{ signinStatusMeta(site).label }}<span v-if="site.signinEnabled">（{{ site.signinTime }}）</span></p>
             <p>最近成功：{{ formatDate(site.lastConnectedAt) }}</p>
             <p v-if="site.lastConnectError">错误：{{ site.lastConnectError }}</p>
             <div class="row-actions">
+              <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
               <button type="button" @click="testSite(site)">测试</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
@@ -184,6 +194,19 @@
                 <button type="button" @click="restoreUserAgent">恢复当前浏览器</button>
               </div>
             </label>
+          </section>
+
+          <section>
+            <h3>签到设置</h3>
+            <label class="inline-check">
+              <input v-model="form.signinEnabled" type="checkbox" /> 启用每日签到
+            </label>
+            <label v-if="form.signinEnabled">
+              签到时间
+              <input v-model.trim="form.signinTime" placeholder="HH:mm，例如 09:00" pattern="^([01]\d|2[0-3]):[0-5]\d$" required />
+            </label>
+            <p v-if="!form.signinEnabled" class="form-hint">开启后调度器会按签到时间自动签到；列表【签到】按钮始终可用。</p>
+            <p v-else class="form-hint">时间采用 24 小时制 HH:mm；签到结果将记录到【日志 &gt; 签到日志】。</p>
           </section>
         </div>
 
@@ -254,6 +277,7 @@ import {
   getSite,
   getSites,
   testSiteConnectivity,
+  triggerSiteSignin,
   updateSite,
   type BrowseTorrentItem,
   type SiteFilter,
@@ -287,7 +311,8 @@ const browseTotal = ref(0)
 const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
   keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
   connectivityStatus: typeof route.query.connectivityStatus === 'string' ? (route.query.connectivityStatus as SiteFilter['connectivityStatus']) ?? 'ALL' : 'ALL',
-  enabled: typeof route.query.enabled === 'string' ? (route.query.enabled as SiteFilter['enabled']) ?? 'ALL' : 'ALL'
+  enabled: typeof route.query.enabled === 'string' ? (route.query.enabled as SiteFilter['enabled']) ?? 'ALL' : 'ALL',
+  signinEnabled: typeof route.query.signinEnabled === 'string' ? (route.query.signinEnabled as SiteFilter['signinEnabled']) ?? 'ALL' : 'ALL'
 })
 
 const form = reactive<SiteFormPayload>({
@@ -295,7 +320,9 @@ const form = reactive<SiteFormPayload>({
   enabled: true,
   apiKey: '',
   cookie: '',
-  userAgent: ''
+  userAgent: '',
+  signinEnabled: false,
+  signinTime: '09:00'
 })
 
 const browseFilters = reactive({
@@ -305,7 +332,7 @@ const browseFilters = reactive({
   pageSize: 100
 })
 
-const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.enabled !== 'ALL'))
+const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.enabled !== 'ALL' || filters.signinEnabled !== 'ALL'))
 const statCards = computed(() => [
   { label: '全部站点', value: stats.value.total, className: '' },
   { label: '在线站点', value: stats.value.online, className: 'success' },
@@ -327,7 +354,9 @@ function resetForm() {
     enabled: true,
     apiKey: '',
     cookie: '',
-    userAgent: navigator.userAgent
+    userAgent: navigator.userAgent,
+    signinEnabled: false,
+    signinTime: '09:00'
   })
 }
 
@@ -347,6 +376,25 @@ function credentialLabel(site: SiteListItem) {
   if (site.hasApiKey) return 'API Key'
   if (site.hasCookie) return 'Cookie'
   return '无可用凭证'
+}
+
+function signinStatusMeta(site: SiteListItem) {
+  if (!site.signinEnabled) {
+    return { label: '已关闭', className: 'muted-chip' }
+  }
+  if (site.signinRunning) {
+    return { label: '签到中...', className: 'unknown-chip' }
+  }
+  if (site.todaySigninStatus === 'SUCCESS') {
+    return { label: '已签到', className: 'online-chip' }
+  }
+  if (site.todaySigninStatus === 'FAILED') {
+    return { label: '签到失败', className: 'auth-chip' }
+  }
+  if (site.todaySigninStatus === 'SKIPPED') {
+    return { label: '已跳过', className: 'unknown-chip' }
+  }
+  return { label: '待签到', className: 'unknown-chip' }
 }
 
 function formatDate(value?: string) {
@@ -405,7 +453,8 @@ async function loadSites() {
       query: {
         keyword: filters.keyword || undefined,
         connectivityStatus: filters.connectivityStatus === 'ALL' ? undefined : filters.connectivityStatus,
-        enabled: filters.enabled === 'ALL' ? undefined : filters.enabled
+        enabled: filters.enabled === 'ALL' ? undefined : filters.enabled,
+        signinEnabled: filters.signinEnabled === 'ALL' ? undefined : filters.signinEnabled
       }
     })
   } catch (err) {
@@ -431,7 +480,9 @@ async function openEdit(site: SiteListItem) {
     enabled: detail.enabled,
     apiKey: detail.apiKey || '',
     cookie: detail.cookie || '',
-    userAgent: detail.userAgent || navigator.userAgent
+    userAgent: detail.userAgent || navigator.userAgent,
+    signinEnabled: detail.signinEnabled,
+    signinTime: detail.signinTime || '09:00'
   })
   originalApiKey.value = detail.apiKey || ''
   originalCookie.value = detail.cookie || ''
@@ -446,6 +497,7 @@ function validateForm() {
     return '站点域名必须是合法域名或 URL'
   }
   if (!form.apiKey?.trim() && !form.cookie?.trim() && !detailHasApiKey.value && !detailHasCookie.value) return 'API Key 和 Cookie 至少填写一个'
+  if (form.signinEnabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.signinTime?.trim() ?? '')) return '签到时间必须是 HH:mm 格式'
   return ''
 }
 
@@ -455,7 +507,9 @@ function buildSitePayload(): SiteFormPayload {
     enabled: form.enabled,
     apiKey: editingSiteId.value && form.apiKey === originalApiKey.value ? originalApiKey.value || undefined : form.apiKey?.trim() || undefined,
     cookie: editingSiteId.value && form.cookie === originalCookie.value ? originalCookie.value || undefined : form.cookie?.trim() || undefined,
-    userAgent: form.userAgent?.trim() || undefined
+    userAgent: form.userAgent?.trim() || undefined,
+    signinEnabled: form.signinEnabled,
+    signinTime: form.signinEnabled ? (form.signinTime?.trim() || '09:00') : (form.signinTime?.trim() || '09:00')
   }
 }
 
@@ -493,6 +547,29 @@ async function testSite(site: SiteListItem) {
     Snackbar.error(err instanceof Error ? err.message : '测试失败')
   }
   await loadSites()
+}
+
+async function triggerSignin(site: SiteListItem) {
+  if (site.signinRunning) {
+    Snackbar.warning('该站点签到正在执行中')
+    return
+  }
+  const target = items.value.find((item) => item.id === site.id)
+  if (target) target.signinRunning = true
+  try {
+    const result = await triggerSiteSignin(site.id)
+    if (result.status === 'SUCCESS') {
+      Snackbar.success(result.message)
+    } else if (result.status === 'SKIPPED') {
+      Snackbar.warning(result.message)
+    } else {
+      Snackbar.error(result.errorMessage || result.message || '签到失败')
+    }
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '签到失败')
+  } finally {
+    await loadSites()
+  }
 }
 
 async function openBrowse(site: SiteListItem) {
@@ -535,6 +612,7 @@ function resetFilters() {
   filters.keyword = ''
   filters.connectivityStatus = 'ALL'
   filters.enabled = 'ALL'
+  filters.signinEnabled = 'ALL'
   loadSites()
 }
 
