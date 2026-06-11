@@ -1,9 +1,9 @@
 import type { SiteRecord } from '../../storage.js'
-import { siteBaseUrl, siteDisplayName } from '../sites.js'
+import { normalizeSiteName, siteBaseUrl, siteDisplayName } from '../sites.js'
 import type { SigninContext, SigninHandler, SigninResult } from './types.js'
 
 export type StandardNexusPhpOptions = {
-  matchDomains: string[]
+  matchNames: string[]
   signinPath?: string
   method?: 'POST' | 'GET'
   bodyBuilder?: () => URLSearchParams | string
@@ -19,8 +19,8 @@ export type StandardNexusPhpOptions = {
   successMessageBuilder?: (displayName: string, text: string, responseJson: unknown) => string
 }
 
-const DEFAULT_SUCCESS_PATTERNS = [/已连续签到/, /签到成功/, /本次签到/, /签到已得/, /签到获得/, /明日再来/, /已签到/]
-const DEFAULT_REPEAT_PATTERNS = [/你今天已经签到过了/, /今日已签到/, /今天已经签到/, /已经签到/, /已领取/]
+const DEFAULT_SUCCESS_PATTERNS = [/已连续签到/, /签到成功/, /本次签到/, /签到已得/, /签到获得/, /明日再来/]
+const DEFAULT_REPEAT_PATTERNS = [/你今天已经签到过了/, /今日已签到/, /今天已经签到/, /已经签到/, /已领取/, /已签到/]
 const DEFAULT_AUTH_FAILURE_PATTERNS = [/Cookie.*失效/, /请先登录/, /需要登录/]
 
 function decodeHtml(value: string) {
@@ -53,24 +53,18 @@ function cookieHeaderValue(value: string) {
     .trim()
 }
 
-function normalizeDomain(value: string) {
-  const trimmed = value.trim()
-  const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
-  return url.hostname.toLowerCase().replace(/^www\./, '')
-}
-
 export function makeStandardNexusPhpSignin(options: StandardNexusPhpOptions): SigninHandler {
   const successPatterns = options.successPatterns ?? DEFAULT_SUCCESS_PATTERNS
   const repeatPatterns = options.repeatPatterns ?? DEFAULT_REPEAT_PATTERNS
   const authFailurePatterns = options.authFailurePatterns ?? DEFAULT_AUTH_FAILURE_PATTERNS
-  const matchDomains = new Set(options.matchDomains.map((domain) => normalizeDomain(domain)))
+  const matchNames = new Set(options.matchNames.map((name) => normalizeSiteName(name)))
   const signinPath = options.signinPath ?? '/attendance.php'
   const method = options.method ?? 'POST'
   const bodyBuilder = options.bodyBuilder ?? (() => new URLSearchParams({ action: 'post', content: '' }))
   const responseType = options.responseType ?? 'html'
 
   return {
-    match: (site) => matchDomains.has(normalizeDomain(site.domain)),
+    match: (site) => matchNames.has(normalizeSiteName(site.name)),
     signin: async (site, _ctx: SigninContext): Promise<SigninResult> => {
       const displayName = siteDisplayName(site)
       if (!site.enabled) {
@@ -106,8 +100,8 @@ export function makeStandardNexusPhpSignin(options: StandardNexusPhpOptions): Si
         if (!response.ok) {
           return {
             status: 'FAILED',
-            message: `${displayName} 签到失败：HTTP ${response.status}`,
-            errorMessage: `HTTP ${response.status}`
+            message: `${displayName} 签到失败：HTTP ${response.status} (${response.url})`,
+            errorMessage: `HTTP ${response.status} | ${response.url}`
           }
         }
         const rawText = await response.text()

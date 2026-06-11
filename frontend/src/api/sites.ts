@@ -5,6 +5,7 @@ export type Credential = 'API_KEY' | 'COOKIE'
 
 export type SiteListItem = {
   id: string
+  name: string
   displayName: string
   domain: string
   baseUrl: string
@@ -39,6 +40,7 @@ export type SiteDetail = SiteListItem & {
 }
 
 export type SiteFormPayload = {
+  name: string
   domain: string
   enabled: boolean
   apiKey?: string
@@ -75,6 +77,12 @@ export type TestSiteConnectivityResponse = {
   uploaded?: number
   downloaded?: number
   errorMessage?: string
+  diagnostic?: {
+    finalUrl?: string
+    httpStatus?: number
+    bodyExcerpt?: string
+    matchedKeywords?: string[]
+  }
 }
 
 export type BrowseTorrentItem = {

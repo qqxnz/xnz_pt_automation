@@ -4,7 +4,7 @@
       <div class="dashboard-head">
         <div>
           <h1>站点</h1>
-          <p>管理 PT 站点域名、API Key、Cookie、连通状态和用户统计</p>
+          <p>管理 PT 站点名称、访问地址、API Key、Cookie、连通状态和用户统计</p>
         </div>
         <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
       </div>
@@ -155,6 +155,7 @@
         <div class="form-grid compact-form-grid">
           <section>
             <h3>基础信息</h3>
+            <label>站点名称<input v-model.trim="form.name" required placeholder="馒头 / M-Team" /></label>
             <label>站点域名<input v-model.trim="form.domain" required placeholder="pt.m-team.cc" /></label>
             <label class="inline-check"><input v-model="form.enabled" type="checkbox" /> 启用站点</label>
           </section>
@@ -316,6 +317,7 @@ const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
 })
 
 const form = reactive<SiteFormPayload>({
+  name: '',
   domain: '',
   enabled: true,
   apiKey: '',
@@ -350,6 +352,7 @@ function resetForm() {
   originalApiKey.value = ''
   originalCookie.value = ''
   Object.assign(form, {
+    name: '',
     domain: '',
     enabled: true,
     apiKey: '',
@@ -476,6 +479,7 @@ async function openEdit(site: SiteListItem) {
   detailHasApiKey.value = detail.hasApiKey
   detailHasCookie.value = detail.hasCookie
   Object.assign(form, {
+    name: detail.name,
     domain: detail.domain,
     enabled: detail.enabled,
     apiKey: detail.apiKey || '',
@@ -490,6 +494,7 @@ async function openEdit(site: SiteListItem) {
 }
 
 function validateForm() {
+  if (!form.name.trim()) return '站点名称不能为空'
   if (!form.domain.trim()) return '站点域名不能为空'
   try {
     new URL(form.domain.includes('://') ? form.domain : `https://${form.domain}`)
@@ -503,6 +508,7 @@ function validateForm() {
 
 function buildSitePayload(): SiteFormPayload {
   return {
+    name: form.name.trim(),
     domain: form.domain.trim(),
     enabled: form.enabled,
     apiKey: editingSiteId.value && form.apiKey === originalApiKey.value ? originalApiKey.value || undefined : form.apiKey?.trim() || undefined,

@@ -25,14 +25,14 @@ type Credential = 'API_KEY' | 'COOKIE'
 
 type SiteDefinition = {
   displayName: string
-  domains: string[]
-  canonicalDomain?: string
+  names: string[]
   strategy: SiteStrategy
   profilePath: string
   torrentPath: string
 }
 
 type SitePayload = {
+  name?: string
   domain?: string
   enabled?: boolean
   apiKey?: string
@@ -70,93 +70,84 @@ export type TorrentListItem = {
 const SITE_DEFINITIONS: SiteDefinition[] = [
   {
     displayName: '馒头',
-    domains: ['m-team.cc', 'pt.m-team.cc', 'api.m-team.cc'],
+    names: ['馒头', 'mteam', 'm-team'],
     strategy: 'MTEAM_API',
     profilePath: '/api/member/profile',
     torrentPath: '/api/torrent/search'
   },
   {
     displayName: '憨憨',
-    domains: ['hhanclub.net', 'www.hhanclub.net'],
+    names: ['憨憨', 'hhan', 'hhanclub'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '家园',
-    domains: ['hdhome.org', 'www.hdhome.org'],
+    names: ['家园', 'hdhome'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '麒麟',
-    domains: ['hdkyl.in', 'www.hdkyl.in'],
-    canonicalDomain: 'www.hdkyl.in',
+    names: ['麒麟', 'hdkyl'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '听听歌',
-    domains: ['totheglory.im', 'www.totheglory.im'],
-    canonicalDomain: 'totheglory.im',
+    names: ['听听歌', 'totheglory', 'ttg'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '朋友',
-    domains: ['pt.keepfrds.com', 'keepfrds.com'],
-    canonicalDomain: 'pt.keepfrds.com',
+    names: ['朋友', 'keepfrds'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '彩虹岛',
-    domains: ['ptchdbits.co', 'www.ptchdbits.co'],
-    canonicalDomain: 'ptchdbits.co',
+    names: ['彩虹岛', '彩虹', 'chdbits'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '猫站',
-    domains: ['pterclub.net', 'pterclub.com', 'www.pterclub.com'],
-    canonicalDomain: 'pterclub.com',
+    names: ['猫站', 'pterclub'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '我堡',
-    domains: ['ourbits.club', 'www.ourbits.club'],
-    canonicalDomain: 'ourbits.club',
+    names: ['我堡', 'ourbits'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '铂金家',
-    domains: ['pthome.net', 'www.pthome.net'],
-    canonicalDomain: 'pthome.net',
+    names: ['铂金家', 'pthome'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '优堡',
-    domains: ['ubits.club', 'www.ubits.club'],
-    canonicalDomain: 'ubits.club',
+    names: ['优堡', 'ubits'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '时间',
-    domains: ['pttime.org', 'www.pttime.org'],
-    canonicalDomain: 'pttime.org',
+    names: ['时间', 'pttime'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
@@ -165,7 +156,7 @@ const SITE_DEFINITIONS: SiteDefinition[] = [
 
 const DEFAULT_NEXUSPHP_DEFINITION: SiteDefinition = {
   displayName: '',
-  domains: [],
+  names: [],
   strategy: 'NEXUSPHP',
   profilePath: '/userdetails.php',
   torrentPath: '/torrents.php'
@@ -203,26 +194,37 @@ const MTEAM_ROLE_LEVELS: Record<string, string> = {
   '9': '大臣'
 }
 
-function normalizeDomain(value: string) {
+function extractHostname(value: string) {
   const trimmed = value.trim()
   const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
-  return url.hostname.toLowerCase().replace(/^www\./, '')
+  return url.hostname.toLowerCase()
 }
 
-function getSiteDefinition(domain: string) {
-  return SITE_DEFINITIONS.find((definition) => definition.domains.some((item) => normalizeDomain(item) === domain))
+function extractHostnamePreserveCase(value: string) {
+  const trimmed = value.trim()
+  const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
+  return url.hostname
 }
 
-function getSiteAdapter(domain: string) {
-  return getSiteDefinition(domain) ?? DEFAULT_NEXUSPHP_DEFINITION
+export function normalizeSiteName(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/[\s._-]+/g, '')
+}
+
+function getSiteDefinition(name: string) {
+  const normalized = normalizeSiteName(name)
+  return SITE_DEFINITIONS.find((definition) => definition.names.some((item) => normalizeSiteName(item) === normalized))
+}
+
+function getSiteAdapter(name: string) {
+  return getSiteDefinition(name) ?? DEFAULT_NEXUSPHP_DEFINITION
 }
 
 export function siteDisplayName(site: SiteRecord) {
-  return getSiteDefinition(site.domain)?.displayName ?? site.domain
+  return getSiteDefinition(site.name)?.displayName ?? site.name
 }
 
 export function siteBaseUrl(site: SiteRecord) {
-  return `https://${getSiteDefinition(site.domain)?.canonicalDomain ?? site.domain}`
+  return `https://${site.domain}`
 }
 
 export function resolveSiteUrl(site: SiteRecord, value: string) {
@@ -341,6 +343,7 @@ async function listItem(site: SiteRecord) {
   const latest = await listLatestSigninLogBySiteAndDate(site.id, today)
   return {
     id: site.id,
+    name: site.name,
     displayName: siteDisplayName(site),
     domain: site.domain,
     baseUrl: siteBaseUrl(site),
@@ -379,9 +382,10 @@ async function detailItem(site: SiteRecord) {
 }
 
 function validatePayload(payload: SitePayload, existing?: SiteRecord) {
+  if (!payload.name?.trim()) return '站点名称不能为空'
   if (!payload.domain?.trim()) return '站点域名不能为空'
   try {
-    normalizeDomain(payload.domain)
+    extractHostname(payload.domain)
   } catch {
     return '站点域名必须是合法域名或 URL'
   }
@@ -471,8 +475,11 @@ function parseSizeToBytes(value: string) {
 
 function parseSizeByLabel(text: string, labels: string[]) {
   for (const label of labels) {
-    const match = text.match(new RegExp(`${label}\\s*[:：]?\\s*([\\d,.]+\\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B))`, 'i'))
-    if (match) return parseSizeToBytes(match[1])
+    // 用分句边界或非「上下」字做前缀锚定，避免「上下载:不限速」里的「下载」被误匹配
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = `(?:^|[；;。\\n]|[^上下载])${escaped}\\s*[:：=]?\\s*([\\d,.]+\\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B))`
+    const match = text.match(new RegExp(pattern, 'i'))
+    if (match && match[1]) return parseSizeToBytes(match[1])
   }
   return undefined
 }
@@ -522,7 +529,7 @@ function parseFreeEndAt(text: string, html = '') {
 }
 
 function parseRatioByLabel(text: string) {
-  const match = text.match(/(?:分享率|分享率\s*\[[^\]]+\])\s*[:：]?\s*(∞|inf|infinity|[\d,.]+)/i)
+  const match = text.match(/(?:分享率|分享率\s*\[[^\]]+\]|Share.?Ratio|Ratio)\s*[:：=]?\s*(∞|inf|infinity|[\d,.]+)/i)
   if (!match) return {}
   if (['∞', 'inf', 'infinity'].includes(match[1].toLowerCase())) return { ratioInfinite: true }
   const ratio = toNumber(match[1])
@@ -563,8 +570,8 @@ function parseTrafficStats(html: string): TrafficStats {
   return {
     userLevel: parseUserLevel(html, cells, text),
     ...parseRatioByLabel(text),
-    uploaded: parseSizeByLabel(text, ['上传量', '上傳量', '上传', '上傳']),
-    downloaded: parseSizeByLabel(text, ['下载量', '下載量', '下载', '下載'])
+    uploaded: parseSizeByLabel(text, ['上传量', '上傳量', '上载量', '上載量', '上传', '上傳', 'Uploaded']),
+    downloaded: parseSizeByLabel(text, ['下载量', '下載量', '下载总量', '下載總量', '下载', '下載', 'Downloaded'])
   }
 }
 
@@ -582,7 +589,7 @@ function cookieHeaderValue(value: string) {
     .trim()
 }
 
-async function fetchWithCookie(site: SiteRecord, path: string) {
+async function fetchWithCookie(site: SiteRecord, path: string): Promise<{ text: string; finalUrl: string; httpStatus: number }> {
   const cookie = site.cookie ? cookieHeaderValue(site.cookie) : ''
   if (!cookie) throw new Error('Cookie 未配置或不可用')
   const errors: string[] = []
@@ -598,7 +605,7 @@ async function fetchWithCookie(site: SiteRecord, path: string) {
         redirect: 'follow'
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return response.text()
+      return { text: await response.text(), finalUrl: response.url, httpStatus: response.status }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'fetch failed')
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
@@ -617,10 +624,10 @@ function findOwnProfilePath(html: string, site: SiteRecord) {
   return undefined
 }
 
-async function fetchNexusProfileHtml(site: SiteRecord, profilePath: string) {
-  const html = await fetchWithCookie(site, profilePath)
-  const ownProfilePath = findOwnProfilePath(html, site)
-  if (!ownProfilePath || resolveSiteUrl(site, profilePath) === ownProfilePath) return html
+async function fetchNexusProfileHtml(site: SiteRecord, profilePath: string): Promise<{ text: string; finalUrl: string; httpStatus: number }> {
+  const first = await fetchWithCookie(site, profilePath)
+  const ownProfilePath = findOwnProfilePath(first.text, site)
+  if (!ownProfilePath || resolveSiteUrl(site, profilePath) === ownProfilePath) return first
   return fetchWithCookie(site, ownProfilePath)
 }
 
@@ -658,33 +665,56 @@ async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
   }
 }
 
-async function fetchTrafficByCredential(site: SiteRecord, credential: Credential) {
-  const definition = getSiteAdapter(site.domain)
+async function fetchTrafficByCredential(site: SiteRecord, credential: Credential): Promise<{ stats: TrafficStats; meta?: { finalUrl: string; httpStatus: number; bodyExcerpt: string } }> {
+  const definition = getSiteAdapter(site.name)
   if (credential === 'API_KEY') {
     if (definition?.strategy !== 'MTEAM_API') throw new Error('该站点不支持 API Key 获取用户信息')
-    return fetchMTeamProfile(site)
+    return { stats: await fetchMTeamProfile(site) }
   }
-  return parseTrafficStats(await fetchNexusProfileHtml(site, definition.profilePath))
+  const fetched = await fetchNexusProfileHtml(site, definition.profilePath)
+  const stats = parseTrafficStats(fetched.text)
+  const bodyExcerpt = fetched.text.replace(/\s+/g, ' ').trim().slice(0, 300)
+  return { stats, meta: { finalUrl: fetched.finalUrl, httpStatus: fetched.httpStatus, bodyExcerpt } }
 }
 
 async function testSite(site: SiteRecord) {
   const attempts: Credential[] = site.apiKey ? ['API_KEY'] : []
   if (site.cookie) attempts.push('COOKIE')
   const errors: string[] = []
+  const diagnostic: { credential?: Credential; finalUrl?: string; httpStatus?: number; bodyExcerpt?: string; matchedKeywords?: string[] } = {}
 
   for (const credential of attempts) {
     try {
-      const stats = await fetchTrafficByCredential(site, credential)
+      const { stats, meta } = await fetchTrafficByCredential(site, credential)
       if (stats.uploaded === undefined || stats.downloaded === undefined || (stats.ratio === undefined && !stats.ratioInfinite)) {
+        diagnostic.credential = credential
+        diagnostic.finalUrl = meta?.finalUrl
+        diagnostic.httpStatus = meta?.httpStatus
+        diagnostic.bodyExcerpt = meta?.bodyExcerpt
+        diagnostic.matchedKeywords = []
         throw new Error('未找到上传量、下载量或分享率')
       }
-      return { credential, stats }
+      return { credential, stats, diagnostic: meta }
     } catch (error) {
-      errors.push(`${credential}: ${error instanceof Error ? error.message : '访问失败'}`)
+      const message = error instanceof Error ? error.message : '访问失败'
+      errors.push(`${credential}: ${message}`)
     }
   }
 
-  throw new Error(errors.join('；') || 'API Key 和 Cookie 都不可用')
+  // 合并最后一条 credential 的诊断信息到错误信息中
+  const lastDiag = diagnostic
+  let detail = errors.join('；') || 'API Key 和 Cookie 都不可用'
+  if (lastDiag.finalUrl || lastDiag.bodyExcerpt) {
+    const parts: string[] = [detail]
+    if (lastDiag.credential) parts.push(`凭证=${lastDiag.credential}`)
+    if (lastDiag.httpStatus !== undefined) parts.push(`HTTP=${lastDiag.httpStatus}`)
+    if (lastDiag.finalUrl) parts.push(`URL=${lastDiag.finalUrl}`)
+    if (lastDiag.bodyExcerpt) parts.push(`摘要=${lastDiag.bodyExcerpt}`)
+    detail = parts.join(' | ')
+  }
+  const e: Error & { diagnostic?: typeof diagnostic } = new Error(detail)
+  e.diagnostic = lastDiag
+  throw e
 }
 
 function parseNexusTorrentRows(html: string): TorrentListItem[] {
@@ -806,14 +836,18 @@ async function browseMTeamTorrents(site: SiteRecord, keyword: string, page: numb
 
 async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPath = '/torrents.php') {
   const path = `${torrentPath}${keyword ? `?search=${encodeURIComponent(keyword)}` : ''}`
-  const html = await fetchWithCookie(site, path)
+  const { text: html, finalUrl, httpStatus } = await fetchWithCookie(site, path)
   const items = parseNexusTorrentRows(html)
-  if (!items.length && looksLikeAuthPage(html)) throw new Error('Cookie 访问失败：需要重新登录')
+  if (!items.length && looksLikeAuthPage(html)) {
+    const e: Error & { diagnostic?: unknown } = new Error('Cookie 访问失败：需要重新登录')
+    e.diagnostic = { finalUrl, httpStatus, bodyExcerpt: html.replace(/\s+/g, ' ').trim().slice(0, 300) }
+    throw e
+  }
   return { total: items.length, items }
 }
 
 export async function browseTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
-  const definition = getSiteDefinition(site.domain)
+  const definition = getSiteDefinition(site.name)
   const errors: string[] = []
 
   if (site.apiKey && definition?.strategy === 'MTEAM_API') {
@@ -851,7 +885,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
 
   const filtered = sites.filter((site) => {
-    if (keyword && !`${siteDisplayName(site)} ${site.domain}`.toLowerCase().includes(keyword)) return false
+    if (keyword && !`${siteDisplayName(site)} ${site.name} ${site.domain}`.toLowerCase().includes(keyword)) return false
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
     if (enabled === 'ENABLED' && !site.enabled) return false
     if (enabled === 'DISABLED' && site.enabled) return false
@@ -887,7 +921,10 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
   const now = new Date().toISOString()
   const site: SiteRecord = {
     id: randomUUID(),
-    domain: normalizeDomain(payload.domain!),
+    name: payload.name!.trim(),
+    // 保留用户输入的原始 hostname（不去除 www. / 不强制小写），用于登录态对齐；
+    // 大小写在 DNS 协议层面等价，但 PT 站点 cookie 通常按 host 匹配，保留原值可减少回话丢失
+    domain: extractHostnamePreserveCase(payload.domain!),
     enabled: payload.enabled ?? true,
     apiKey: payload.apiKey?.trim() || undefined,
     cookie: payload.cookie?.trim() || undefined,
@@ -912,7 +949,8 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
 
   const updated: SiteRecord = {
     ...existing,
-    domain: normalizeDomain(payload.domain!),
+    name: payload.name!.trim(),
+    domain: extractHostnamePreserveCase(payload.domain!),
     enabled: payload.enabled ?? existing.enabled,
     apiKey: payload.apiKey?.trim() || existing.apiKey,
     cookie: payload.cookie?.trim() || existing.cookie,
@@ -954,10 +992,18 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
   } catch (error) {
     site.connectivityStatus = 'AUTH_FAILED'
     site.currentCredential = undefined
-    site.lastConnectError = error instanceof Error ? error.message : '站点测试失败'
+    const message = error instanceof Error ? error.message : '站点测试失败'
+    site.lastConnectError = message
     site.updatedAt = new Date().toISOString()
     await updateSiteInDb(site)
-    return res.status(400).json({ ok: false, status: site.connectivityStatus, message: site.lastConnectError, errorMessage: site.lastConnectError })
+    const diagnostic = (error as Error & { diagnostic?: { finalUrl?: string; httpStatus?: number; bodyExcerpt?: string; matchedKeywords?: string[] } }).diagnostic
+    return res.status(400).json({
+      ok: false,
+      status: site.connectivityStatus,
+      message: site.lastConnectError,
+      errorMessage: site.lastConnectError,
+      diagnostic
+    })
   }
 })
 

@@ -182,6 +182,7 @@ export type ProxyRecord = {
 
 export type SiteRecord = {
   id: string
+  name: string
   domain: string
   enabled: boolean
   apiKey?: string
@@ -324,7 +325,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 9
+const schemaVersion = 10
 
 export const storagePaths = {
   root,
@@ -390,7 +391,9 @@ function normalizeMigratedState(state: Partial<AppStateMigrationPayload>): AppSt
     operationLogs: state.operationLogs ?? [],
     taskLogs: state.taskLogs ?? [],
     scheduleLogs: state.scheduleLogs ?? [],
-    sites: (state.sites ?? []).filter((site) => typeof site.domain === 'string'),
+    sites: (state.sites ?? [])
+      .filter((site) => typeof site.domain === 'string')
+      .map((site) => ({ ...site, name: site.name?.trim() || site.domain })),
     proxies: state.proxies ?? [],
     downloaders: (state.downloaders ?? []).filter((downloader) => typeof downloader.name === 'string'),
     tasks,
@@ -481,6 +484,7 @@ function createStructuredTables(db: DatabaseSync) {
     );
     CREATE TABLE IF NOT EXISTS sites (
       id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
       domain TEXT NOT NULL,
       enabled INTEGER NOT NULL,
       api_key TEXT,
@@ -904,6 +908,42 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
       if (!tableHasColumn(db, 'sites', 'last_signin_status')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_status TEXT')
       if (!tableHasColumn(db, 'sites', 'last_signin_message')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_message TEXT')
     }
+    if (currentVersion < 10) {
+      if (!tableHasColumn(db, 'sites', 'name')) db.exec("ALTER TABLE sites ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+      db.exec(`
+        UPDATE sites
+        SET name = CASE lower(domain)
+          WHEN 'm-team.cc' THEN '馒头'
+          WHEN 'pt.m-team.cc' THEN '馒头'
+          WHEN 'api.m-team.cc' THEN '馒头'
+          WHEN 'hhanclub.net' THEN '憨憨'
+          WHEN 'www.hhanclub.net' THEN '憨憨'
+          WHEN 'hdhome.org' THEN '家园'
+          WHEN 'www.hdhome.org' THEN '家园'
+          WHEN 'hdkyl.in' THEN '麒麟'
+          WHEN 'www.hdkyl.in' THEN '麒麟'
+          WHEN 'totheglory.im' THEN '听听歌'
+          WHEN 'www.totheglory.im' THEN '听听歌'
+          WHEN 'pt.keepfrds.com' THEN '朋友'
+          WHEN 'keepfrds.com' THEN '朋友'
+          WHEN 'ptchdbits.co' THEN '彩虹岛'
+          WHEN 'www.ptchdbits.co' THEN '彩虹岛'
+          WHEN 'pterclub.net' THEN '猫站'
+          WHEN 'pterclub.com' THEN '猫站'
+          WHEN 'www.pterclub.com' THEN '猫站'
+          WHEN 'ourbits.club' THEN '我堡'
+          WHEN 'www.ourbits.club' THEN '我堡'
+          WHEN 'pthome.net' THEN '铂金家'
+          WHEN 'www.pthome.net' THEN '铂金家'
+          WHEN 'ubits.club' THEN '优堡'
+          WHEN 'www.ubits.club' THEN '优堡'
+          WHEN 'pttime.org' THEN '时间'
+          WHEN 'www.pttime.org' THEN '时间'
+          ELSE domain
+        END
+        WHERE trim(name) = ''
+      `)
+    }
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', migratedAt)
@@ -932,10 +972,10 @@ function upsertUser(db: DatabaseSync, item: UserRecord) {
 }
 
 function upsertSite(db: DatabaseSync, item: SiteRecord) {
-  db.prepare(`INSERT INTO sites (id, domain, enabled, api_key, cookie, user_agent, proxy_id, connectivity_status, current_credential, user_level, ratio, ratio_infinite, uploaded, downloaded, traffic_synced_at, last_connected_at, last_connect_error, signin_enabled, signin_time, last_signin_at, last_signin_status, last_signin_message, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET domain = excluded.domain, enabled = excluded.enabled, api_key = excluded.api_key, cookie = excluded.cookie, user_agent = excluded.user_agent, proxy_id = excluded.proxy_id, connectivity_status = excluded.connectivity_status, current_credential = excluded.current_credential, user_level = excluded.user_level, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, uploaded = excluded.uploaded, downloaded = excluded.downloaded, traffic_synced_at = excluded.traffic_synced_at, last_connected_at = excluded.last_connected_at, last_connect_error = excluded.last_connect_error, signin_enabled = excluded.signin_enabled, signin_time = excluded.signin_time, last_signin_at = excluded.last_signin_at, last_signin_status = excluded.last_signin_status, last_signin_message = excluded.last_signin_message, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.domain, bool(item.enabled), optional(item.apiKey), optional(item.cookie), optional(item.userAgent), optional(item.proxyId), item.connectivityStatus, optional(item.currentCredential), optional(item.userLevel), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), optional(item.uploaded), optional(item.downloaded), optional(item.trafficSyncedAt), optional(item.lastConnectedAt), optional(item.lastConnectError), bool(item.signinEnabled), item.signinTime, optional(item.lastSigninAt), optional(item.lastSigninStatus), optional(item.lastSigninMessage), item.createdAt, item.updatedAt)
+  db.prepare(`INSERT INTO sites (id, name, domain, enabled, api_key, cookie, user_agent, proxy_id, connectivity_status, current_credential, user_level, ratio, ratio_infinite, uploaded, downloaded, traffic_synced_at, last_connected_at, last_connect_error, signin_enabled, signin_time, last_signin_at, last_signin_status, last_signin_message, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, domain = excluded.domain, enabled = excluded.enabled, api_key = excluded.api_key, cookie = excluded.cookie, user_agent = excluded.user_agent, proxy_id = excluded.proxy_id, connectivity_status = excluded.connectivity_status, current_credential = excluded.current_credential, user_level = excluded.user_level, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, uploaded = excluded.uploaded, downloaded = excluded.downloaded, traffic_synced_at = excluded.traffic_synced_at, last_connected_at = excluded.last_connected_at, last_connect_error = excluded.last_connect_error, signin_enabled = excluded.signin_enabled, signin_time = excluded.signin_time, last_signin_at = excluded.last_signin_at, last_signin_status = excluded.last_signin_status, last_signin_message = excluded.last_signin_message, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.domain, bool(item.enabled), optional(item.apiKey), optional(item.cookie), optional(item.userAgent), optional(item.proxyId), item.connectivityStatus, optional(item.currentCredential), optional(item.userLevel), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), optional(item.uploaded), optional(item.downloaded), optional(item.trafficSyncedAt), optional(item.lastConnectedAt), optional(item.lastConnectError), bool(item.signinEnabled), item.signinTime, optional(item.lastSigninAt), optional(item.lastSigninStatus), optional(item.lastSigninMessage), item.createdAt, item.updatedAt)
 }
 
 function upsertProxy(db: DatabaseSync, item: ProxyRecord) {
@@ -1014,6 +1054,7 @@ function usersFromDb(db: DatabaseSync): UserRecord[] {
 function sitesFromDb(db: DatabaseSync): SiteRecord[] {
   return (db.prepare('SELECT * FROM sites ORDER BY created_at DESC, id').all() as any[]).map((row) => ({
     id: row.id,
+    name: row.name || row.domain,
     domain: row.domain,
     enabled: fromBool(row.enabled),
     apiKey: row.api_key ?? undefined,
@@ -2131,6 +2172,7 @@ function snapshotFromRow(row: any): SiteTrafficSnapshotRecord {
 function sitesFromDbFromRow(row: any): SiteRecord {
   return {
     id: row.id,
+    name: row.name || row.domain,
     domain: row.domain,
     enabled: fromBool(row.enabled),
     apiKey: row.api_key ?? undefined,

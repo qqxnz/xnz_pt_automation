@@ -1,5 +1,5 @@
 import { makeStandardNexusPhpSignin } from './standardNexusPhp.js'
 
 export const hdkylSignin = makeStandardNexusPhpSignin({
-  matchDomains: ['hdkyl.in']
+  matchNames: ['麒麟', 'hdkyl']
 })

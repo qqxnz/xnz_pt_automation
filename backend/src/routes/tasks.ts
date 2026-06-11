@@ -18,7 +18,7 @@ import {
 } from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog } from '../utils/logger.js'
 import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
-import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
+import { browseTorrents, normalizeSiteName, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
 
 export const tasksRouter = Router()
 
@@ -180,7 +180,7 @@ function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['di
 
 function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
   if (!item.id) return undefined
-  if (/m-team\.cc$/i.test(site.domain) && site.apiKey?.trim()) {
+  if (['馒头', 'mteam', 'm-team'].map(normalizeSiteName).includes(normalizeSiteName(site.name)) && site.apiKey?.trim()) {
     const url = new URL('https://api.m-team.cc/api/torrent/genDlToken')
     url.searchParams.set('id', item.id)
     return url.toString()

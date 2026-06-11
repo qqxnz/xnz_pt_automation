@@ -1,5 +1,5 @@
 import { makeStandardNexusPhpSignin } from './standardNexusPhp.js'
 
 export const hhanclubSignin = makeStandardNexusPhpSignin({
-  matchDomains: ['hhanclub.net']
+  matchNames: ['憨憨', 'hhan', 'hhanclub']
 })

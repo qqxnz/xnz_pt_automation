@@ -1,5 +1,5 @@
 import { makeStandardNexusPhpSignin } from './standardNexusPhp.js'
 
 export const chdbitsSignin = makeStandardNexusPhpSignin({
-  matchDomains: ['ptchdbits.co', 'www.ptchdbits.co']
+  matchNames: ['彩虹岛', '彩虹', 'chdbits']
 })

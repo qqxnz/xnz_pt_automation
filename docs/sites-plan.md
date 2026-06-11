@@ -22,13 +22,15 @@ pterclub.net / .com  猫站   NEXUSPHP
 ourbits.club         我堡   NEXUSPHP
 pthome.net           铂金家 NEXUSPHP
 ubits.club           优堡   NEXUSPHP
-pttime.org           时间   NEXUSPHP
+pttime.org           时间   NEXUSPHP (canonical=www.pttime.org，PTTime 把 pttime.org 302 跳到 www.pttime.org，c_secure_* cookie 必须发到 www 才能保持登录)
 ```
 
 规则：
 
 - 用户只填写站点域名，显示名称由映射表决定。
-- 支持同站多个域名，域名归一化后匹配映射表。
+- 支持同站多个域名和子域名，匹配时仅做小写归一，**不去除 `www.` 前缀**，保留用户原始输入（包括子域名）。
+- 同一站点可能在 `www.` 与裸域下登录态不同（如 PTTime 把 `pttime.org` 302 到 `www.pttime.org/login.php`，`c_secure_*` cookie 必须发到 `www.` 才能保持登录），所以保存的 `domain` 字段就是用户输入的原始主机名。
+- `SITE_DEFINITIONS` 的 `canonicalDomain` 用于请求时统一 host（如 PTTime 强制 `https://www.pttime.org`），保证 `siteBaseUrl` 走对 host。
 - 未知域名允许保存，显示域名本身，并默认按 NexusPHP 站点处理。
 - M-Team 使用 API 特殊策略；普通站点和未知站点默认使用 Cookie 抓取 `/userdetails.php` 和 `/torrents.php`。
 
@@ -120,6 +122,7 @@ POST /api/sites/:id/test-connectivity
 - API Key 不可用时回退 Cookie。
 - 成功后更新 `currentCredential`、连通状态、用户等级、分享率、上传量、下载量。
 - 两种凭证都失败时标记认证失败，并保留错误原因。
+- 失败响应中携带 `diagnostic` 字段（`finalUrl` / `httpStatus` / `bodyExcerpt` / `matchedKeywords`），便于排查「认证失败」的真实原因（cookie 失效、Cloudflare 拦截、关键字未匹配等）。
 
 M-Team：
 
@@ -235,7 +238,7 @@ index.ts              // 派发 + 同站防重入 + 写 site_signin_logs
 
 派发规则：
 
-- `mteam.ts` / `hhanclub.ts` / `hdhome.ts` / `hdkyl.ts` 通过 `normalizeDomain` 匹配对应站点。
+- `mteam.ts` / `hhanclub.ts` / `hdhome.ts` / `hdkyl.ts` / `totheglory.ts` / `keepfrds.ts` / `chdbits.ts` / `pterclub.ts` / `ourbits.ts` / `pthome.ts` / `ubits.ts` / `pttime.ts` 各自通过 `match(site)` 匹配 `site.domain`（小写归一后比对，保留原始大小写与子域名）。
 - 未命中时使用 `baseNexusPhp` 通用实现，POST `attendance.php` 并解析成功/重复/失败关键词。
 - 站点 `enabled === false` 或缺少 `cookie` 时直接返回 `SKIPPED`，不会调用网络。
 
@@ -294,6 +297,7 @@ index.ts              // 派发 + 同站防重入 + 写 site_signin_logs
 - 站点数据模型扩展 `signinEnabled / signinTime / lastSigninAt / lastSigninStatus / lastSigninMessage`，数据库 schema 升级到 v8。
 - 新建 `site_signin_logs` 表，写日志与今日状态查询。
 - 实现 4 个内置站点 + 通用 NexusPHP 兜底签到实现与派发。
+- 站点域名归一化仅在匹配 `SITE_DEFINITIONS` 时进行（只小写，不去 `www.`），POST/PUT 站点接口保存用户输入的原始主机名（`pttime.org` / `www.pttime.org` / `pt.keepfrds.com` 都按用户原样保留）。
 - 实现 `POST /api/sites/:id/signin` 手动签到接口，含同站防重入。
 - 实现 `POST /api/sites/signin-all` 批量签到。
 - 调度器新增 `site-auto-signin` job。

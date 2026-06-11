@@ -1,6 +1,6 @@
 import { listSitesFromDb } from '../storage.js'
 import { performSiteSignin } from '../routes/signin/index.js'
-import { syncSiteTrafficStats } from '../routes/sites.js'
+import { siteDisplayName, syncSiteTrafficStats } from '../routes/sites.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
@@ -271,7 +271,7 @@ export async function runDueSignins() {
       failedCount += 1
       details.push({
         siteId: site.id,
-        siteName: site.domain,
+        siteName: siteDisplayName(site),
         status: 'FAILED',
         message: error instanceof Error ? error.message : '签到失败',
         durationMs: 0
