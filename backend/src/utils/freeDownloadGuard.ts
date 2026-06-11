@@ -1,4 +1,4 @@
-import { listDownloadersFromDb, listTorrents, updateTorrents, type TorrentRecord } from '../storage.js'
+import { listAllTorrents, listDownloadersFromDb, updateTorrents, type TorrentRecord } from '../storage.js'
 import { deleteTorrentFromQb } from './qbittorrent.js'
 
 export type FreeDownloadGuardSummary = {
@@ -52,8 +52,7 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
   const updatedTorrents: TorrentRecord[] = []
 
   try {
-    const candidateList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' })
-    const candidates = candidateList.items.filter((torrent) => torrent.onlyFreeDownload && torrent.torrentHash)
+    const candidates = (await listAllTorrents({ pushStatus: 'PUSHED' })).filter((torrent) => torrent.onlyFreeDownload && torrent.torrentHash)
     summary.checkedCount = candidates.length
 
     const downloaders = await listDownloadersFromDb()

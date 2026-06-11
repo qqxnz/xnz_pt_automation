@@ -1,4 +1,4 @@
-import { listDownloadersFromDb, listTorrents, recordTorrentTraffic, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord, type TorrentTrafficSample } from '../storage.js'
+import { listAllTorrents, listDownloadersFromDb, recordTorrentTraffic, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord, type TorrentTrafficSample } from '../storage.js'
 import { getQbTorrentItems, QbittorrentError, type QbTorrentItem } from './qbittorrent.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 
@@ -81,8 +81,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
   try {
     for (const downloader of enabledDownloaders) {
       const previousStatus = downloader.status
-      const pushedTorrentList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED', downloaderId: downloader.id })
-      const pushedTorrents = pushedTorrentList.items.filter((torrent) => torrent.torrentHash)
+      const pushedTorrents = (await listAllTorrents({ pushStatus: 'PUSHED', downloaderId: downloader.id })).filter((torrent) => torrent.torrentHash)
       if (!pushedTorrents.length) continue
 
       try {

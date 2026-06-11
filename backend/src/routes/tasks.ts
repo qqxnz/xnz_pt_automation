@@ -6,10 +6,10 @@ import {
   getTaskFromDb,
   insertTaskToDb,
   insertTorrents,
+  listAllTorrents,
   listDownloadersFromDb,
   listSitesFromDb,
   listTasksFromDb,
-  listTorrents,
   queryLogs,
   type SiteRecord,
   type TaskRecord,
@@ -376,8 +376,8 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     } catch (error) {
       throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
     }
-    const existingTorrents = await listTorrents({ siteId: site.id, page: 1, pageSize: 1 })
-    const existingKeys = new Set(existingTorrents.items.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
+    const existingTorrents = await listAllTorrents({ siteId: site.id })
+    const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
     const matched = matchedCandidates(task, deduped)
@@ -772,8 +772,8 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
   try {
     const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
-    const existingTorrents = await listTorrents({ siteId: site.id, page: 1, pageSize: 1 })
-    const existingKeys = new Set(existingTorrents.items.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
+    const existingTorrents = await listAllTorrents({ siteId: site.id })
+    const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
     const matched = matchedCandidates(task, deduped)

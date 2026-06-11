@@ -1,4 +1,4 @@
-import { listDownloadersFromDb, listTorrents, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord } from '../storage.js'
+import { listAllTorrents, listDownloadersFromDb, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord } from '../storage.js'
 import { getQbTorrentPeers, QbittorrentError } from './qbittorrent.js'
 
 let ipv6SyncRunning = false
@@ -97,8 +97,7 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
   try {
     for (const downloader of enabledDownloaders) {
       summary.scannedDownloaders += 1
-      const downloaderTorrentList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED', downloaderId: downloader.id })
-      const downloaderTorrents = downloaderTorrentList.items.filter((torrent) => torrent.torrentHash)
+      const downloaderTorrents = (await listAllTorrents({ pushStatus: 'PUSHED', downloaderId: downloader.id })).filter((torrent) => torrent.torrentHash)
       if (!downloaderTorrents.length) {
         const prev = downloader.hasIpv6Peers
         const cleared = clearDownloaderIpv6(downloader, syncedAt)

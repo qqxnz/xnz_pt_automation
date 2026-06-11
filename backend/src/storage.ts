@@ -1569,6 +1569,13 @@ export async function listTorrents(query: TorrentQuery) {
   return { items: rows.map(torrentFromRow), total: Number(totalRow.total ?? 0), page, pageSize }
 }
 
+export async function listAllTorrents(query: Omit<TorrentQuery, 'page' | 'pageSize'> = {}) {
+  const db = await readyDb()
+  const where = torrentWhere(query)
+  const rows = db.prepare(`SELECT * FROM torrents ${where.sql} ORDER BY first_seen_at DESC, id DESC`).all(...(where.params as any[])) as any[]
+  return rows.map(torrentFromRow)
+}
+
 export async function readTorrentStats(): Promise<TorrentStats> {
   const db = await readyDb()
   const now = new Date().toISOString()
