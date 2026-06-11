@@ -8,6 +8,7 @@ import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
 import { settingsRouter } from './routes/settings.js'
 import { sitesRouter } from './routes/sites.js'
+import { siteStatisticsRouter } from './routes/siteStatistics.js'
 import { statsRouter } from './routes/stats.js'
 import { tasksRouter } from './routes/tasks.js'
 import { torrentsRouter } from './routes/torrents.js'
@@ -29,6 +30,7 @@ app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/sites', sitesRouter)
+app.use('/api/site-statistics', siteStatisticsRouter)
 app.use('/api/downloaders', downloadersRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/torrents', torrentsRouter)

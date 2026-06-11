@@ -56,7 +56,6 @@ export type TorrentStats = {
   expiringSoon: number
   totalUploaded: number
   totalDownloaded: number
-  bySite: Array<{ siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>
 }
 
 export type TorrentFilter = {

@@ -1,4 +1,4 @@
-import { readState, type DownloaderRecord, type TorrentRecord, writeState } from '../storage.js'
+import { readState, recordTorrentTraffic, type DownloaderRecord, type TorrentRecord, type TorrentTrafficSample, writeState } from '../storage.js'
 import { getQbTorrentItems, QbittorrentError, type QbTorrentItem } from './qbittorrent.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 
@@ -75,6 +75,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
   }
   let changed = false
   const recoveredDownloaderIds: string[] = []
+  const trafficSamples: TorrentTrafficSample[] = []
 
   try {
     for (const downloader of enabledDownloaders) {
@@ -88,6 +89,15 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
         for (const torrent of pushedTorrents) {
           const item = torrent.torrentHash ? byHash.get(torrent.torrentHash.toLowerCase()) : undefined
           const itemChanged = item ? applySnapshot(torrent, item, syncedAt) : markMissing(torrent, syncedAt)
+          if (item) {
+            trafficSamples.push({
+              torrentId: torrent.id,
+              siteId: torrent.siteId,
+              siteName: torrent.siteName,
+              uploaded: item.uploaded ?? 0,
+              downloaded: item.downloaded ?? 0
+            })
+          }
           if (itemChanged) {
             summary.updatedTorrents += 1
             changed = true
@@ -111,6 +121,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
     }
 
     if (changed) await writeState(state)
+    await recordTorrentTraffic(trafficSamples, syncedAt)
     return summary
   } finally {
     syncRunning = false

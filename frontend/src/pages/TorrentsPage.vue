@@ -15,21 +15,6 @@
         </article>
       </section>
 
-      <section v-if="stats.bySite.length" class="panel torrent-site-summary">
-        <div class="panel-title-row">
-          <h2>站点上传下载</h2>
-          <span>最近同步：{{ formatDate(lastSyncAt) }}</span>
-        </div>
-        <div class="torrent-site-summary-grid">
-          <article v-for="site in stats.bySite" :key="site.siteId">
-            <strong>{{ site.siteName }}</strong>
-            <span>{{ site.torrentCount }} 个种子</span>
-            <span>上传 {{ formatBytes(site.uploaded) }}</span>
-            <span>下载 {{ formatBytes(site.downloaded) }}</span>
-          </article>
-        </div>
-      </section>
-
       <section class="sites-toolbar panel torrents-toolbar">
         <input v-model.trim="filters.keyword" placeholder="搜索标题" @keyup.enter="resetPageAndLoad" />
         <select v-model="filters.siteId" @change="resetPageAndLoad">
@@ -316,8 +301,7 @@ const emptyStats: TorrentStats = {
   failed: 0,
   expiringSoon: 0,
   totalUploaded: 0,
-  totalDownloaded: 0,
-  bySite: []
+  totalDownloaded: 0
 }
 
 const items = ref<TorrentItem[]>([])
@@ -335,7 +319,6 @@ const pushingIds = ref<string[]>([])
 const deletingIds = ref<string[]>([])
 const error = ref('')
 const stats = ref<TorrentStats>({ ...emptyStats })
-const lastSyncAt = ref<string>()
 type PushFormState = {
   torrent: TorrentItem
   downloaderId: string
@@ -379,10 +362,6 @@ async function loadTorrents() {
     items.value = result.items
     total.value = result.total
     stats.value = result.stats
-    lastSyncAt.value = result.items
-      .map((item) => item.downloadStatsSyncedAt)
-      .filter((value): value is string => Boolean(value))
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
     selectedIds.value = selectedIds.value.filter((id) => result.items.some((item) => item.id === id))
   } catch (err) {
     error.value = err instanceof Error ? err.message : '种子列表加载失败'

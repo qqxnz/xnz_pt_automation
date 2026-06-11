@@ -76,6 +76,7 @@ const navItems = [
   { label: '下载器', to: '/downloaders' },
   { label: '任务', to: '/tasks' },
   { label: '种子', to: '/torrents' },
+  { label: '站点统计', to: '/statistics' },
   { label: '日志', to: '/logs' },
   { label: '系统', to: '/settings' }
 ]

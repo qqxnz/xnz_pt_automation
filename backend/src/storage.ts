@@ -280,14 +280,29 @@ export type TorrentStats = {
   expiringSoon: number
   totalUploaded: number
   totalDownloaded: number
-  bySite: Array<{ siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>
+}
+
+export type TorrentTrafficSample = {
+  torrentId: string
+  siteId: string
+  siteName: string
+  uploaded: number
+  downloaded: number
+}
+
+export type SiteStatisticsQuery = {
+  startDate: string
+  endDate: string
+  siteId?: string
+  page: number
+  pageSize: number
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 5
+const schemaVersion = 6
 
 export const storagePaths = {
   root,
@@ -634,6 +649,23 @@ function createStructuredTables(db: DatabaseSync) {
       ratio_infinite INTEGER,
       synced_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS site_torrent_traffic_daily (
+      date TEXT NOT NULL,
+      site_id TEXT NOT NULL,
+      site_name TEXT NOT NULL,
+      uploaded REAL NOT NULL DEFAULT 0,
+      downloaded REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (date, site_id)
+    );
+    CREATE TABLE IF NOT EXISTS torrent_traffic_cursors (
+      torrent_id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      site_name TEXT NOT NULL,
+      uploaded REAL NOT NULL DEFAULT 0,
+      downloaded REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS system_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       settings_json TEXT NOT NULL,
@@ -648,6 +680,7 @@ function createStructuredTables(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_torrents_run_mode ON torrents(source_run_mode);
     CREATE INDEX IF NOT EXISTS idx_torrents_download_url_hash ON torrents(download_url_hash);
     CREATE INDEX IF NOT EXISTS idx_torrents_torrent_hash ON torrents(torrent_hash);
+    CREATE INDEX IF NOT EXISTS idx_site_torrent_traffic_daily_site_date ON site_torrent_traffic_daily(site_id, date);
     CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_task_logs_created ON task_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_task_logs_task_created ON task_logs(task_id, created_at DESC);
@@ -691,21 +724,8 @@ async function ensureStorage() {
     const currentVersion = userVersion(db)
     if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) return
 
-    if (currentVersion === 4 && tableHasRows(db, 'users')) {
-      migrateV4ToV5(db)
-      db.exec('COMMIT')
-      return
-    }
-
-    if (currentVersion === 3 && tableHasRows(db, 'users')) {
-      migrateV3ToV4(db)
-      db.exec('COMMIT')
-      return
-    }
-
-    if (currentVersion === 2 && tableHasRows(db, 'tasks')) {
-      migrateV2ToV3(db)
-      db.exec('COMMIT')
+    if (currentVersion >= 2 && tableHasRows(db, 'users')) {
+      migrateStructuredDatabase(db, currentVersion)
       return
     }
 
@@ -718,6 +738,7 @@ async function ensureStorage() {
     db.exec('BEGIN IMMEDIATE')
     try {
       writeStructuredState(db, state)
+      seedTorrentTrafficStatistics(db, new Date().toISOString())
       setMeta(db, 'schema_version', String(schemaVersion))
       setMeta(db, 'last_migration_status', 'SUCCESS')
       setMeta(db, 'migrated_at', new Date().toISOString())
@@ -738,80 +759,68 @@ function tableHasColumn(db: DatabaseSync, table: string, column: string) {
   return rows.some((row) => row.name === column)
 }
 
-function migrateV2ToV3(db: DatabaseSync) {
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    if (!tableHasColumn(db, 'tasks', 'torrent_count_condition')) {
-      db.exec('ALTER TABLE tasks ADD COLUMN torrent_count_condition TEXT')
-    }
-    if (!tableHasColumn(db, 'tasks', 'torrent_count')) {
-      db.exec('ALTER TABLE tasks ADD COLUMN torrent_count INTEGER')
-    }
-    setMeta(db, 'schema_version', String(schemaVersion))
-    setMeta(db, 'last_migration_status', 'SUCCESS')
-    setMeta(db, 'migrated_at', new Date().toISOString())
-    setMeta(db, 'migrated_from', 'v2-additive')
-    db.exec(`PRAGMA user_version = ${schemaVersion}`)
-  } catch (error) {
-    db.exec('ROLLBACK')
-    setMeta(db, 'last_migration_status', 'FAILED')
-    throw error
-  }
+function localDateKey(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-function migrateV3ToV4(db: DatabaseSync) {
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    if (!tableHasColumn(db, 'torrents', 'has_ipv6_peers')) {
-      db.exec('ALTER TABLE torrents ADD COLUMN has_ipv6_peers INTEGER')
-    }
-    if (!tableHasColumn(db, 'torrents', 'ipv6_peer_count')) {
-      db.exec('ALTER TABLE torrents ADD COLUMN ipv6_peer_count INTEGER')
-    }
-    if (!tableHasColumn(db, 'torrents', 'total_peer_count')) {
-      db.exec('ALTER TABLE torrents ADD COLUMN total_peer_count INTEGER')
-    }
-    if (!tableHasColumn(db, 'torrents', 'peer_sync_rid')) {
-      db.exec('ALTER TABLE torrents ADD COLUMN peer_sync_rid INTEGER')
-    }
-    if (!tableHasColumn(db, 'torrents', 'peer_synced_at')) {
-      db.exec('ALTER TABLE torrents ADD COLUMN peer_synced_at TEXT')
-    }
-    if (!tableHasColumn(db, 'downloaders', 'has_ipv6_peers')) {
-      db.exec('ALTER TABLE downloaders ADD COLUMN has_ipv6_peers INTEGER')
-    }
-    if (!tableHasColumn(db, 'downloaders', 'ipv6_torrent_count')) {
-      db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_torrent_count INTEGER')
-    }
-    if (!tableHasColumn(db, 'downloaders', 'ipv6_synced_at')) {
-      db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_synced_at TEXT')
-    }
-    setMeta(db, 'schema_version', String(schemaVersion))
-    setMeta(db, 'last_migration_status', 'SUCCESS')
-    setMeta(db, 'migrated_at', new Date().toISOString())
-    setMeta(db, 'migrated_from', 'v3-additive-ipv6')
-    db.exec(`PRAGMA user_version = ${schemaVersion}`)
-  } catch (error) {
-    db.exec('ROLLBACK')
-    setMeta(db, 'last_migration_status', 'FAILED')
-    throw error
-  }
+function seedTorrentTrafficStatistics(db: DatabaseSync, migratedAt: string) {
+  const alreadySeeded = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('torrent_traffic_seeded_at') as { value?: string } | undefined
+  if (alreadySeeded?.value) return
+
+  const date = localDateKey(new Date(migratedAt))
+  db.prepare(`
+    INSERT INTO site_torrent_traffic_daily (date, site_id, site_name, uploaded, downloaded, updated_at)
+    SELECT ?, site_id, site_name, SUM(COALESCE(uploaded, 0)), SUM(COALESCE(downloaded, 0)), ?
+    FROM torrents
+    WHERE COALESCE(uploaded, 0) > 0 OR COALESCE(downloaded, 0) > 0
+    GROUP BY site_id, site_name
+    ON CONFLICT(date, site_id) DO UPDATE SET
+      uploaded = site_torrent_traffic_daily.uploaded + excluded.uploaded,
+      downloaded = site_torrent_traffic_daily.downloaded + excluded.downloaded,
+      site_name = excluded.site_name,
+      updated_at = excluded.updated_at
+  `).run(date, migratedAt)
+  db.prepare(`
+    INSERT INTO torrent_traffic_cursors (torrent_id, site_id, site_name, uploaded, downloaded, updated_at)
+    SELECT id, site_id, site_name, COALESCE(uploaded, 0), COALESCE(downloaded, 0), ? FROM torrents
+    WHERE 1
+    ON CONFLICT(torrent_id) DO NOTHING
+  `).run(migratedAt)
+  setMeta(db, 'torrent_traffic_seeded_at', migratedAt)
 }
 
-function migrateV4ToV5(db: DatabaseSync) {
+function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
+  const migratedAt = new Date().toISOString()
   db.exec('BEGIN IMMEDIATE')
   try {
-    if (!tableHasColumn(db, 'tasks', 'size_min_gb')) {
-      db.exec('ALTER TABLE tasks ADD COLUMN size_min_gb REAL')
+    if (currentVersion < 3) {
+      if (!tableHasColumn(db, 'tasks', 'torrent_count_condition')) db.exec('ALTER TABLE tasks ADD COLUMN torrent_count_condition TEXT')
+      if (!tableHasColumn(db, 'tasks', 'torrent_count')) db.exec('ALTER TABLE tasks ADD COLUMN torrent_count INTEGER')
     }
-    if (!tableHasColumn(db, 'tasks', 'size_max_gb')) {
-      db.exec('ALTER TABLE tasks ADD COLUMN size_max_gb REAL')
+    if (currentVersion < 4) {
+      if (!tableHasColumn(db, 'torrents', 'has_ipv6_peers')) db.exec('ALTER TABLE torrents ADD COLUMN has_ipv6_peers INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'ipv6_peer_count')) db.exec('ALTER TABLE torrents ADD COLUMN ipv6_peer_count INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'total_peer_count')) db.exec('ALTER TABLE torrents ADD COLUMN total_peer_count INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'peer_sync_rid')) db.exec('ALTER TABLE torrents ADD COLUMN peer_sync_rid INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'peer_synced_at')) db.exec('ALTER TABLE torrents ADD COLUMN peer_synced_at TEXT')
+      if (!tableHasColumn(db, 'downloaders', 'has_ipv6_peers')) db.exec('ALTER TABLE downloaders ADD COLUMN has_ipv6_peers INTEGER')
+      if (!tableHasColumn(db, 'downloaders', 'ipv6_torrent_count')) db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_torrent_count INTEGER')
+      if (!tableHasColumn(db, 'downloaders', 'ipv6_synced_at')) db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_synced_at TEXT')
     }
+    if (currentVersion < 5) {
+      if (!tableHasColumn(db, 'tasks', 'size_min_gb')) db.exec('ALTER TABLE tasks ADD COLUMN size_min_gb REAL')
+      if (!tableHasColumn(db, 'tasks', 'size_max_gb')) db.exec('ALTER TABLE tasks ADD COLUMN size_max_gb REAL')
+    }
+    if (currentVersion < 6) seedTorrentTrafficStatistics(db, migratedAt)
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
-    setMeta(db, 'migrated_at', new Date().toISOString())
-    setMeta(db, 'migrated_from', 'v4-size-range')
+    setMeta(db, 'migrated_at', migratedAt)
+    setMeta(db, 'migrated_from', `v${currentVersion}-additive`)
     db.exec(`PRAGMA user_version = ${schemaVersion}`)
+    db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
     setMeta(db, 'last_migration_status', 'FAILED')
@@ -1431,12 +1440,6 @@ export async function readTorrentStats(): Promise<TorrentStats> {
       SUM(COALESCE(downloaded, 0)) AS total_downloaded
     FROM torrents
   `).get(now) as any
-  const bySite = db.prepare(`
-    SELECT site_id, site_name, SUM(COALESCE(uploaded, 0)) AS uploaded, SUM(COALESCE(downloaded, 0)) AS downloaded, COUNT(*) AS torrent_count
-    FROM torrents
-    GROUP BY site_id, site_name
-    ORDER BY uploaded + downloaded DESC
-  `).all() as any[]
   return {
     total: Number(row.total ?? 0),
     running: Number(row.running ?? 0),
@@ -1447,13 +1450,130 @@ export async function readTorrentStats(): Promise<TorrentStats> {
     failed: Number(row.failed ?? 0),
     expiringSoon: Number(row.expiring_soon ?? 0),
     totalUploaded: Number(row.total_uploaded ?? 0),
-    totalDownloaded: Number(row.total_downloaded ?? 0),
-    bySite: bySite.map((item) => ({
-      siteId: item.site_id,
-      siteName: item.site_name,
-      uploaded: Number(item.uploaded ?? 0),
-      downloaded: Number(item.downloaded ?? 0),
-      torrentCount: Number(item.torrent_count ?? 0)
+    totalDownloaded: Number(row.total_downloaded ?? 0)
+  }
+}
+
+export async function recordTorrentTraffic(samples: TorrentTrafficSample[], syncedAt: string) {
+  if (!samples.length) return { uploadedDelta: 0, downloadedDelta: 0, updatedCount: 0 }
+  const db = await readyDb()
+  const date = localDateKey(new Date(syncedAt))
+  let uploadedDelta = 0
+  let downloadedDelta = 0
+  let updatedCount = 0
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const readCursor = db.prepare('SELECT uploaded, downloaded FROM torrent_traffic_cursors WHERE torrent_id = ?')
+    const upsertCursor = db.prepare(`
+      INSERT INTO torrent_traffic_cursors (torrent_id, site_id, site_name, uploaded, downloaded, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(torrent_id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name,
+        uploaded = excluded.uploaded, downloaded = excluded.downloaded, updated_at = excluded.updated_at
+    `)
+    const addDaily = db.prepare(`
+      INSERT INTO site_torrent_traffic_daily (date, site_id, site_name, uploaded, downloaded, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(date, site_id) DO UPDATE SET site_name = excluded.site_name,
+        uploaded = site_torrent_traffic_daily.uploaded + excluded.uploaded,
+        downloaded = site_torrent_traffic_daily.downloaded + excluded.downloaded,
+        updated_at = excluded.updated_at
+    `)
+
+    for (const sample of samples) {
+      const currentUploaded = Number.isFinite(sample.uploaded) ? Math.max(sample.uploaded, 0) : 0
+      const currentDownloaded = Number.isFinite(sample.downloaded) ? Math.max(sample.downloaded, 0) : 0
+      const cursor = readCursor.get(sample.torrentId) as { uploaded: number; downloaded: number } | undefined
+      const uploadIncrement = cursor && currentUploaded >= cursor.uploaded ? currentUploaded - cursor.uploaded : cursor ? 0 : currentUploaded
+      const downloadIncrement = cursor && currentDownloaded >= cursor.downloaded ? currentDownloaded - cursor.downloaded : cursor ? 0 : currentDownloaded
+      upsertCursor.run(sample.torrentId, sample.siteId, sample.siteName, currentUploaded, currentDownloaded, syncedAt)
+      if (uploadIncrement > 0 || downloadIncrement > 0) {
+        addDaily.run(date, sample.siteId, sample.siteName, uploadIncrement, downloadIncrement, syncedAt)
+        uploadedDelta += uploadIncrement
+        downloadedDelta += downloadIncrement
+        updatedCount += 1
+      }
+    }
+    db.exec('COMMIT')
+    return { uploadedDelta, downloadedDelta, updatedCount }
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function readSiteStatistics(query: SiteStatisticsQuery) {
+  const db = await readyDb()
+  const siteClause = query.siteId ? 'AND daily.site_id = ?' : ''
+  const params: Array<string | number> = [query.startDate, query.endDate]
+  if (query.siteId) params.push(query.siteId)
+  const countRow = db.prepare(`
+    SELECT COUNT(DISTINCT daily.site_id) AS total
+    FROM site_torrent_traffic_daily daily
+    WHERE daily.date BETWEEN ? AND ? ${siteClause}
+  `).get(...params) as { total: number }
+  const total = Number(countRow.total ?? 0)
+  const page = Math.max(Math.floor(query.page), 1)
+  const pageSize = Math.min(Math.max(Math.floor(query.pageSize), 1), 100)
+  const rows = db.prepare(`
+    SELECT daily.site_id, MAX(daily.site_name) AS site_name,
+      SUM(daily.uploaded) AS uploaded, SUM(daily.downloaded) AS downloaded,
+      CASE WHEN sites.id IS NULL THEN 1 ELSE 0 END AS site_deleted
+    FROM site_torrent_traffic_daily daily
+    LEFT JOIN sites ON sites.id = daily.site_id
+    WHERE daily.date BETWEEN ? AND ? ${siteClause}
+    GROUP BY daily.site_id, sites.id
+    ORDER BY SUM(daily.uploaded) + SUM(daily.downloaded) DESC, site_name
+    LIMIT ? OFFSET ?
+  `).all(...params, pageSize, (page - 1) * pageSize) as any[]
+  const totals = db.prepare(`
+    SELECT COALESCE(SUM(daily.uploaded), 0) AS uploaded, COALESCE(SUM(daily.downloaded), 0) AS downloaded
+    FROM site_torrent_traffic_daily daily
+    WHERE daily.date BETWEEN ? AND ? ${siteClause}
+  `).get(...params) as any
+  const siteIds = rows.map((row) => String(row.site_id))
+  const siteOptions = (db.prepare(`
+    SELECT daily.site_id, MAX(daily.site_name) AS site_name, CASE WHEN sites.id IS NULL THEN 1 ELSE 0 END AS site_deleted
+    FROM site_torrent_traffic_daily daily
+    LEFT JOIN sites ON sites.id = daily.site_id
+    GROUP BY daily.site_id, sites.id
+    ORDER BY site_name
+  `).all() as any[]).map((row) => ({
+    siteId: String(row.site_id),
+    siteName: String(row.site_name),
+    siteDeleted: Boolean(row.site_deleted)
+  }))
+  const dailyRows = siteIds.length
+    ? db.prepare(`
+        SELECT date, site_id, site_name, uploaded, downloaded
+        FROM site_torrent_traffic_daily
+        WHERE date BETWEEN ? AND ? AND site_id IN (${siteIds.map(() => '?').join(',')})
+        ORDER BY date DESC, site_name
+      `).all(query.startDate, query.endDate, ...siteIds) as any[]
+    : []
+
+  return {
+    startDate: query.startDate,
+    endDate: query.endDate,
+    totalUploaded: Number(totals.uploaded ?? 0),
+    totalDownloaded: Number(totals.downloaded ?? 0),
+    siteCount: total,
+    total,
+    page,
+    pageSize,
+    siteOptions,
+    items: rows.map((row) => ({
+      siteId: String(row.site_id),
+      siteName: String(row.site_name),
+      siteDeleted: Boolean(row.site_deleted),
+      uploaded: Number(row.uploaded ?? 0),
+      downloaded: Number(row.downloaded ?? 0),
+      daily: dailyRows
+        .filter((daily) => daily.site_id === row.site_id)
+        .map((daily) => ({
+          date: String(daily.date),
+          uploaded: Number(daily.uploaded ?? 0),
+          downloaded: Number(daily.downloaded ?? 0)
+        }))
     }))
   }
 }

@@ -653,6 +653,18 @@ a {
   grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(128px, 0.8fr)) 128px;
 }
 
+.statistics-toolbar {
+  grid-template-columns: repeat(2, minmax(180px, 0.7fr)) minmax(220px, 1fr) 114px;
+}
+
+.statistics-toolbar label {
+  display: grid;
+  gap: 7px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .sites-toolbar input,
 .sites-toolbar select,
 .site-form input,
@@ -972,6 +984,78 @@ a {
 .feature-page {
   display: grid;
   gap: 26px;
+}
+
+.statistics-date-value {
+  font-size: clamp(15px, 1.2vw, 20px) !important;
+}
+
+.statistics-list-panel,
+.statistics-site-list {
+  display: grid;
+  gap: 16px;
+}
+
+.statistics-site-card {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.statistics-site-card summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(130px, 0.7fr));
+  gap: 18px;
+  align-items: center;
+  padding: 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.statistics-site-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.statistics-site-card summary > span {
+  display: grid;
+  gap: 5px;
+}
+
+.statistics-site-card summary small {
+  color: #6b7280;
+  font-weight: 750;
+}
+
+.statistics-site-name {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.statistics-daily-table {
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.statistics-daily-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  padding: 13px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.statistics-daily-row:last-child {
+  border-bottom: 0;
+}
+
+.statistics-daily-head {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .settings-page {
@@ -2003,6 +2087,11 @@ a {
   }
 
   .torrents-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statistics-toolbar,
+  .statistics-site-card summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

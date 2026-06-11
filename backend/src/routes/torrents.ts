@@ -89,32 +89,6 @@ function resolvePushSavePath(torrent: TorrentRecord, downloader: { savePath?: st
   return torrent.taskSavePath?.trim() || downloader.savePath?.trim() || undefined
 }
 
-function stats(items: Awaited<ReturnType<typeof readState>>['torrents']) {
-  const now = Date.now()
-  const safeItems = items.map(safeTorrent)
-  const bySite = new Map<string, { siteId: string; siteName: string; uploaded: number; downloaded: number; torrentCount: number }>()
-  for (const item of safeItems) {
-    const site = bySite.get(item.siteId) ?? { siteId: item.siteId, siteName: item.siteName, uploaded: 0, downloaded: 0, torrentCount: 0 }
-    site.uploaded += item.uploaded ?? 0
-    site.downloaded += item.downloaded ?? 0
-    site.torrentCount += 1
-    bySite.set(item.siteId, site)
-  }
-  return {
-    total: safeItems.length,
-    running: safeItems.filter((item) => item.pushStatus === 'PUSHED').length,
-    notRunning: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED' || item.pushStatus === 'DELETED').length,
-    auto: safeItems.filter((item) => item.sourceRunMode === 'AUTO').length,
-    manual: safeItems.filter((item) => item.sourceRunMode === 'MANUAL_RUN').length,
-    pending: safeItems.filter((item) => item.pushStatus === 'NEW').length,
-    failed: safeItems.filter((item) => item.pushStatus === 'PUSH_FAILED').length,
-    expiringSoon: safeItems.filter((item) => item.freeEndAt && new Date(item.freeEndAt).getTime() > now && item.currentState === 'EXPIRING_SOON').length,
-    totalUploaded: safeItems.reduce((total, item) => total + (item.uploaded ?? 0), 0),
-    totalDownloaded: safeItems.reduce((total, item) => total + (item.downloaded ?? 0), 0),
-    bySite: [...bySite.values()].sort((a, b) => b.uploaded + b.downloaded - (a.uploaded + a.downloaded))
-  }
-}
-
 function matchesFreeStatus(torrent: ReturnType<typeof safeTorrent>, freeStatus: string) {
   if (freeStatus === 'ALL') return true
 
