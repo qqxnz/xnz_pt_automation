@@ -1,4 +1,4 @@
-import { readState, recordTorrentTraffic, type DownloaderRecord, type TorrentRecord, type TorrentTrafficSample, writeState } from '../storage.js'
+import { listDownloadersFromDb, listTorrents, recordTorrentTraffic, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord, type TorrentTrafficSample } from '../storage.js'
 import { getQbTorrentItems, QbittorrentError, type QbTorrentItem } from './qbittorrent.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 
@@ -63,9 +63,9 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
   }
 
   syncRunning = true
-  const state = await readState()
   const syncedAt = new Date().toISOString()
-  const enabledDownloaders = state.downloaders.filter((downloader) => downloader.enabled && (!downloaderId || downloader.id === downloaderId))
+  const allDownloaders = await listDownloadersFromDb()
+  const enabledDownloaders = allDownloaders.filter((downloader) => downloader.enabled && (!downloaderId || downloader.id === downloaderId))
   const summary: TorrentSyncSummary = {
     successfulDownloaders: 0,
     failedDownloaders: 0,
@@ -73,14 +73,16 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
     syncedAt,
     errors: []
   }
-  let changed = false
+  const updatedDownloaders: DownloaderRecord[] = []
+  const updatedTorrents: TorrentRecord[] = []
   const recoveredDownloaderIds: string[] = []
   const trafficSamples: TorrentTrafficSample[] = []
 
   try {
     for (const downloader of enabledDownloaders) {
       const previousStatus = downloader.status
-      const pushedTorrents = state.torrents.filter((torrent) => torrent.pushStatus === 'PUSHED' && torrent.downloaderId === downloader.id && torrent.torrentHash)
+      const pushedTorrentList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED', downloaderId: downloader.id })
+      const pushedTorrents = pushedTorrentList.items.filter((torrent) => torrent.torrentHash)
       if (!pushedTorrents.length) continue
 
       try {
@@ -100,7 +102,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
           }
           if (itemChanged) {
             summary.updatedTorrents += 1
-            changed = true
+            updatedTorrents.push(torrent)
           }
         }
         downloader.status = 'ONLINE'
@@ -108,7 +110,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
         downloader.lastSyncedAt = syncedAt
         downloader.updatedAt = syncedAt
         summary.successfulDownloaders += 1
-        changed = true
+        updatedDownloaders.push(downloader)
         if (previousStatus !== 'ONLINE') recoveredDownloaderIds.push(downloader.id)
       } catch (error) {
         downloader.status = statusFromError(error)
@@ -116,11 +118,14 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
         downloader.updatedAt = syncedAt
         summary.failedDownloaders += 1
         summary.errors.push({ downloaderId: downloader.id, downloaderName: downloader.name, message: downloader.statusMessage })
-        changed = true
+        updatedDownloaders.push(downloader)
       }
     }
 
-    if (changed) await writeState(state)
+    if (updatedTorrents.length) await updateTorrents(updatedTorrents)
+    for (const downloader of updatedDownloaders) {
+      await updateDownloaderInDb(downloader)
+    }
     await recordTorrentTraffic(trafficSamples, syncedAt)
     return summary
   } finally {

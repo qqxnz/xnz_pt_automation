@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -229,18 +229,18 @@ export type DownloaderRecord = {
   updatedAt: string
 }
 
-type AppState = {
-  users: UserRecord[]
-  operationLogs: OperationLogRecord[]
-  taskLogs: TaskLogRecord[]
-  scheduleLogs: ScheduleLogRecord[]
-  sites: SiteRecord[]
-  proxies: ProxyRecord[]
-  downloaders: DownloaderRecord[]
-  tasks: TaskRecord[]
-  torrents: TorrentRecord[]
-  siteTrafficSnapshots: SiteTrafficSnapshotRecord[]
-  systemSettings: SystemSettings
+type AppStateMigrationPayload = {
+  users?: UserRecord[]
+  operationLogs?: OperationLogRecord[]
+  taskLogs?: TaskLogRecord[]
+  scheduleLogs?: ScheduleLogRecord[]
+  sites?: SiteRecord[]
+  proxies?: ProxyRecord[]
+  downloaders?: DownloaderRecord[]
+  tasks?: TaskRecord[]
+  torrents?: TorrentRecord[]
+  siteTrafficSnapshots?: SiteTrafficSnapshotRecord[]
+  systemSettings?: SystemSettings
   systemSettingsUpdatedAt?: string
 }
 
@@ -302,7 +302,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 6
+const schemaVersion = 7
 
 export const storagePaths = {
   root,
@@ -324,29 +324,15 @@ export const defaultSystemSettings: SystemSettings = {
   defaultUserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
-async function initialState(): Promise<AppState> {
+async function initialAdminUser(): Promise<UserRecord> {
   return {
-    users: [
-      {
-        id: 'admin',
-        username: 'admin',
-        passwordHash: await createPasswordHash(process.env.DEFAULT_ADMIN_PASSWORD ?? '123456')
-      }
-    ],
-    operationLogs: [],
-    taskLogs: [],
-    scheduleLogs: [],
-    sites: [],
-    proxies: [],
-    downloaders: [],
-    tasks: [],
-    torrents: [],
-    siteTrafficSnapshots: [],
-    systemSettings: defaultSystemSettings
+    id: 'admin',
+    username: 'admin',
+    passwordHash: await createPasswordHash(process.env.DEFAULT_ADMIN_PASSWORD ?? '123456')
   }
 }
 
-function normalizeState(state: Partial<AppState>): AppState {
+function normalizeMigratedState(state: Partial<AppStateMigrationPayload>): AppStateMigrationPayload {
   const systemSettings = {
     ...defaultSystemSettings,
     ...(state.systemSettings ?? {})
@@ -398,6 +384,24 @@ function normalizeState(state: Partial<AppState>): AppState {
 let database: DatabaseSync | undefined
 let storageReady: Promise<void> | undefined
 
+async function readJsonFile(filePath: string): Promise<Partial<AppStateMigrationPayload> | undefined> {
+  try {
+    const fs = await import('node:fs/promises')
+    const raw = await fs.readFile(filePath, 'utf8')
+    return JSON.parse(raw) as Partial<AppStateMigrationPayload>
+  } catch {
+    return undefined
+  }
+}
+
+function tryRemoveLegacyStateFile() {
+  try {
+    if (existsSync(legacyStateFile)) unlinkSync(legacyStateFile)
+  } catch {
+    // 忽略删除失败，避免影响正常启动
+  }
+}
+
 function bool(value?: boolean) {
   return value ? 1 : 0
 }
@@ -440,11 +444,6 @@ function createBaseTables(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS app_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS app_state (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      state_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
     );
   `)
 }
@@ -697,20 +696,14 @@ function setMeta(db: DatabaseSync, key: string, value: string) {
   db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
 }
 
-function readDbState(db: DatabaseSync): Partial<AppState> | undefined {
+function readDbLegacyState(db: DatabaseSync): Partial<AppStateMigrationPayload> | undefined {
   const row = db.prepare('SELECT state_json FROM app_state WHERE id = 1').get() as { state_json?: string } | undefined
   if (!row?.state_json) return undefined
-  return JSON.parse(row.state_json) as Partial<AppState>
-}
-
-function backupBeforeMigration(db: DatabaseSync) {
-  if (!existsSync(dbFile)) return
-  const alreadyBackedUp = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('v2_backup_path') as { value?: string } | undefined
-  if (alreadyBackedUp?.value) return
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backupPath = `${dbFile}.backup-before-v2-${stamp}`
-  copyFileSync(dbFile, backupPath)
-  setMeta(db, 'v2_backup_path', backupPath)
+  try {
+    return JSON.parse(row.state_json) as Partial<AppStateMigrationPayload>
+  } catch {
+    return undefined
+  }
 }
 
 async function ensureStorage() {
@@ -724,20 +717,34 @@ async function ensureStorage() {
     const currentVersion = userVersion(db)
     if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) return
 
-    if (currentVersion >= 2 && tableHasRows(db, 'users')) {
+    if (currentVersion >= 2) {
       migrateStructuredDatabase(db, currentVersion)
       return
     }
 
-    const stateFromDb = readDbState(db)
-    const stateFromFile = !stateFromDb && existsSync(legacyStateFile) ? JSON.parse(readFileSync(legacyStateFile, 'utf8')) as Partial<AppState> : undefined
+    const stateFromDb = readDbLegacyState(db)
+    const stateFromFile = !stateFromDb && existsSync(legacyStateFile) ? await readJsonFile(legacyStateFile) : undefined
     const source = stateFromDb ? 'app_state' : stateFromFile ? legacyStateFile : 'initial'
-    const state = normalizeState(stateFromDb ?? stateFromFile ?? await initialState())
+    const state = normalizeMigratedState(stateFromDb ?? stateFromFile ?? {})
 
-    backupBeforeMigration(db)
     db.exec('BEGIN IMMEDIATE')
     try {
-      writeStructuredState(db, state)
+      if (state.users?.length) {
+        for (const item of state.users) upsertUser(db, item)
+      } else {
+        upsertUser(db, await initialAdminUser())
+      }
+      for (const item of state.sites ?? []) upsertSite(db, item)
+      for (const item of state.proxies ?? []) upsertProxy(db, item)
+      for (const item of state.downloaders ?? []) upsertDownloader(db, item)
+      for (const item of state.tasks ?? []) upsertTask(db, item)
+      for (const item of state.torrents ?? []) upsertTorrent(db, item)
+      for (const item of state.operationLogs ?? []) upsertOperationLog(db, item)
+      for (const item of state.taskLogs ?? []) upsertTaskLog(db, item)
+      for (const item of state.scheduleLogs ?? []) upsertScheduleLog(db, item)
+      for (const item of state.siteTrafficSnapshots ?? []) upsertSnapshot(db, item)
+      db.prepare('INSERT INTO system_settings (id, settings_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at')
+        .run(json(state.systemSettings ?? defaultSystemSettings), optional(state.systemSettingsUpdatedAt))
       seedTorrentTrafficStatistics(db, new Date().toISOString())
       setMeta(db, 'schema_version', String(schemaVersion))
       setMeta(db, 'last_migration_status', 'SUCCESS')
@@ -815,6 +822,11 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
       if (!tableHasColumn(db, 'tasks', 'size_max_gb')) db.exec('ALTER TABLE tasks ADD COLUMN size_max_gb REAL')
     }
     if (currentVersion < 6) seedTorrentTrafficStatistics(db, migratedAt)
+    if (currentVersion < 7) {
+      // v7 移除对旧版 JSON 存储的依赖：删掉 app_state 单行表与磁盘上的 app-state.json 文件
+      dropLegacyStateTable(db)
+      tryRemoveLegacyStateFile()
+    }
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', migratedAt)
@@ -833,42 +845,8 @@ function tableHasRows(db: DatabaseSync, table: string) {
   return Boolean(row?.ok)
 }
 
-function clearStructuredTables(db: DatabaseSync, includeLogs = true) {
-  db.exec(`
-    DELETE FROM users;
-    DELETE FROM sites;
-    DELETE FROM proxies;
-    DELETE FROM downloaders;
-    DELETE FROM tasks;
-    DELETE FROM torrents;
-    DELETE FROM site_traffic_snapshots;
-    DELETE FROM system_settings;
-  `)
-  if (includeLogs) {
-    db.exec(`
-      DELETE FROM operation_logs;
-      DELETE FROM task_logs;
-      DELETE FROM schedule_logs;
-    `)
-  }
-}
-
-function writeStructuredState(db: DatabaseSync, state: AppState, options: { includeLogs?: boolean } = {}) {
-  const includeLogs = options.includeLogs ?? true
-  clearStructuredTables(db, includeLogs)
-  for (const item of state.users) upsertUser(db, item)
-  for (const item of state.sites) upsertSite(db, item)
-  for (const item of state.proxies) upsertProxy(db, item)
-  for (const item of state.downloaders) upsertDownloader(db, item)
-  for (const item of state.tasks) upsertTask(db, item)
-  for (const item of state.torrents) upsertTorrent(db, item)
-  if (includeLogs) {
-    for (const item of state.operationLogs) upsertOperationLog(db, item)
-    for (const item of state.taskLogs) upsertTaskLog(db, item)
-    for (const item of state.scheduleLogs) upsertScheduleLog(db, item)
-  }
-  for (const item of state.siteTrafficSnapshots) upsertSnapshot(db, item)
-  db.prepare('INSERT INTO system_settings (id, settings_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at').run(json(state.systemSettings), optional(state.systemSettingsUpdatedAt))
+function dropLegacyStateTable(db: DatabaseSync) {
+  db.exec('DROP TABLE IF EXISTS app_state')
 }
 
 function upsertUser(db: DatabaseSync, item: UserRecord) {
@@ -1181,24 +1159,6 @@ function systemSettingsFromDb(db: DatabaseSync) {
   }
 }
 
-function readStructuredState(db: DatabaseSync): AppState {
-  const systemSettings = systemSettingsFromDb(db)
-  return normalizeState({
-    users: usersFromDb(db),
-    operationLogs: (db.prepare('SELECT * FROM operation_logs ORDER BY created_at DESC, id DESC').all() as any[]).map(operationLogFromRow),
-    taskLogs: (db.prepare('SELECT * FROM task_logs ORDER BY created_at DESC, id DESC').all() as any[]).map(taskLogFromRow),
-    scheduleLogs: (db.prepare('SELECT * FROM schedule_logs ORDER BY created_at DESC, id DESC').all() as any[]).map(scheduleLogFromRow),
-    sites: sitesFromDb(db),
-    proxies: proxiesFromDb(db),
-    downloaders: downloadersFromDb(db),
-    tasks: tasksFromDb(db),
-    torrents: torrentsFromDb(db),
-    siteTrafficSnapshots: snapshotsFromDb(db),
-    systemSettings: systemSettings.settings,
-    systemSettingsUpdatedAt: systemSettings.updatedAt
-  })
-}
-
 function pruneLogTable(db: DatabaseSync, table: string) {
   db.prepare(`DELETE FROM ${table} WHERE id NOT IN (SELECT id FROM ${table} ORDER BY created_at DESC, id DESC LIMIT 1000)`).run()
 }
@@ -1301,23 +1261,6 @@ async function readyDb() {
   return openDatabase()
 }
 
-export async function readState(): Promise<AppState> {
-  return readStructuredState(await readyDb())
-}
-
-export async function writeState(state: AppState) {
-  const db = await readyDb()
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    writeStructuredState(db, normalizeState(state), { includeLogs: false })
-    setMeta(db, 'last_write_at', new Date().toISOString())
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
-  }
-}
-
 export async function readStorageMigrationStatus() {
   const db = await readyDb()
   const row = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('last_migration_status') as { value?: string } | undefined
@@ -1330,9 +1273,20 @@ export async function readStorageSchemaVersion() {
   return row?.value ?? String(userVersion(db))
 }
 
-export async function readSystemSettings() {
-  const state = await readState()
-  return state.systemSettings
+export async function readSystemSettings(): Promise<SystemSettings> {
+  const db = await readyDb()
+  return systemSettingsFromDb(db).settings
+}
+
+export async function readSystemSettingsMeta(): Promise<{ settings: SystemSettings; updatedAt?: string }> {
+  const db = await readyDb()
+  return systemSettingsFromDb(db)
+}
+
+export async function writeSystemSettings(settings: SystemSettings, updatedAt: string): Promise<void> {
+  const db = await readyDb()
+  db.prepare('INSERT INTO system_settings (id, settings_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at')
+    .run(json(settings), updatedAt)
 }
 
 export async function appendOperationLog(payload: Omit<OperationLogRecord, 'id' | 'type' | 'createdAt'>) {
@@ -1578,9 +1532,272 @@ export async function readSiteStatistics(query: SiteStatisticsQuery) {
   }
 }
 
-export async function readTasks() {
+export async function listTasksFromDb(): Promise<TaskRecord[]> {
   const db = await readyDb()
   return tasksFromDb(db)
+}
+
+export async function getTaskFromDb(id: string): Promise<TaskRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any
+  return row ? taskFromRow(row) : undefined
+}
+
+export async function insertTaskToDb(task: TaskRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertTask(db, task)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function deleteTaskFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function updateTaskFieldsInDb(
+  id: string,
+  fields: Partial<
+    Pick<
+      TaskRecord,
+      | 'name'
+      | 'siteId'
+      | 'downloaderId'
+      | 'autoRunEnabled'
+      | 'autoRunStartedAt'
+      | 'nextRunAt'
+      | 'intervalMinutes'
+      | 'freeOnly'
+      | 'onlyFreeDownload'
+      | 'autoPush'
+      | 'discountTypes'
+      | 'seederCondition'
+      | 'seederCount'
+      | 'sizeMinGb'
+      | 'sizeMaxGb'
+      | 'torrentCountCondition'
+      | 'torrentCount'
+      | 'expiringSoonMinutes'
+      | 'savePathOverride'
+      | 'categoryOverride'
+      | 'tagsOverride'
+      | 'running'
+      | 'lastRunMode'
+      | 'lastStartedAt'
+      | 'lastFinishedAt'
+      | 'lastStatus'
+      | 'lastSummary'
+      | 'lastError'
+      | 'updatedAt'
+    >
+  >
+): Promise<void> {
+  const db = await readyDb()
+  const assignments: string[] = []
+  const values: unknown[] = []
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined) continue
+    const column = taskFieldToColumn[key as keyof typeof fields]
+    if (!column) continue
+    assignments.push(`${column} = ?`)
+    values.push(taskFieldToDbValue(key as keyof typeof fields, value))
+  }
+  if (!assignments.length) return
+  values.push(id)
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(`UPDATE tasks SET ${assignments.join(', ')} WHERE id = ?`).run(...(values as any[]))
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+const taskFieldToColumn: Record<string, string> = {
+  name: 'name',
+  siteId: 'site_id',
+  downloaderId: 'downloader_id',
+  autoRunEnabled: 'auto_run_enabled',
+  autoRunStartedAt: 'auto_run_started_at',
+  nextRunAt: 'next_run_at',
+  intervalMinutes: 'interval_minutes',
+  freeOnly: 'free_only',
+  onlyFreeDownload: 'only_free_download',
+  autoPush: 'auto_push',
+  discountTypes: 'discount_types_json',
+  seederCondition: 'seeder_condition',
+  seederCount: 'seeder_count',
+  sizeMinGb: 'size_min_gb',
+  sizeMaxGb: 'size_max_gb',
+  torrentCountCondition: 'torrent_count_condition',
+  torrentCount: 'torrent_count',
+  expiringSoonMinutes: 'expiring_soon_minutes',
+  savePathOverride: 'save_path_override',
+  categoryOverride: 'category_override',
+  tagsOverride: 'tags_override_json',
+  running: 'running',
+  lastRunMode: 'last_run_mode',
+  lastStartedAt: 'last_started_at',
+  lastFinishedAt: 'last_finished_at',
+  lastStatus: 'last_status',
+  lastSummary: 'last_summary',
+  lastError: 'last_error',
+  updatedAt: 'updated_at'
+}
+
+function taskFieldToDbValue(key: string, value: unknown): unknown {
+  if (key === 'discountTypes' || key === 'tagsOverride') return json(value ?? null)
+  if (key === 'autoRunEnabled' || key === 'freeOnly' || key === 'onlyFreeDownload' || key === 'autoPush' || key === 'running') {
+    return bool(value as boolean | undefined)
+  }
+  return value === undefined ? null : value
+}
+
+function taskFromRow(row: any): TaskRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    siteId: row.site_id,
+    downloaderId: row.downloader_id,
+    autoRunEnabled: fromBool(row.auto_run_enabled),
+    autoRunStartedAt: row.auto_run_started_at ?? undefined,
+    nextRunAt: row.next_run_at ?? undefined,
+    intervalMinutes: row.interval_minutes,
+    freeOnly: fromBool(row.free_only),
+    onlyFreeDownload: fromBool(row.only_free_download),
+    autoPush: fromBool(row.auto_push),
+    discountTypes: parseJson(row.discount_types_json, defaultTaskDiscountTypes),
+    seederCondition: row.seeder_condition ?? undefined,
+    seederCount: row.seeder_count ?? undefined,
+    sizeMinGb: row.size_min_gb ?? 0,
+    sizeMaxGb: row.size_max_gb ?? 0,
+    torrentCountCondition: row.torrent_count_condition ?? undefined,
+    torrentCount: row.torrent_count ?? undefined,
+    expiringSoonMinutes: row.expiring_soon_minutes ?? undefined,
+    savePathOverride: row.save_path_override ?? undefined,
+    categoryOverride: row.category_override ?? undefined,
+    tagsOverride: parseJson<string[] | undefined>(row.tags_override_json, undefined),
+    running: fromBool(row.running),
+    lastRunMode: row.last_run_mode ?? undefined,
+    lastStartedAt: row.last_started_at ?? undefined,
+    lastFinishedAt: row.last_finished_at ?? undefined,
+    lastStatus: row.last_status ?? undefined,
+    lastSummary: row.last_summary ?? undefined,
+    lastError: row.last_error ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export async function listProxiesFromDb(): Promise<ProxyRecord[]> {
+  const db = await readyDb()
+  return proxiesFromDb(db)
+}
+
+export async function getProxyFromDb(id: string): Promise<ProxyRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM proxies WHERE id = ?').get(id) as any
+  if (!row) return undefined
+  return {
+    id: row.id,
+    name: row.name,
+    enabled: fromBool(row.enabled),
+    type: row.type,
+    host: row.host,
+    port: row.port,
+    username: row.username ?? undefined,
+    password: row.password ?? undefined,
+    lastTestStatus: row.last_test_status ?? undefined,
+    lastTestedAt: row.last_tested_at ?? undefined
+  }
+}
+
+export async function insertProxyToDb(proxy: ProxyRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertProxy(db, proxy)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function updateProxyInDb(proxy: ProxyRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    upsertProxy(db, proxy)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function deleteProxyFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare('DELETE FROM proxies WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function findUserByUsername(username: string): Promise<UserRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any
+  return row ? userFromRow(row) : undefined
+}
+
+export async function findUserById(id: string): Promise<UserRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any
+  return row ? userFromRow(row) : undefined
+}
+
+export async function listUsersFromDb(): Promise<UserRecord[]> {
+  const db = await readyDb()
+  return usersFromDb(db)
+}
+
+export async function updateUserLastLoginAt(id: string, lastLoginAt: string): Promise<void> {
+  const db = await readyDb()
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(lastLoginAt, id)
+}
+
+export async function updateUserPassword(id: string, passwordHash: string, passwordChangedAt: string): Promise<void> {
+  const db = await readyDb()
+  db.prepare('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?').run(passwordHash, passwordChangedAt, id)
+}
+
+function userFromRow(row: any): UserRecord {
+  return {
+    id: row.id,
+    username: row.username,
+    passwordHash: row.password_hash,
+    passwordChangedAt: row.password_changed_at ?? undefined,
+    lastLoginAt: row.last_login_at ?? undefined
+  }
 }
 
 function refreshTorrentFreeStateForStorage(torrent: TorrentRecord, expiringSoonMinutes = 120) {
@@ -1659,10 +1876,9 @@ export async function deleteTorrents(ids: string[]) {
 
 // ============================================================================
 // Independent sites repository (operates only on `sites` and
-// `site_traffic_snapshots` tables, never touches other tables or the global
-// in-memory `state` object). Use this from site routes and the
-// `site-traffic-sync` scheduler so concurrent writes from torrent / task
-// modules cannot clobber site data via the global `writeState` path.
+// `site_traffic_snapshots` tables, never touches other tables). Use this from
+// site routes and the `site-traffic-sync` scheduler so concurrent writes from
+// torrent / task / downloader modules stay isolated to their own tables.
 // ============================================================================
 
 export async function listSitesFromDb(): Promise<SiteRecord[]> {
@@ -1787,9 +2003,8 @@ function sitesFromDbFromRow(row: any): SiteRecord {
 
 // ============================================================================
 // Independent downloaders repository (operates only on the `downloaders` table,
-// never touches other tables or the global in-memory `state` object). Use this
-// from downloader routes so concurrent writes from torrent / task modules
-// cannot clobber downloader data via the global `writeState` path.
+// never touches other tables). Use this from downloader routes so concurrent
+// writes from torrent / task / site modules stay isolated to their own tables.
 // ============================================================================
 
 export async function listDownloadersFromDb(): Promise<DownloaderRecord[]> {

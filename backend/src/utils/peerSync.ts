@@ -1,4 +1,4 @@
-import { readState, type DownloaderRecord, type TorrentRecord, writeState } from '../storage.js'
+import { listDownloadersFromDb, listTorrents, updateDownloaderInDb, updateTorrents, type DownloaderRecord, type TorrentRecord } from '../storage.js'
 import { getQbTorrentPeers, QbittorrentError } from './qbittorrent.js'
 
 let ipv6SyncRunning = false
@@ -80,9 +80,9 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
   }
 
   ipv6SyncRunning = true
-  const state = await readState()
   const syncedAt = new Date().toISOString()
-  const enabledDownloaders = state.downloaders.filter((downloader) => downloader.enabled && (!downloaderId || downloader.id === downloaderId))
+  const allDownloaders = await listDownloadersFromDb()
+  const enabledDownloaders = allDownloaders.filter((downloader) => downloader.enabled && (!downloaderId || downloader.id === downloaderId))
   const summary: Ipv6PeerSyncSummary = {
     scannedDownloaders: 0,
     scannedTorrents: 0,
@@ -91,18 +91,20 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
     errors: [],
     syncedAt
   }
-  let changed = false
+  const updatedTorrents: TorrentRecord[] = []
+  const updatedDownloaders: DownloaderRecord[] = []
 
   try {
     for (const downloader of enabledDownloaders) {
       summary.scannedDownloaders += 1
-      const downloaderTorrents = state.torrents.filter((torrent) => torrent.pushStatus === 'PUSHED' && torrent.downloaderId === downloader.id && torrent.torrentHash)
+      const downloaderTorrentList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED', downloaderId: downloader.id })
+      const downloaderTorrents = downloaderTorrentList.items.filter((torrent) => torrent.torrentHash)
       if (!downloaderTorrents.length) {
         const prev = downloader.hasIpv6Peers
         const cleared = clearDownloaderIpv6(downloader, syncedAt)
         if (cleared || prev) {
           summary.clearedDownloaders += 1
-          changed = true
+          updatedDownloaders.push(downloader)
         }
         continue
       }
@@ -111,12 +113,12 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
       const isOnline = downloader.status === 'ONLINE'
       if (!isOnline) {
         for (const torrent of downloaderTorrents) {
-          if (clearTorrentIpv6(torrent, syncedAt)) changed = true
+          if (clearTorrentIpv6(torrent, syncedAt)) updatedTorrents.push(torrent)
         }
         const prev = downloader.hasIpv6Peers
         if (clearDownloaderIpv6(downloader, syncedAt) || prev) {
           summary.clearedDownloaders += 1
-          changed = true
+          updatedDownloaders.push(downloader)
         }
         continue
       }
@@ -125,7 +127,7 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
       for (const torrent of downloaderTorrents) {
         try {
           const snapshot = await getQbTorrentPeers(downloader, torrent.torrentHash!, torrent.peerSyncRid)
-          if (applyPeerSnapshot(torrent, snapshot, syncedAt)) changed = true
+          if (applyPeerSnapshot(torrent, snapshot, syncedAt)) updatedTorrents.push(torrent)
         } catch (error) {
           if (error instanceof QbittorrentError && error.code === 'AUTH_FAILED') {
             downloader.status = 'AUTH_FAILED'
@@ -134,11 +136,11 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
             hadError = true
             summary.errors.push({ downloaderId: downloader.id, downloaderName: downloader.name, message: errorMessage(error) })
             for (const t of downloaderTorrents) {
-              if (clearTorrentIpv6(t, syncedAt)) changed = true
+              if (clearTorrentIpv6(t, syncedAt)) updatedTorrents.push(t)
             }
             if (clearDownloaderIpv6(downloader, syncedAt)) {
               summary.clearedDownloaders += 1
-              changed = true
+              updatedDownloaders.push(downloader)
             }
             break
           }
@@ -150,19 +152,22 @@ export async function syncTorrentIpv6Peers(downloaderId?: string): Promise<Ipv6P
         const agg = aggregateDownloaderIpv6(downloaderTorrents)
         if (downloader.hasIpv6Peers !== agg.hasIpv6Peers) {
           downloader.hasIpv6Peers = agg.hasIpv6Peers
-          changed = true
+          updatedDownloaders.push(downloader)
         }
         if (downloader.ipv6TorrentCount !== agg.ipv6TorrentCount) {
           downloader.ipv6TorrentCount = agg.ipv6TorrentCount
-          changed = true
+          updatedDownloaders.push(downloader)
         }
         downloader.ipv6SyncedAt = syncedAt
-        changed = true
+        updatedDownloaders.push(downloader)
         summary.ipv6TorrentCount += agg.ipv6TorrentCount
       }
     }
 
-    if (changed) await writeState(state)
+    if (updatedTorrents.length) await updateTorrents(updatedTorrents)
+    for (const downloader of updatedDownloaders) {
+      await updateDownloaderInDb(downloader)
+    }
     return summary
   } finally {
     ipv6SyncRunning = false

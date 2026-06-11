@@ -1,7 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, type SiteRecord, type TaskRecord, type TorrentRecord, writeState } from '../storage.js'
+import {
+  deleteTaskFromDb,
+  getTaskFromDb,
+  insertTaskToDb,
+  insertTorrents,
+  listDownloadersFromDb,
+  listSitesFromDb,
+  listTasksFromDb,
+  listTorrents,
+  queryLogs,
+  type SiteRecord,
+  type TaskRecord,
+  type TorrentRecord,
+  updateTaskFieldsInDb
+} from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog } from '../utils/logger.js'
 import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
 import { browseTorrents, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
@@ -70,13 +84,17 @@ function siteName(site?: { domain: string }) {
   return site ? siteDisplayName(site as SiteRecord) : '未知站点'
 }
 
-function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof readState>>, existingId?: string) {
+function validatePayload(
+  payload: TaskPayload,
+  context: { existingTasks: TaskRecord[]; sites: SiteRecord[]; downloaders: { id: string }[] },
+  existingId?: string
+) {
   const name = payload.name?.trim()
   if (!name) return '任务名称不能为空'
   if (name.length > 60) return '任务名称不能超过 60 个字符'
-  if (state.tasks.some((task) => task.id !== existingId && task.name.toLowerCase() === name.toLowerCase())) return '任务名称已存在'
-  if (!payload.siteId || !state.sites.some((site) => site.id === payload.siteId)) return '请选择站点'
-  if (!payload.downloaderId || !state.downloaders.some((downloader) => downloader.id === payload.downloaderId)) return '请选择下载器'
+  if (context.existingTasks.some((task) => task.id !== existingId && task.name.toLowerCase() === name.toLowerCase())) return '任务名称已存在'
+  if (!payload.siteId || !context.sites.some((site) => site.id === payload.siteId)) return '请选择站点'
+  if (!payload.downloaderId || !context.downloaders.some((downloader) => downloader.id === payload.downloaderId)) return '请选择下载器'
   const interval = payload.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 10 分钟'
   if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE', 'NORMAL'].includes(type))) return '优惠类型范围不合法'
@@ -94,9 +112,9 @@ function validatePayload(payload: TaskPayload, state: Awaited<ReturnType<typeof 
   return undefined
 }
 
-function listItem(task: TaskRecord, state: Awaited<ReturnType<typeof readState>>) {
-  const site = state.sites.find((item) => item.id === task.siteId)
-  const downloader = state.downloaders.find((item) => item.id === task.downloaderId)
+function listItem(task: TaskRecord, context: { sites: SiteRecord[]; downloaders: { id: string; name: string }[] }) {
+  const site = context.sites.find((item) => item.id === task.siteId)
+  const downloader = context.downloaders.find((item) => item.id === task.downloaderId)
   return {
     ...task,
     siteName: siteName(site),
@@ -104,7 +122,7 @@ function listItem(task: TaskRecord, state: Awaited<ReturnType<typeof readState>>
   }
 }
 
-function buildTask(payload: TaskPayload, state: Awaited<ReturnType<typeof readState>>, existing?: TaskRecord): TaskRecord {
+function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
   const now = new Date().toISOString()
   const intervalMinutes = payload.intervalMinutes ?? existing?.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   const autoRunEnabled = payload.autoRunEnabled ?? existing?.autoRunEnabled ?? false
@@ -212,15 +230,6 @@ function torrentHash(site: SiteRecord, item: CandidateTorrent) {
   return createHash('sha1').update(`${site.id}:${item.torrentId}`).digest('hex')
 }
 
-function knownTorrentKeys(torrents: TorrentRecord[]) {
-  return new Set(torrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
-}
-
-function newCandidatesForSite(site: SiteRecord, items: CandidateTorrent[], torrents: TorrentRecord[]) {
-  const existingKeys = knownTorrentKeys(torrents)
-  return items.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
-}
-
 function applyTorrentCountCondition(task: TaskRecord, items: CandidateTorrent[]) {
   if (!task.torrentCountCondition) return items
   const target = task.torrentCount ?? 1
@@ -264,9 +273,19 @@ async function logOperation(req: Parameters<typeof operationActor>[1], res: Para
   })
 }
 
-async function persistTaskUpdate(state: Awaited<ReturnType<typeof readState>>, task: TaskRecord) {
+async function persistTaskUpdate(task: TaskRecord) {
   try {
-    await writeState(state)
+    await updateTaskFieldsInDb(task.id, {
+      running: task.running,
+      lastRunMode: task.lastRunMode,
+      lastStartedAt: task.lastStartedAt,
+      lastFinishedAt: task.lastFinishedAt,
+      lastStatus: task.lastStatus,
+      lastSummary: task.lastSummary,
+      lastError: task.lastError,
+      nextRunAt: task.nextRunAt,
+      updatedAt: task.updatedAt
+    })
   } catch (error) {
     logger.error('task', `任务状态写盘失败，尝试仅复位 running 字段`, {
       taskId: task.id,
@@ -274,17 +293,15 @@ async function persistTaskUpdate(state: Awaited<ReturnType<typeof readState>>, t
       error: errorMessage(error, '写盘失败')
     })
     try {
-      const fallback = await readState()
-      const target = fallback.tasks.find((item) => item.id === task.id)
-      if (target && target.running) {
-        target.running = false
-        target.lastFinishedAt = new Date().toISOString()
-        target.lastStatus = 'FAILED'
-        target.lastError = '任务状态写盘失败，已回退为失败状态'
-        target.lastSummary = '任务状态写盘失败'
-        target.updatedAt = new Date().toISOString()
-        await writeState(fallback)
-      }
+      const finishedAt = new Date().toISOString()
+      await updateTaskFieldsInDb(task.id, {
+        running: false,
+        lastFinishedAt: finishedAt,
+        lastStatus: 'FAILED',
+        lastError: '任务状态写盘失败，已回退为失败状态',
+        lastSummary: '任务状态写盘失败',
+        updatedAt: finishedAt
+      })
     } catch (fallbackError) {
       logger.error('task', `任务状态写盘二次回退失败`, {
         taskId: task.id,
@@ -299,8 +316,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   if (runningTaskIds.has(taskId)) throw new Error('任务正在运行')
   runningTaskIds.add(taskId)
 
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === taskId)
+  const task = await getTaskFromDb(taskId)
   if (!task) {
     runningTaskIds.delete(taskId)
     throw new Error('任务不存在')
@@ -310,8 +326,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     throw new Error('任务正在运行')
   }
 
-  const site = state.sites.find((item) => item.id === task.siteId)
-  const downloader = state.downloaders.find((item) => item.id === task.downloaderId)
+  const [sites, downloaders] = await Promise.all([listSitesFromDb(), listDownloadersFromDb()])
+  const site = sites.find((item) => item.id === task.siteId)
+  const downloader = downloaders.find((item) => item.id === task.downloaderId)
   const startedAt = new Date().toISOString()
   task.running = true
   task.lastStartedAt = startedAt
@@ -320,7 +337,15 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   task.lastError = undefined
   task.lastSummary = '运行中'
   task.updatedAt = startedAt
-  await writeState(state)
+  await updateTaskFieldsInDb(task.id, {
+    running: true,
+    lastStartedAt: startedAt,
+    lastRunMode: runMode,
+    lastStatus: undefined,
+    lastError: undefined,
+    lastSummary: '运行中',
+    updatedAt: startedAt
+  })
   logger.info('task', `任务【${task.name}】开始执行`, {
     taskId: task.id,
     taskName: task.name,
@@ -342,6 +367,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     })
   }
 
+  let pushedTorrentRecords: TorrentRecord[] = []
   try {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
     let fetched: CandidateTorrent[]
@@ -350,7 +376,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     } catch (error) {
       throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
     }
-    const deduped = newCandidatesForSite(site, fetched, state.torrents)
+    const existingTorrents = await listTorrents({ siteId: site.id, page: 1, pageSize: 1 })
+    const existingKeys = new Set(existingTorrents.items.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
+    const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
     const matched = matchedCandidates(task, deduped)
     const pushable = applyTorrentCountCondition(task, matched)
@@ -417,7 +445,10 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         downloadUrlHash: torrentHash(site, item),
         downloadUrl: item.downloadUrl
       }
-      state.torrents.unshift(record)
+      pushedTorrentRecords.push(record)
+    }
+    if (pushedTorrentRecords.length) {
+      await insertTorrents(pushedTorrentRecords)
     }
     const finishedAt = new Date().toISOString()
     const baseSummary = `抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，推送候选 ${pushable.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
@@ -430,7 +461,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastError = undefined
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
-    await persistTaskUpdate(state, task)
+    await persistTaskUpdate(task)
     await recordTaskLog({
       taskId: task.id,
       taskName: task.name,
@@ -495,7 +526,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastSummary = message
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
-    await persistTaskUpdate(state, task)
+    await persistTaskUpdate(task)
     await recordTaskLog({
       taskId: task.id,
       taskName: task.name,
@@ -557,9 +588,9 @@ export type ResetStuckTasksOptions = {
 export async function resetStuckRunningTasks(options: ResetStuckTasksOptions): Promise<StuckTaskResetSummary> {
   const thresholdMs = options.thresholdMs ?? STUCK_TASK_THRESHOLD_MS
   const nowMs = Date.now()
-  const state = await readState()
+  const tasks = await listTasksFromDb()
   const stuck: TaskRecord[] = []
-  for (const task of state.tasks) {
+  for (const task of tasks) {
     if (!task.running) continue
     const startedMs = task.lastStartedAt ? new Date(task.lastStartedAt).getTime() : 0
     const isStuck = !startedMs || Number.isNaN(startedMs) || nowMs - startedMs >= thresholdMs
@@ -577,13 +608,16 @@ export async function resetStuckRunningTasks(options: ResetStuckTasksOptions): P
     const reason = options.source === 'startup'
       ? '进程启动时检测到运行中状态残留，已自动重置'
       : '运行时间超过阈值未结束，已自动重置为失败'
-    task.running = false
-    task.lastFinishedAt = finishedAt
-    task.lastStatus = 'FAILED'
-    task.lastError = reason
-    task.lastSummary = reason
-    task.nextRunAt = wasAutoEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
-    task.updatedAt = finishedAt
+    const nextRunAt = wasAutoEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
+    await updateTaskFieldsInDb(task.id, {
+      running: false,
+      lastFinishedAt: finishedAt,
+      lastStatus: 'FAILED',
+      lastError: reason,
+      lastSummary: reason,
+      nextRunAt,
+      updatedAt: finishedAt
+    })
     resetTaskIds.push(task.id)
     await recordTaskLog({
       taskId: task.id,
@@ -610,7 +644,6 @@ export async function resetStuckRunningTasks(options: ResetStuckTasksOptions): P
       thresholdMs
     })
   }
-  await writeState(state)
   return { resetCount: resetTaskIds.length, resetTaskIds }
 }
 
@@ -621,9 +654,9 @@ export type DueTaskRunSummary = {
 }
 
 export async function runDueTasks(): Promise<DueTaskRunSummary> {
-  const state = await readState()
+  const tasks = await listTasksFromDb()
   const now = Date.now()
-  const dueTasks = state.tasks.filter((task) => task.autoRunEnabled && task.nextRunAt && new Date(task.nextRunAt).getTime() <= now)
+  const dueTasks = tasks.filter((task) => task.autoRunEnabled && task.nextRunAt && new Date(task.nextRunAt).getTime() <= now)
   const runnableTasks = dueTasks.filter((task) => !task.running)
   for (const task of dueTasks) {
     if (task.running) continue
@@ -637,95 +670,111 @@ export async function runDueTasks(): Promise<DueTaskRunSummary> {
 }
 
 tasksRouter.get('/', requireAuth, async (req, res) => {
-  const state = await readState()
+  const [tasks, sites, downloaders] = await Promise.all([listTasksFromDb(), listSitesFromDb(), listDownloadersFromDb()])
+  const context = { sites, downloaders }
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const autoRun = String(req.query.autoRun ?? 'ALL')
-  const filtered = state.tasks.filter((task) => {
-    const item = listItem(task, state)
+  const filtered = tasks.filter((task) => {
+    const item = listItem(task, context)
     if (keyword && !`${item.name} ${item.siteName} ${item.downloaderName}`.toLowerCase().includes(keyword)) return false
     if (autoRun === 'ON' && !task.autoRunEnabled) return false
     if (autoRun === 'OFF' && task.autoRunEnabled) return false
     return true
   })
   res.json({
-    items: filtered.map((task) => listItem(task, state)),
+    items: filtered.map((task) => listItem(task, context)),
     total: filtered.length,
     stats: {
-      total: state.tasks.length,
-      autoRunEnabled: state.tasks.filter((task) => task.autoRunEnabled).length,
-      running: state.tasks.filter((task) => task.running).length,
-      failed: state.tasks.filter((task) => task.lastStatus === 'FAILED').length
+      total: tasks.length,
+      autoRunEnabled: tasks.filter((task) => task.autoRunEnabled).length,
+      running: tasks.filter((task) => task.running).length,
+      failed: tasks.filter((task) => task.lastStatus === 'FAILED').length
     }
   })
 })
 
 tasksRouter.post('/', requireAuth, async (req, res) => {
-  const state = await readState()
+  const [tasks, sites, downloaders] = await Promise.all([listTasksFromDb(), listSitesFromDb(), listDownloadersFromDb()])
   const payload = req.body as TaskPayload
-  const validation = validatePayload(payload, state)
+  const validation = validatePayload(payload, { existingTasks: tasks, sites, downloaders })
   if (validation) return res.status(400).json({ message: validation })
-  const task = buildTask(payload, state)
-  state.tasks.unshift(task)
-  await writeState(state)
+  const task = buildTask(payload)
+  await insertTaskToDb(task)
   await logOperation(req, res, '新建任务', `新建任务「${task.name}」`)
-  res.status(201).json(listItem(task, state))
+  res.status(201).json(listItem(task, { sites, downloaders }))
 })
 
 tasksRouter.get('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === String(req.params.id))
+  const [task, sites, downloaders] = await Promise.all([
+    getTaskFromDb(String(req.params.id)),
+    listSitesFromDb(),
+    listDownloadersFromDb()
+  ])
   if (!task) return res.status(404).json({ message: '任务不存在' })
-  res.json(listItem(task, state))
+  res.json(listItem(task, { sites, downloaders }))
 })
 
 tasksRouter.put('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
-  const index = state.tasks.findIndex((item) => item.id === String(req.params.id))
-  if (index < 0) return res.status(404).json({ message: '任务不存在' })
+  const id = String(req.params.id)
+  const [existing, tasks, sites, downloaders] = await Promise.all([
+    getTaskFromDb(id),
+    listTasksFromDb(),
+    listSitesFromDb(),
+    listDownloadersFromDb()
+  ])
+  if (!existing) return res.status(404).json({ message: '任务不存在' })
   const payload = req.body as TaskPayload
-  const validation = validatePayload(payload, state, String(req.params.id))
+  const validation = validatePayload(payload, { existingTasks: tasks, sites, downloaders }, id)
   if (validation) return res.status(400).json({ message: validation })
-  const task = buildTask(payload, state, state.tasks[index])
-  state.tasks[index] = task
-  await writeState(state)
+  const task = buildTask(payload, existing)
+  await insertTaskToDb(task)
   await logOperation(req, res, '编辑任务', `编辑任务「${task.name}」`)
-  res.json(listItem(task, state))
+  res.json(listItem(task, { sites, downloaders }))
 })
 
 tasksRouter.delete('/:id', requireAuth, async (req, res) => {
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === String(req.params.id))
+  const id = String(req.params.id)
+  const task = await getTaskFromDb(id)
   if (!task) return res.status(404).json({ message: '任务不存在' })
-  state.tasks = state.tasks.filter((item) => item.id !== task.id)
-  await writeState(state)
+  await deleteTaskFromDb(id)
   await logOperation(req, res, '删除任务', `删除任务「${task.name}」`)
   res.status(204).send()
 })
 
 tasksRouter.post('/:id/auto-run', requireAuth, async (req, res) => {
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === String(req.params.id))
+  const id = String(req.params.id)
+  const [task, sites, downloaders] = await Promise.all([
+    getTaskFromDb(id),
+    listSitesFromDb(),
+    listDownloadersFromDb()
+  ])
   if (!task) return res.status(404).json({ message: '任务不存在' })
   const autoRunEnabled = Boolean((req.body as { autoRunEnabled?: boolean }).autoRunEnabled)
   const now = new Date().toISOString()
-  task.autoRunEnabled = autoRunEnabled
-  task.autoRunStartedAt = autoRunEnabled ? now : undefined
-  task.nextRunAt = autoRunEnabled ? addMinutes(now, task.intervalMinutes) : undefined
-  task.updatedAt = now
-  await writeState(state)
+  const nextRunAt = autoRunEnabled ? addMinutes(now, task.intervalMinutes) : undefined
+  await updateTaskFieldsInDb(id, {
+    autoRunEnabled,
+    autoRunStartedAt: autoRunEnabled ? now : undefined,
+    nextRunAt,
+    updatedAt: now
+  })
+  const updated: TaskRecord = { ...task, autoRunEnabled, autoRunStartedAt: autoRunEnabled ? now : undefined, nextRunAt, updatedAt: now }
   await logOperation(req, res, autoRunEnabled ? '开启任务自动执行' : '关闭任务自动执行', `${autoRunEnabled ? '开启' : '关闭'}任务「${task.name}」自动执行`)
-  res.json(listItem(task, state))
+  res.json(listItem(updated, { sites, downloaders }))
 })
 
 tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
-  const state = await readState()
-  const task = state.tasks.find((item) => item.id === String(req.params.id))
+  const id = String(req.params.id)
+  const task = await getTaskFromDb(id)
   if (!task) return res.status(404).json({ message: '任务不存在' })
-  const site = state.sites.find((item) => item.id === task.siteId)
+  const sites = await listSitesFromDb()
+  const site = sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
   try {
     const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
-    const deduped = newCandidatesForSite(site, fetched, state.torrents)
+    const existingTorrents = await listTorrents({ siteId: site.id, page: 1, pageSize: 1 })
+    const existingKeys = new Set(existingTorrents.items.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
+    const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
     const matched = matchedCandidates(task, deduped)
     const pushable = applyTorrentCountCondition(task, matched)
@@ -755,24 +804,22 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
 tasksRouter.post('/:id/run', requireAuth, async (req, res) => {
   try {
     const result = await runTaskById(String(req.params.id), 'MANUAL_RUN')
-    const state = await readState()
+    const [sites, downloaders] = await Promise.all([listSitesFromDb(), listDownloadersFromDb()])
     await logOperation(req, res, '运行任务', `手动运行任务「${result.task.name}」：${result.summary}`, result.task.lastStatus)
-    res.json({ task: listItem(result.task, state), fetchedCount: result.fetchedCount, matchedCount: result.matchedCount, skippedExistingCount: result.skippedExistingCount, pushedCount: result.pushedCount, pushFailedCount: result.pushFailedCount, summary: result.summary })
+    res.json({ task: listItem(result.task, { sites, downloaders }), fetchedCount: result.fetchedCount, matchedCount: result.matchedCount, skippedExistingCount: result.skippedExistingCount, pushedCount: result.pushedCount, pushFailedCount: result.pushFailedCount, summary: result.summary })
   } catch (error) {
     const message = error instanceof Error ? error.message : '任务执行失败'
-    const state = await readState()
-    const task = state.tasks.find((item) => item.id === String(req.params.id))
+    const id = String(req.params.id)
+    const [task, sites, downloaders] = await Promise.all([getTaskFromDb(id), listSitesFromDb(), listDownloadersFromDb()])
     await logOperation(req, res, '运行任务', `手动运行任务「${task?.name ?? '未知任务'}」失败：${message}`, 'FAILED')
-    res.status(message === '任务正在运行' ? 409 : task ? 400 : 404).json({ message, task: task ? listItem(task, state) : undefined })
+    res.status(message === '任务正在运行' ? 409 : task ? 400 : 404).json({ message, task: task ? listItem(task, { sites, downloaders }) : undefined })
   }
 })
 
 tasksRouter.get('/:id/logs', requireAuth, async (req, res) => {
-  const state = await readState()
   const taskId = String(req.params.id)
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
-  const items = state.taskLogs.filter((log) => log.taskId === taskId)
-  const start = (page - 1) * pageSize
-  res.json({ items: items.slice(start, start + pageSize), total: items.length, page, pageSize })
+  const result = await queryLogs({ type: 'task', page, pageSize, taskId })
+  res.json(result)
 })

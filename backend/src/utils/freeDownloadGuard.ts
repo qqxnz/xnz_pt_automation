@@ -1,4 +1,4 @@
-import { readState, writeState } from '../storage.js'
+import { listDownloadersFromDb, listTorrents, updateTorrents, type TorrentRecord } from '../storage.js'
 import { deleteTorrentFromQb } from './qbittorrent.js'
 
 export type FreeDownloadGuardSummary = {
@@ -40,7 +40,6 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
   }
 
   guardRunning = true
-  const state = await readState()
   const now = Date.now()
   const summary: FreeDownloadGuardSummary = {
     checkedCount: 0,
@@ -50,32 +49,36 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
     skippedCount: 0,
     details: []
   }
-  let changed = false
+  const updatedTorrents: TorrentRecord[] = []
 
   try {
-    const candidates = state.torrents.filter((torrent) => torrent.onlyFreeDownload && torrent.pushStatus === 'PUSHED' && torrent.torrentHash)
+    const candidateList = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' })
+    const candidates = candidateList.items.filter((torrent) => torrent.onlyFreeDownload && torrent.torrentHash)
     summary.checkedCount = candidates.length
+
+    const downloaders = await listDownloadersFromDb()
+    const downloaderById = new Map(downloaders.map((downloader) => [downloader.id, downloader]))
 
     for (const torrent of candidates) {
       const freeEndTime = validTime(torrent.freeEndAt)
       if (freeEndTime === undefined || freeEndTime > now || !isDownloadIncomplete(torrent.downloadProgress)) continue
 
       summary.expiredIncompleteCount += 1
-      const downloader = state.downloaders.find((item) => item.id === torrent.downloaderId)
+      const downloader = downloaderById.get(torrent.downloaderId ?? '')
       if (!downloader) {
         const message = '种子绑定下载器不存在，无法删除下载器任务'
         torrent.errorMessage = message
+        updatedTorrents.push(torrent)
         summary.failedCount += 1
         summary.details.push({ torrentId: torrent.id, title: torrent.title, downloaderName: torrent.downloaderName, message, status: 'FAILED' })
-        changed = true
         continue
       }
       if (!downloader.enabled) {
         const message = '下载器已禁用，无法删除下载器任务'
         torrent.errorMessage = message
+        updatedTorrents.push(torrent)
         summary.failedCount += 1
         summary.details.push({ torrentId: torrent.id, title: torrent.title, downloaderName: downloader.name, message, status: 'FAILED' })
-        changed = true
         continue
       }
 
@@ -83,9 +86,9 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
       if (!hash) {
         const message = '缺少下载器任务 Hash，无法删除下载器任务'
         torrent.errorMessage = message
+        updatedTorrents.push(torrent)
         summary.failedCount += 1
         summary.details.push({ torrentId: torrent.id, title: torrent.title, downloaderName: downloader.name, message, status: 'FAILED' })
-        changed = true
         continue
       }
 
@@ -95,7 +98,7 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
         torrent.currentState = 'DOWNLOADER_DELETED'
         torrent.downloaderState = 'deleted'
         torrent.errorMessage = undefined
-        changed = true
+        updatedTorrents.push(torrent)
         summary.deletedCount += 1
         summary.details.push({
           torrentId: torrent.id,
@@ -109,13 +112,13 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
       } catch (error) {
         const message = error instanceof Error ? error.message : '删除下载器任务失败'
         torrent.errorMessage = `仅免费下载删除失败：${message}`
-        changed = true
+        updatedTorrents.push(torrent)
         summary.failedCount += 1
         summary.details.push({ torrentId: torrent.id, title: torrent.title, downloaderName: downloader.name, message, status: 'FAILED' })
       }
     }
 
-    if (changed) await writeState(state)
+    if (updatedTorrents.length) await updateTorrents(updatedTorrents)
 
     return summary
   } finally {

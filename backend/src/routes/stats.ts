@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, type TorrentRecord, writeState } from '../storage.js'
+import { findUserByUsername, listDownloadersFromDb, listSitesFromDb, listTorrents, queryLogs, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -19,49 +19,7 @@ function localDayStartTime() {
   return start.getTime()
 }
 
-function validTime(value?: string) {
-  if (!value) return undefined
-  const time = new Date(value).getTime()
-  return Number.isNaN(time) ? undefined : time
-}
-
-function refreshTorrentFreeState(torrent: TorrentRecord, expiringSoonMinutes = 120) {
-  if (!torrent.freeEndAt || torrent.pushStatus === 'DELETED') return false
-  const freeEndTime = validTime(torrent.freeEndAt)
-  if (freeEndTime === undefined) return false
-
-  const previousState = torrent.currentState
-  const previousFreeNow = torrent.isFreeNow
-  const now = Date.now()
-  if (freeEndTime <= now) {
-    torrent.isFreeNow = false
-    torrent.currentState = 'EXPIRED'
-  } else {
-    torrent.isFreeNow = true
-    if (freeEndTime - now <= expiringSoonMinutes * 60_000) {
-      torrent.currentState = 'EXPIRING_SOON'
-    } else if (torrent.pushStatus === 'PUSHED') {
-      torrent.currentState = 'PUSHED'
-    } else if (torrent.pushStatus === 'PUSH_FAILED') {
-      torrent.currentState = 'PUSH_FAILED'
-    } else {
-      torrent.currentState = 'FREE_NOW'
-    }
-  }
-  return previousState !== torrent.currentState || previousFreeNow !== torrent.isFreeNow
-}
-
-function refreshTorrentFreeStates(state: Awaited<ReturnType<typeof readState>>) {
-  let changed = false
-  for (const torrent of state.torrents) {
-    const task = state.tasks.find((item) => item.id === torrent.sourceTaskId)
-    changed = refreshTorrentFreeState(torrent, task?.expiringSoonMinutes ?? 120) || changed
-  }
-  return changed
-}
-
-async function readTransferOverview(state: Awaited<ReturnType<typeof readState>>) {
-  const enabledDownloaders = state.downloaders.filter((downloader) => downloader.enabled)
+async function readTransferOverview(enabledDownloaders: DownloaderRecord[]) {
   if (!enabledDownloaders.length) return null
 
   const results = await Promise.allSettled(enabledDownloaders.map((downloader) => getQbTransferInfo(downloader)))
@@ -82,19 +40,23 @@ async function readTransferOverview(state: Awaited<ReturnType<typeof readState>>
 }
 
 statsRouter.get('/overview', requireAuth, async (_req, res) => {
-  const state = await readState()
-  const torrentStateChanged = refreshTorrentFreeStates(state)
-  if (torrentStateChanged) await writeState(state)
+  await refreshStoredTorrentFreeStates()
+
+  const [sites, downloaders, recentLogs] = await Promise.all([
+    listSitesFromDb(),
+    listDownloadersFromDb(),
+    queryLogs<TaskLogRecord>({ type: 'task', page: 1, pageSize: 5 })
+  ])
 
   const siteStats = {
-    total: state.sites.length,
-    online: state.sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
-    offline: state.sites.filter((site) => site.connectivityStatus === 'OFFLINE').length,
-    authFailed: state.sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
-    unknown: state.sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
+    total: sites.length,
+    online: sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
+    offline: sites.filter((site) => site.connectivityStatus === 'OFFLINE').length,
+    authFailed: sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
+    unknown: sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
   }
   const risks: DashboardRisk[] = []
-  const admin = state.users.find((user) => user.username === 'admin')
+  const admin = await findUserByUsername('admin')
   const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
 
   if (admin && await verifyPassword(defaultPassword, admin.passwordHash)) {
@@ -106,7 +68,7 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     })
   }
 
-  if (state.downloaders.length === 0) {
+  if (downloaders.length === 0) {
     risks.push({
       type: 'DOWNLOADER_NOT_CONFIGURED',
       message: '下载器尚未配置，种子无法自动推送',
@@ -135,10 +97,8 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
 
   const todayStartTime = localDayStartTime()
   const now = Date.now()
-  const transfer = await readTransferOverview(state)
-  const recentJobs = [...state.taskLogs]
-    .sort((a, b) => (validTime(b.finishedAt ?? b.createdAt) ?? 0) - (validTime(a.finishedAt ?? a.createdAt) ?? 0))
-    .slice(0, 5)
+  const transfer = await readTransferOverview(downloaders.filter((downloader) => downloader.enabled))
+  const recentJobs = recentLogs.items
     .map((log) => ({
       id: log.id,
       name: log.taskName,
@@ -154,15 +114,16 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       pushFailedCount: log.pushFailedCount
     }))
 
+  const todayNew = await listTorrents({ page: 1, pageSize: 1 })
+  const pushedCount = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' })
+  const expiringSoon = await listTorrents({ page: 1, pageSize: 1, freeStatus: 'EXPIRING_SOON' })
+
   res.json({
     sites: siteStats,
     torrents: {
-      todayNew: state.torrents.filter((torrent) => (validTime(torrent.firstSeenAt) ?? 0) >= todayStartTime).length,
-      pushed: state.torrents.filter((torrent) => torrent.pushStatus === 'PUSHED').length,
-      expiringSoon: state.torrents.filter((torrent) => {
-        const freeEndTime = validTime(torrent.freeEndAt)
-        return freeEndTime !== undefined && freeEndTime > now && torrent.currentState === 'EXPIRING_SOON'
-      }).length
+      todayNew: todayNew.total,
+      pushed: pushedCount.total,
+      expiringSoon: expiringSoon.total
     },
     transfer,
     risks,

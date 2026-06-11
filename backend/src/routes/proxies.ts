@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState } from '../storage.js'
+import { listProxiesFromDb } from '../storage.js'
 
 export const proxiesRouter = Router()
 
 proxiesRouter.get('/', requireAuth, async (_req, res) => {
-  const state = await readState()
+  const items = await listProxiesFromDb()
   res.json({
-    items: state.proxies.map(({ password: _password, ...proxy }) => proxy)
+    items: items.map(({ password: _password, ...proxy }) => proxy)
   })
 })

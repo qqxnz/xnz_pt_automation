@@ -3,7 +3,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { defaultSystemSettings, readState, readStorageMigrationStatus, readStorageSchemaVersion, storagePaths, type SystemSettings, writeState } from '../storage.js'
+import {
+  defaultSystemSettings,
+  findUserByUsername,
+  readStorageMigrationStatus,
+  readStorageSchemaVersion,
+  readSystemSettings,
+  readSystemSettingsMeta,
+  storagePaths,
+  type SystemSettings,
+  writeSystemSettings
+} from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -100,8 +110,7 @@ function changedKeys(before: SystemSettings, after: SystemSettings) {
 }
 
 settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
-  const state = await readState()
-  const admin = state.users.find((user) => user.username === 'admin')
+  const admin = await findUserByUsername('admin')
   const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
 
   res.json({
@@ -129,8 +138,8 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
 })
 
 settingsRouter.get('/', requireAuth, async (_req, res) => {
-  const state = await readState()
-  res.json({ settings: publicSettings(state.systemSettings), updatedAt: state.systemSettingsUpdatedAt })
+  const meta = await readSystemSettingsMeta()
+  res.json({ settings: publicSettings(meta.settings), updatedAt: meta.updatedAt })
 })
 
 settingsRouter.post('/validate', requireAuth, async (req, res) => {
@@ -140,18 +149,16 @@ settingsRouter.post('/validate', requireAuth, async (req, res) => {
 })
 
 settingsRouter.put('/', requireAuth, async (req, res) => {
-  const state = await readState()
+  const currentSettings = await readSystemSettings()
   const publicResult = validateSettings(req.body)
   if (!publicResult.settings) return res.status(400).json({ message: publicResult.message, code: publicResult.code })
-  const result = validateSettings({ ...state.systemSettings, ...req.body }, true)
+  const result = validateSettings({ ...currentSettings, ...req.body }, true)
   if (!result.settings) return res.status(400).json({ message: result.message, code: result.code })
 
-  const before = state.systemSettings
+  const before = currentSettings
   const changed = changedKeys(before, result.settings)
   const updatedAt = new Date().toISOString()
-  state.systemSettings = result.settings
-  state.systemSettingsUpdatedAt = updatedAt
-  await writeState(state)
+  await writeSystemSettings(result.settings, updatedAt)
 
   await recordOperationLog({
     action: 'SETTINGS_UPDATE',

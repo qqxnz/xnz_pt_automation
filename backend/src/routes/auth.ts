@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { readState, readSystemSettings, type UserRecord, writeState } from '../storage.js'
+import { findUserById, findUserByUsername, readSystemSettings, updateUserLastLoginAt, updateUserPassword, type UserRecord } from '../storage.js'
 import { clearSession, getSessionUserId, setSession } from '../utils/session.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { createPasswordHash, verifyPassword } from '../utils/password.js'
@@ -25,8 +25,7 @@ authRouter.post('/login', async (req, res) => {
     return
   }
 
-  const state = await readState()
-  const user = state.users.find((item) => item.username === username)
+  const user = await findUserByUsername(username)
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     await recordOperationLog({
       action: 'AUTH_LOGIN',
@@ -40,8 +39,9 @@ authRouter.post('/login', async (req, res) => {
     return
   }
 
-  user.lastLoginAt = new Date().toISOString()
-  await writeState(state)
+  const lastLoginAt = new Date().toISOString()
+  await updateUserLastLoginAt(user.id, lastLoginAt)
+  user.lastLoginAt = lastLoginAt
   const settings = await readSystemSettings()
   const sessionToken = setSession(req, res, user.id, settings.sessionTtlHours)
   await recordOperationLog({
@@ -58,8 +58,7 @@ authRouter.post('/login', async (req, res) => {
 
 authRouter.post('/logout', async (req, res) => {
   const userId = getSessionUserId(req)
-  const state = userId ? await readState() : undefined
-  const user = state?.users.find((item) => item.id === userId)
+  const user = userId ? await findUserById(userId) : undefined
   clearSession(res)
   await recordOperationLog({
     action: 'AUTH_LOGOUT',
@@ -80,8 +79,7 @@ authRouter.get('/me', async (req, res) => {
     return
   }
 
-  const state = await readState()
-  const user = state.users.find((item) => item.id === userId)
+  const user = await findUserById(userId)
   if (!user) {
     res.status(401).json({ message: '登录态已过期，请重新登录' })
     return
@@ -106,16 +104,17 @@ authRouter.put('/password', requireAuth, async (req, res) => {
     return
   }
 
-  const state = await readState()
-  const user = state.users.find((item) => item.id === res.locals.user.id)
+  const user = await findUserById(res.locals.user.id)
   if (!user || !(await verifyPassword(oldPassword, user.passwordHash))) {
     res.status(400).json({ message: '旧密码不正确', code: 'OLD_PASSWORD_INVALID' })
     return
   }
 
-  user.passwordHash = await createPasswordHash(newPassword)
-  user.passwordChangedAt = new Date().toISOString()
-  await writeState(state)
+  const passwordHash = await createPasswordHash(newPassword)
+  const passwordChangedAt = new Date().toISOString()
+  await updateUserPassword(user.id, passwordHash, passwordChangedAt)
+  user.passwordHash = passwordHash
+  user.passwordChangedAt = passwordChangedAt
   await recordOperationLog({
     action: 'AUTH_CHANGE_PASSWORD',
     message: `用户 ${user.username} 修改密码`,
