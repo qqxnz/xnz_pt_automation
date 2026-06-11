@@ -18,21 +18,25 @@ import { isSiteSigninRunning, signinSiteById } from './signin/index.js'
 
 export const sitesRouter = Router()
 
-let siteTrafficSyncRunning = false
+const SITE_AUTO_UPDATE_COOLDOWN_MS = 6 * 60 * 60 * 1000
+const siteUpdatePromises = new Map<string, Promise<SiteUpdateResult>>()
+const queuedSiteUpdateIds = new Set<string>()
+const siteUpdateRerunIds = new Set<string>()
+let siteUpdateBatchPromise: Promise<SiteUpdateSummary> | undefined
+let siteUpdateBatchStartPromise: Promise<SiteUpdateBatchStart> | undefined
 
 type SiteStrategy = 'MTEAM_API' | 'NEXUSPHP'
 type Credential = 'API_KEY' | 'COOKIE'
 
 type SiteDefinition = {
   displayName: string
-  names: string[]
+  domains: string[]
   strategy: SiteStrategy
   profilePath: string
   torrentPath: string
 }
 
 type SitePayload = {
-  name?: string
   domain?: string
   enabled?: boolean
   apiKey?: string
@@ -48,6 +52,26 @@ type TrafficStats = {
   ratioInfinite?: boolean
   uploaded?: number
   downloaded?: number
+}
+
+type SiteUpdateResult = {
+  siteId: string
+  siteName: string
+  ok: boolean
+  errorMessage?: string
+}
+
+type SiteUpdateSummary = {
+  successCount: number
+  failedCount: number
+  syncedAt: string
+  errors: Array<{ siteId: string; siteName: string; message: string }>
+}
+
+type SiteUpdateBatchStart = {
+  acceptedCount: number
+  skippedCount: number
+  alreadyRunning: boolean
 }
 
 type AppState = {
@@ -70,84 +94,84 @@ export type TorrentListItem = {
 const SITE_DEFINITIONS: SiteDefinition[] = [
   {
     displayName: '馒头',
-    names: ['馒头', 'mteam', 'm-team'],
+    domains: ['m-team.cc', 'pt.m-team.cc', 'api.m-team.cc'],
     strategy: 'MTEAM_API',
     profilePath: '/api/member/profile',
     torrentPath: '/api/torrent/search'
   },
   {
     displayName: '憨憨',
-    names: ['憨憨', 'hhan', 'hhanclub'],
+    domains: ['hhanclub.net', 'www.hhanclub.net'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '家园',
-    names: ['家园', 'hdhome'],
+    domains: ['hdhome.org', 'www.hdhome.org'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '麒麟',
-    names: ['麒麟', 'hdkyl'],
+    domains: ['hdkyl.in', 'www.hdkyl.in'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '听听歌',
-    names: ['听听歌', 'totheglory', 'ttg'],
+    domains: ['totheglory.im', 'www.totheglory.im'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '朋友',
-    names: ['朋友', 'keepfrds'],
+    domains: ['pt.keepfrds.com', 'keepfrds.com'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '彩虹岛',
-    names: ['彩虹岛', '彩虹', 'chdbits'],
+    domains: ['ptchdbits.co', 'www.ptchdbits.co'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '猫站',
-    names: ['猫站', 'pterclub'],
+    domains: ['pterclub.net', 'pterclub.com', 'www.pterclub.com'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '我堡',
-    names: ['我堡', 'ourbits'],
+    domains: ['ourbits.club', 'www.ourbits.club'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '铂金家',
-    names: ['铂金家', 'pthome'],
+    domains: ['pthome.net', 'www.pthome.net'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '优堡',
-    names: ['优堡', 'ubits'],
+    domains: ['ubits.club', 'www.ubits.club'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
   },
   {
     displayName: '时间',
-    names: ['时间', 'pttime'],
+    domains: ['pttime.org', 'www.pttime.org'],
     strategy: 'NEXUSPHP',
     profilePath: '/userdetails.php',
     torrentPath: '/torrents.php'
@@ -156,7 +180,7 @@ const SITE_DEFINITIONS: SiteDefinition[] = [
 
 const DEFAULT_NEXUSPHP_DEFINITION: SiteDefinition = {
   displayName: '',
-  names: [],
+  domains: [],
   strategy: 'NEXUSPHP',
   profilePath: '/userdetails.php',
   torrentPath: '/torrents.php'
@@ -206,21 +230,21 @@ function extractHostnamePreserveCase(value: string) {
   return url.hostname
 }
 
-export function normalizeSiteName(value: string) {
-  return value.trim().toLocaleLowerCase().replace(/[\s._-]+/g, '')
+export function normalizeSiteDomain(value: string) {
+  return extractHostname(value)
 }
 
-function getSiteDefinition(name: string) {
-  const normalized = normalizeSiteName(name)
-  return SITE_DEFINITIONS.find((definition) => definition.names.some((item) => normalizeSiteName(item) === normalized))
+function getSiteDefinition(domain: string) {
+  const normalized = normalizeSiteDomain(domain)
+  return SITE_DEFINITIONS.find((definition) => definition.domains.some((item) => normalizeSiteDomain(item) === normalized))
 }
 
-function getSiteAdapter(name: string) {
-  return getSiteDefinition(name) ?? DEFAULT_NEXUSPHP_DEFINITION
+function getSiteAdapter(domain: string) {
+  return getSiteDefinition(domain) ?? DEFAULT_NEXUSPHP_DEFINITION
 }
 
 export function siteDisplayName(site: SiteRecord) {
-  return getSiteDefinition(site.name)?.displayName ?? site.name
+  return getSiteDefinition(site.domain)?.displayName ?? site.domain
 }
 
 export function siteBaseUrl(site: SiteRecord) {
@@ -284,8 +308,127 @@ async function trafficDeltas(site: SiteRecord) {
   }
 }
 
-export async function syncSiteTrafficStats() {
-  if (siteTrafficSyncRunning) {
+async function updateSiteStats(siteId: string): Promise<SiteUpdateResult> {
+  const existing = siteUpdatePromises.get(siteId)
+  if (existing) return existing
+
+  const promise = (async () => {
+    const requestedSite = await getSiteFromDb(siteId)
+    if (!requestedSite) return { siteId, siteName: siteId, ok: false, errorMessage: '站点不存在' }
+
+    try {
+      const result = await testSite(requestedSite)
+      const site = await getSiteFromDb(siteId)
+      if (!site) return { siteId, siteName: siteDisplayName(requestedSite), ok: false, errorMessage: '站点已删除' }
+      site.connectivityStatus = 'ONLINE'
+      site.currentCredential = result.credential
+      site.userLevel = result.stats.userLevel
+      site.ratio = result.stats.ratio
+      site.ratioInfinite = result.stats.ratioInfinite
+      site.uploaded = result.stats.uploaded
+      site.downloaded = result.stats.downloaded
+      site.trafficSyncedAt = new Date().toISOString()
+      site.lastConnectedAt = site.trafficSyncedAt
+      site.lastConnectError = undefined
+      site.updatedAt = site.trafficSyncedAt
+      await recordSiteTrafficSnapshot(site, site.trafficSyncedAt)
+      await updateSiteInDb(site)
+      return { siteId: site.id, siteName: siteDisplayName(site), ok: true }
+    } catch (error) {
+      const site = await getSiteFromDb(siteId)
+      if (!site) return { siteId, siteName: siteDisplayName(requestedSite), ok: false, errorMessage: '站点已删除' }
+      site.connectivityStatus = 'AUTH_FAILED'
+      site.currentCredential = undefined
+      site.lastConnectError = error instanceof Error ? error.message : '站点更新失败'
+      site.updatedAt = new Date().toISOString()
+      await updateSiteInDb(site)
+      return { siteId: site.id, siteName: siteDisplayName(site), ok: false, errorMessage: site.lastConnectError }
+    }
+  })().finally(() => {
+    siteUpdatePromises.delete(siteId)
+    if (siteUpdateRerunIds.delete(siteId)) queueSiteUpdate(siteId)
+  })
+
+  siteUpdatePromises.set(siteId, promise)
+  return promise
+}
+
+function queueSiteUpdate(siteId: string, rerunIfRunning = false) {
+  const alreadyRunning = siteUpdatePromises.has(siteId)
+  if (alreadyRunning && rerunIfRunning) siteUpdateRerunIds.add(siteId)
+  const promise = updateSiteStats(siteId)
+  promise.catch((error) => {
+    logger.error('sites', '站点后台更新失败', { siteId, error: error instanceof Error ? error.message : String(error) })
+  })
+  return { accepted: !alreadyRunning, alreadyRunning }
+}
+
+function isStaleForAutoUpdate(site: SiteRecord, now: number) {
+  const lastAttemptAt = site.trafficSyncedAt ?? (site.connectivityStatus !== 'UNKNOWN' ? site.updatedAt : undefined)
+  if (!lastAttemptAt) return true
+  const timestamp = Date.parse(lastAttemptAt)
+  return !Number.isFinite(timestamp) || now - timestamp >= SITE_AUTO_UPDATE_COOLDOWN_MS
+}
+
+async function runSiteUpdateBatch(sites: SiteRecord[]): Promise<SiteUpdateSummary> {
+  const syncedAt = new Date().toISOString()
+  let successCount = 0
+  let failedCount = 0
+  const errors: SiteUpdateSummary['errors'] = []
+
+  for (const site of sites) {
+    try {
+      const result = await updateSiteStats(site.id)
+      if (result.ok) {
+        successCount += 1
+      } else {
+        failedCount += 1
+        errors.push({ siteId: result.siteId, siteName: result.siteName, message: result.errorMessage ?? '站点更新失败' })
+      }
+    } catch (error) {
+      failedCount += 1
+      errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: error instanceof Error ? error.message : '站点更新失败' })
+    } finally {
+      queuedSiteUpdateIds.delete(site.id)
+    }
+  }
+  return { successCount, failedCount, syncedAt, errors }
+}
+
+async function startSiteUpdateBatch(options: { staleOnly: boolean }): Promise<SiteUpdateBatchStart> {
+  if (siteUpdateBatchPromise || siteUpdateBatchStartPromise) {
+    if (siteUpdateBatchStartPromise) await siteUpdateBatchStartPromise
+    return { acceptedCount: 0, skippedCount: 0, alreadyRunning: true }
+  }
+
+  siteUpdateBatchStartPromise = (async () => {
+    const enabledSites = (await listSitesFromDb()).filter((site) => site.enabled)
+    const now = Date.now()
+    const candidates = options.staleOnly ? enabledSites.filter((site) => isStaleForAutoUpdate(site, now)) : enabledSites
+    const skippedCount = enabledSites.length - candidates.length
+
+    if (candidates.length) {
+      candidates.forEach((site) => queuedSiteUpdateIds.add(site.id))
+      siteUpdateBatchPromise = runSiteUpdateBatch(candidates).finally(() => {
+        candidates.forEach((site) => queuedSiteUpdateIds.delete(site.id))
+        siteUpdateBatchPromise = undefined
+      })
+      siteUpdateBatchPromise.catch((error) => {
+        logger.error('sites', '站点批量后台更新失败', { error: error instanceof Error ? error.message : String(error) })
+      })
+    }
+    return { acceptedCount: candidates.length, skippedCount, alreadyRunning: false }
+  })()
+
+  try {
+    return await siteUpdateBatchStartPromise
+  } finally {
+    siteUpdateBatchStartPromise = undefined
+  }
+}
+
+export async function syncSiteTrafficStats(options: { staleOnly?: boolean } = {}) {
+  if (siteUpdateBatchPromise || siteUpdateBatchStartPromise) {
     return {
       successCount: 0,
       failedCount: 1,
@@ -294,47 +437,14 @@ export async function syncSiteTrafficStats() {
     }
   }
 
-  siteTrafficSyncRunning = true
-  const sites = await listSitesFromDb()
-  const syncedAt = new Date().toISOString()
-  let successCount = 0
-  let failedCount = 0
-  const errors: Array<{ siteId: string; siteName: string; message: string }> = []
-
-  try {
-    for (const original of sites.filter((item) => item.enabled)) {
-      const site: SiteRecord = { ...original }
-      try {
-        const result = await testSite(site)
-        site.connectivityStatus = 'ONLINE'
-        site.currentCredential = result.credential
-        site.userLevel = result.stats.userLevel
-        site.ratio = result.stats.ratio
-        site.ratioInfinite = result.stats.ratioInfinite
-        site.uploaded = result.stats.uploaded
-        site.downloaded = result.stats.downloaded
-        site.trafficSyncedAt = new Date().toISOString()
-        site.lastConnectedAt = site.trafficSyncedAt
-        site.lastConnectError = undefined
-        site.updatedAt = site.trafficSyncedAt
-        await recordSiteTrafficSnapshot(site, site.trafficSyncedAt)
-        await updateSiteInDb(site)
-        successCount += 1
-      } catch (error) {
-        site.connectivityStatus = 'AUTH_FAILED'
-        site.currentCredential = undefined
-        site.lastConnectError = error instanceof Error ? error.message : '站点同步失败'
-        site.updatedAt = new Date().toISOString()
-        await updateSiteInDb(site)
-        errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: site.lastConnectError })
-        failedCount += 1
-      }
-    }
-
-    return { successCount, failedCount, syncedAt, errors }
-  } finally {
-    siteTrafficSyncRunning = false
-  }
+  const enabledSites = (await listSitesFromDb()).filter((site) => site.enabled)
+  const sites = options.staleOnly ? enabledSites.filter((site) => isStaleForAutoUpdate(site, Date.now())) : enabledSites
+  sites.forEach((site) => queuedSiteUpdateIds.add(site.id))
+  siteUpdateBatchPromise = runSiteUpdateBatch(sites).finally(() => {
+    sites.forEach((site) => queuedSiteUpdateIds.delete(site.id))
+    siteUpdateBatchPromise = undefined
+  })
+  return siteUpdateBatchPromise
 }
 
 async function listItem(site: SiteRecord) {
@@ -343,7 +453,6 @@ async function listItem(site: SiteRecord) {
   const latest = await listLatestSigninLogBySiteAndDate(site.id, today)
   return {
     id: site.id,
-    name: site.name,
     displayName: siteDisplayName(site),
     domain: site.domain,
     baseUrl: siteBaseUrl(site),
@@ -368,7 +477,8 @@ async function listItem(site: SiteRecord) {
     lastSigninAt: site.lastSigninAt,
     lastSigninStatus: site.lastSigninStatus,
     lastSigninMessage: site.lastSigninMessage,
-    signinRunning: isSiteSigninRunning(site.id)
+    signinRunning: isSiteSigninRunning(site.id),
+    updating: siteUpdatePromises.has(site.id) || queuedSiteUpdateIds.has(site.id)
   }
 }
 
@@ -382,7 +492,6 @@ async function detailItem(site: SiteRecord) {
 }
 
 function validatePayload(payload: SitePayload, existing?: SiteRecord) {
-  if (!payload.name?.trim()) return '站点名称不能为空'
   if (!payload.domain?.trim()) return '站点域名不能为空'
   try {
     extractHostname(payload.domain)
@@ -666,7 +775,7 @@ async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
 }
 
 async function fetchTrafficByCredential(site: SiteRecord, credential: Credential): Promise<{ stats: TrafficStats; meta?: { finalUrl: string; httpStatus: number; bodyExcerpt: string } }> {
-  const definition = getSiteAdapter(site.name)
+  const definition = getSiteAdapter(site.domain)
   if (credential === 'API_KEY') {
     if (definition?.strategy !== 'MTEAM_API') throw new Error('该站点不支持 API Key 获取用户信息')
     return { stats: await fetchMTeamProfile(site) }
@@ -847,7 +956,7 @@ async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPat
 }
 
 export async function browseTorrents(site: SiteRecord, keyword: string, page: number, pageSize: number) {
-  const definition = getSiteDefinition(site.name)
+  const definition = getSiteDefinition(site.domain)
   const errors: string[] = []
 
   if (site.apiKey && definition?.strategy === 'MTEAM_API') {
@@ -885,7 +994,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
 
   const filtered = sites.filter((site) => {
-    if (keyword && !`${siteDisplayName(site)} ${site.name} ${site.domain}`.toLowerCase().includes(keyword)) return false
+    if (keyword && !`${siteDisplayName(site)} ${site.domain}`.toLowerCase().includes(keyword)) return false
     if (connectivityStatus !== 'ALL' && site.connectivityStatus !== connectivityStatus) return false
     if (enabled === 'ENABLED' && !site.enabled) return false
     if (enabled === 'DISABLED' && site.enabled) return false
@@ -921,7 +1030,7 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
   const now = new Date().toISOString()
   const site: SiteRecord = {
     id: randomUUID(),
-    name: payload.name!.trim(),
+    name: extractHostnamePreserveCase(payload.domain!),
     // 保留用户输入的原始 hostname（不去除 www. / 不强制小写），用于登录态对齐；
     // 大小写在 DNS 协议层面等价，但 PT 站点 cookie 通常按 host 匹配，保留原值可减少回话丢失
     domain: extractHostnamePreserveCase(payload.domain!),
@@ -936,6 +1045,7 @@ sitesRouter.post('/', requireAuth, async (req, res) => {
     updatedAt: now
   }
   await insertSiteToDb(site)
+  if (site.enabled) queueSiteUpdate(site.id, true)
   return res.status(201).json(await detailItem(site))
 })
 
@@ -949,7 +1059,7 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
 
   const updated: SiteRecord = {
     ...existing,
-    name: payload.name!.trim(),
+    name: extractHostnamePreserveCase(payload.domain!),
     domain: extractHostnamePreserveCase(payload.domain!),
     enabled: payload.enabled ?? existing.enabled,
     apiKey: payload.apiKey?.trim() || existing.apiKey,
@@ -960,6 +1070,7 @@ sitesRouter.put('/:id', requireAuth, async (req, res) => {
     updatedAt: new Date().toISOString()
   }
   await updateSiteInDb(updated)
+  if (updated.enabled) queueSiteUpdate(updated.id, true)
   return res.json(await detailItem(updated))
 })
 
@@ -973,38 +1084,29 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
   const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
 
-  try {
-    const result = await testSite(site)
-    site.connectivityStatus = 'ONLINE'
-    site.currentCredential = result.credential
-    site.userLevel = result.stats.userLevel
-    site.ratio = result.stats.ratio
-    site.ratioInfinite = result.stats.ratioInfinite
-    site.uploaded = result.stats.uploaded
-    site.downloaded = result.stats.downloaded
-    site.trafficSyncedAt = new Date().toISOString()
-    site.lastConnectedAt = site.trafficSyncedAt
-    site.lastConnectError = undefined
-    site.updatedAt = site.trafficSyncedAt
-    await recordSiteTrafficSnapshot(site, site.trafficSyncedAt)
-    await updateSiteInDb(site)
-    return res.json({ ok: true, status: site.connectivityStatus, credential: site.currentCredential, ...result.stats })
-  } catch (error) {
-    site.connectivityStatus = 'AUTH_FAILED'
-    site.currentCredential = undefined
-    const message = error instanceof Error ? error.message : '站点测试失败'
-    site.lastConnectError = message
-    site.updatedAt = new Date().toISOString()
-    await updateSiteInDb(site)
-    const diagnostic = (error as Error & { diagnostic?: { finalUrl?: string; httpStatus?: number; bodyExcerpt?: string; matchedKeywords?: string[] } }).diagnostic
-    return res.status(400).json({
-      ok: false,
-      status: site.connectivityStatus,
-      message: site.lastConnectError,
-      errorMessage: site.lastConnectError,
-      diagnostic
-    })
-  }
+  const result = await updateSiteStats(site.id)
+  const updated = await getSiteFromDb(site.id)
+  if (!result.ok) return res.status(400).json({ ok: false, status: updated?.connectivityStatus ?? 'AUTH_FAILED', message: result.errorMessage, errorMessage: result.errorMessage })
+  return res.json({
+    ok: true,
+    status: updated?.connectivityStatus ?? 'ONLINE',
+    credential: updated?.currentCredential,
+    userLevel: updated?.userLevel,
+    ratio: updated?.ratio,
+    ratioInfinite: updated?.ratioInfinite,
+    uploaded: updated?.uploaded,
+    downloaded: updated?.downloaded
+  })
+})
+
+sitesRouter.post('/:id/update', requireAuth, async (req, res) => {
+  const site = await getSiteFromDb(String(req.params.id))
+  if (!site) return res.status(404).json({ message: '站点不存在' })
+  return res.status(202).json(queueSiteUpdate(site.id))
+})
+
+sitesRouter.post('/update-all', requireAuth, async (_req, res) => {
+  return res.status(202).json(await startSiteUpdateBatch({ staleOnly: true }))
 })
 
 sitesRouter.post('/sync-traffic', requireAuth, async (_req, res) => {

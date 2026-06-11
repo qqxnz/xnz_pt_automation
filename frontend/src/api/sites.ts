@@ -5,7 +5,6 @@ export type Credential = 'API_KEY' | 'COOKIE'
 
 export type SiteListItem = {
   id: string
-  name: string
   displayName: string
   domain: string
   baseUrl: string
@@ -31,6 +30,7 @@ export type SiteListItem = {
   lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
   lastSigninMessage?: string
   signinRunning: boolean
+  updating: boolean
 }
 
 export type SiteDetail = SiteListItem & {
@@ -40,7 +40,6 @@ export type SiteDetail = SiteListItem & {
 }
 
 export type SiteFormPayload = {
-  name: string
   domain: string
   enabled: boolean
   apiKey?: string
@@ -142,6 +141,14 @@ export function deleteSite(id: string) {
 
 export function testSiteConnectivity(id: string) {
   return apiRequest<TestSiteConnectivityResponse>(`/api/sites/${id}/test-connectivity`, { method: 'POST' })
+}
+
+export function updateSiteInfo(id: string) {
+  return apiRequest<{ accepted: boolean; alreadyRunning: boolean }>(`/api/sites/${id}/update`, { method: 'POST' })
+}
+
+export function updateAllSites() {
+  return apiRequest<{ acceptedCount: number; skippedCount: number; alreadyRunning: boolean }>('/api/sites/update-all', { method: 'POST' })
 }
 
 export function syncSiteTraffic() {

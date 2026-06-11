@@ -1,5 +1,5 @@
 import { makeStandardNexusPhpSignin } from './standardNexusPhp.js'
 
 export const pttimeSignin = makeStandardNexusPhpSignin({
-  matchNames: ['时间', 'pttime']
+  matchDomains: ['pttime.org', 'www.pttime.org']
 })

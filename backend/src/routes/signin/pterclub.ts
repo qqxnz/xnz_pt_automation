@@ -1,7 +1,7 @@
 import { makeStandardNexusPhpSignin } from './standardNexusPhp.js'
 
 export const pterclubSignin = makeStandardNexusPhpSignin({
-  matchNames: ['猫站', 'pterclub'],
+  matchDomains: ['pterclub.net', 'pterclub.com', 'www.pterclub.com'],
   signinPath: '/attendance-ajax.php',
   responseType: 'json',
   jsonStatusKey: 'status',

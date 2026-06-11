@@ -4,7 +4,7 @@
       <div class="dashboard-head">
         <div>
           <h1>站点</h1>
-          <p>管理 PT 站点名称、访问地址、API Key、Cookie、连通状态和用户统计</p>
+          <p>管理 PT 站点域名、API Key、Cookie、连通状态和用户统计</p>
         </div>
         <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
       </div>
@@ -85,7 +85,7 @@
             <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
             <div class="row-actions">
               <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
-              <button type="button" @click="testSite(site)">测试</button>
+              <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
               <button class="danger-text" type="button" @click="removeSite(site)">删除</button>
@@ -132,7 +132,7 @@
             <p v-if="site.lastConnectError">错误：{{ site.lastConnectError }}</p>
             <div class="row-actions">
               <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
-              <button type="button" @click="testSite(site)">测试</button>
+              <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
               <button class="danger-text" type="button" @click="removeSite(site)">删除</button>
@@ -155,7 +155,6 @@
         <div class="form-grid compact-form-grid">
           <section>
             <h3>基础信息</h3>
-            <label>站点名称<input v-model.trim="form.name" required placeholder="馒头 / M-Team" /></label>
             <label>站点域名<input v-model.trim="form.domain" required placeholder="pt.m-team.cc" /></label>
             <label class="inline-check"><input v-model="form.enabled" type="checkbox" /> 启用站点</label>
           </section>
@@ -268,7 +267,7 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import {
@@ -277,8 +276,9 @@ import {
   deleteSite,
   getSite,
   getSites,
-  testSiteConnectivity,
   triggerSiteSignin,
+  updateAllSites,
+  updateSiteInfo,
   updateSite,
   type BrowseTorrentItem,
   type SiteFilter,
@@ -308,6 +308,7 @@ const browseError = ref('')
 const browsingSite = ref<SiteListItem>()
 const browseItems = ref<BrowseTorrentItem[]>([])
 const browseTotal = ref(0)
+let updatePollingTimer: number | undefined
 
 const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
   keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
@@ -317,7 +318,6 @@ const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
 })
 
 const form = reactive<SiteFormPayload>({
-  name: '',
   domain: '',
   enabled: true,
   apiKey: '',
@@ -352,7 +352,6 @@ function resetForm() {
   originalApiKey.value = ''
   originalCookie.value = ''
   Object.assign(form, {
-    name: '',
     domain: '',
     enabled: true,
     apiKey: '',
@@ -479,7 +478,6 @@ async function openEdit(site: SiteListItem) {
   detailHasApiKey.value = detail.hasApiKey
   detailHasCookie.value = detail.hasCookie
   Object.assign(form, {
-    name: detail.name,
     domain: detail.domain,
     enabled: detail.enabled,
     apiKey: detail.apiKey || '',
@@ -494,7 +492,6 @@ async function openEdit(site: SiteListItem) {
 }
 
 function validateForm() {
-  if (!form.name.trim()) return '站点名称不能为空'
   if (!form.domain.trim()) return '站点域名不能为空'
   try {
     new URL(form.domain.includes('://') ? form.domain : `https://${form.domain}`)
@@ -508,7 +505,6 @@ function validateForm() {
 
 function buildSitePayload(): SiteFormPayload {
   return {
-    name: form.name.trim(),
     domain: form.domain.trim(),
     enabled: form.enabled,
     apiKey: editingSiteId.value && form.apiKey === originalApiKey.value ? originalApiKey.value || undefined : form.apiKey?.trim() || undefined,
@@ -529,15 +525,11 @@ async function saveSite() {
   saving.value = true
   try {
     const payload = buildSitePayload()
-    const saved = editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
-    try {
-      const result = await testSiteConnectivity(saved.id)
-      Snackbar[result.ok ? 'success' : 'error'](result.ok ? `测试成功，当前使用${result.credential === 'COOKIE' ? 'Cookie' : 'API Key'}` : result.errorMessage || '测试失败')
-    } catch (testError) {
-      Snackbar.error(`站点已保存，测试失败：${testError instanceof Error ? testError.message : '测试失败'}`)
-    }
+    editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
     formVisible.value = false
+    Snackbar.success('站点已保存，正在后台更新')
     await loadSites()
+    startUpdatePolling()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '保存失败')
   } finally {
@@ -545,14 +537,44 @@ async function saveSite() {
   }
 }
 
-async function testSite(site: SiteListItem) {
+async function triggerSiteUpdate(site: SiteListItem) {
+  if (site.updating) return
+  const target = items.value.find((item) => item.id === site.id)
+  if (target) target.updating = true
   try {
-    const result = await testSiteConnectivity(site.id)
-    Snackbar.success(`测试成功，当前使用${result.credential === 'COOKIE' ? 'Cookie' : 'API Key'}`)
+    await updateSiteInfo(site.id)
+    Snackbar.success('站点信息正在后台更新')
+    startUpdatePolling()
   } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : '测试失败')
+    if (target) target.updating = false
+    Snackbar.error(err instanceof Error ? err.message : '更新失败')
   }
-  await loadSites()
+}
+
+function stopUpdatePolling() {
+  if (updatePollingTimer !== undefined) window.clearTimeout(updatePollingTimer)
+  updatePollingTimer = undefined
+}
+
+function startUpdatePolling() {
+  if (updatePollingTimer !== undefined) return
+  updatePollingTimer = window.setTimeout(async () => {
+    updatePollingTimer = undefined
+    await loadSites()
+    if (items.value.some((site) => site.updating)) startUpdatePolling()
+  }, 3000)
+}
+
+async function triggerAutomaticUpdate() {
+  try {
+    const result = await updateAllSites()
+    if (result.acceptedCount > 0 || result.alreadyRunning) {
+      await loadSites()
+      startUpdatePolling()
+    }
+  } catch (err) {
+    console.warn('自动更新站点信息失败', err)
+  }
 }
 
 async function triggerSignin(site: SiteListItem) {
@@ -625,5 +647,8 @@ function resetFilters() {
 onMounted(async () => {
   if (route.query.action === 'create') openCreate()
   await loadSites()
+  await triggerAutomaticUpdate()
 })
+
+onBeforeUnmount(stopUpdatePolling)
 </script>

@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.1.0
+    image: qqxnz/xnz-pt-automation:0.2.0
     container_name: xnz-pt-automation
     restart: always
     ports:

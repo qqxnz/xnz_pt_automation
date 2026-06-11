@@ -127,7 +127,7 @@ const jobs: SchedulerJob[] = [
     nextRunAt: Date.now() + SITE_TRAFFIC_SYNC_INTERVAL_MS,
     running: false,
     run: async () => {
-      const summary = await syncSiteTrafficStats()
+      const summary = await syncSiteTrafficStats({ staleOnly: true })
       return {
         successCount: summary.successCount,
         failedCount: summary.failedCount,

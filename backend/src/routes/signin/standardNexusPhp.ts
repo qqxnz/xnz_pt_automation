@@ -1,9 +1,9 @@
 import type { SiteRecord } from '../../storage.js'
-import { normalizeSiteName, siteBaseUrl, siteDisplayName } from '../sites.js'
+import { normalizeSiteDomain, siteBaseUrl, siteDisplayName } from '../sites.js'
 import type { SigninContext, SigninHandler, SigninResult } from './types.js'
 
 export type StandardNexusPhpOptions = {
-  matchNames: string[]
+  matchDomains: string[]
   signinPath?: string
   method?: 'POST' | 'GET'
   bodyBuilder?: () => URLSearchParams | string
@@ -57,14 +57,14 @@ export function makeStandardNexusPhpSignin(options: StandardNexusPhpOptions): Si
   const successPatterns = options.successPatterns ?? DEFAULT_SUCCESS_PATTERNS
   const repeatPatterns = options.repeatPatterns ?? DEFAULT_REPEAT_PATTERNS
   const authFailurePatterns = options.authFailurePatterns ?? DEFAULT_AUTH_FAILURE_PATTERNS
-  const matchNames = new Set(options.matchNames.map((name) => normalizeSiteName(name)))
+  const matchDomains = new Set(options.matchDomains.map((domain) => normalizeSiteDomain(domain)))
   const signinPath = options.signinPath ?? '/attendance.php'
   const method = options.method ?? 'POST'
   const bodyBuilder = options.bodyBuilder ?? (() => new URLSearchParams({ action: 'post', content: '' }))
   const responseType = options.responseType ?? 'html'
 
   return {
-    match: (site) => matchNames.has(normalizeSiteName(site.name)),
+    match: (site) => matchDomains.has(normalizeSiteDomain(site.domain)),
     signin: async (site, _ctx: SigninContext): Promise<SigninResult> => {
       const displayName = siteDisplayName(site)
       if (!site.enabled) {
