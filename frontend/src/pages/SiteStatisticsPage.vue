@@ -17,85 +17,38 @@
       <section class="sites-toolbar statistics-toolbar panel">
         <div class="statistics-date-cell">
           <span class="statistics-date-label">开始日期</span>
-          <button
-            type="button"
-            class="statistics-date-trigger"
-            :class="{ 'is-empty': !filters.startDate }"
-            @click="openPicker('start')"
-          >
-            <span class="statistics-date-text">{{ filters.startDate || '选择开始日期' }}</span>
-            <span class="statistics-date-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            </span>
-          </button>
-        </div>
-        <div class="statistics-date-cell">
-          <span class="statistics-date-label">结束日期</span>
-          <button
-            type="button"
-            class="statistics-date-trigger"
-            :class="{ 'is-empty': !filters.endDate }"
-            @click="openPicker('end')"
-          >
-            <span class="statistics-date-text">{{ filters.endDate || '选择结束日期' }}</span>
-            <span class="statistics-date-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            </span>
-          </button>
-        </div>
-      </section>
-
-      <VarPopup
-        v-model:show="startPicker.show"
-        position="bottom"
-        :overlay-style="{ background: 'rgba(15, 23, 42, 0.45)' }"
-        :close-on-click-overlay="true"
-        :safe-area="true"
-        @closed="startPicker.show = false"
-      >
-        <div class="statistics-date-sheet">
-          <div class="statistics-date-sheet-header">
-            <strong>选择开始日期</strong>
-            <button type="button" class="statistics-date-sheet-close" @click="startPicker.show = false">关闭</button>
-          </div>
-          <VarDatePicker
-            v-model="startPicker.value"
-            type="date"
-            :max="startPicker.max"
-            header-color="#3f7cff"
-            color="#3f7cff"
-            first-day-of-week="1"
-            :show-current="true"
+          <StatisticsDatePicker
+            v-model="filters.startDate"
+            :max="todayKey"
+            title="选择开始日期"
+            placeholder="选择开始日期"
             @change="onStartChange"
           />
         </div>
-      </VarPopup>
-
-      <VarPopup
-        v-model:show="endPicker.show"
-        position="bottom"
-        :overlay-style="{ background: 'rgba(15, 23, 42, 0.45)' }"
-        :close-on-click-overlay="true"
-        :safe-area="true"
-        @closed="endPicker.show = false"
-      >
-        <div class="statistics-date-sheet">
-          <div class="statistics-date-sheet-header">
-            <strong>选择结束日期</strong>
-            <button type="button" class="statistics-date-sheet-close" @click="endPicker.show = false">关闭</button>
-          </div>
-          <VarDatePicker
-            v-model="endPicker.value"
-            type="date"
-            :min="endPicker.min"
-            header-color="#3f7cff"
-            color="#3f7cff"
-            first-day-of-week="1"
-            :show-current="true"
+        <div class="statistics-date-cell">
+          <span class="statistics-date-label">结束日期</span>
+          <StatisticsDatePicker
+            v-model="filters.endDate"
+            :min="filters.startDate"
+            :max="todayKey"
+            title="选择结束日期"
+            placeholder="选择结束日期"
             @change="onEndChange"
           />
         </div>
-      </VarPopup>
+      </section>
+
+      <section class="statistics-presets">
+        <span class="statistics-presets-label">快捷</span>
+        <button
+          v-for="preset in presets"
+          :key="preset.key"
+          type="button"
+          class="statistics-preset-chip"
+          :class="{ active: isPresetActive(preset) }"
+          @click="applyPreset(preset)"
+        >{{ preset.label }}</button>
+      </section>
 
       <section class="panel statistics-chart-panel">
         <div class="panel-title-row">
@@ -155,8 +108,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import StatisticsPieChart, { type PieSlice } from '../components/StatisticsPieChart.vue'
+import StatisticsDatePicker from '../components/StatisticsDatePicker.vue'
 import { getSiteStatistics, type SiteStatisticsResponse } from '../api/siteStatistics'
-import { Popup as VarPopup, DatePicker as VarDatePicker, Snackbar } from '@varlet/ui'
+import { Snackbar } from '@varlet/ui'
 
 function dateKey(value: Date) {
   const year = value.getFullYear()
@@ -166,61 +120,54 @@ function dateKey(value: Date) {
 }
 
 const today = new Date()
+const todayKey = dateKey(today)
 const filters = reactive({
-  startDate: dateKey(today),
-  endDate: dateKey(today),
+  startDate: todayKey,
+  endDate: todayKey,
   siteId: '',
   page: 1,
   pageSize: 20
 })
-const startDateInput = ref<HTMLInputElement | null>(null)
-const endDateInput = ref<HTMLInputElement | null>(null)
 
-const startPicker = reactive<{ show: boolean; value: string; max: string }>({
-  show: false,
-  value: filters.startDate,
-  max: dateKey(today)
-})
-const endPicker = reactive<{ show: boolean; value: string; min?: string }>({
-  show: false,
-  value: filters.endDate,
-  min: filters.startDate
-})
+type Preset = { key: string; label: string; days: number }
 
-function openPicker(which: 'start' | 'end') {
-  if (which === 'start') {
-    startPicker.value = filters.startDate
-    startPicker.show = true
-  } else {
-    endPicker.value = filters.endDate
-    endPicker.min = filters.startDate || undefined
-    endPicker.show = true
-  }
-}
+const presets: Preset[] = [
+  { key: 'today', label: '今天', days: 0 },
+  { key: 'yesterday', label: '昨天', days: 1 },
+  { key: '7d', label: '最近 7 天', days: 7 },
+  { key: '30d', label: '最近 30 天', days: 30 }
+]
 
-function onStartChange(value: string | string[]) {
-  const v = Array.isArray(value) ? value[0] : value
-  if (!v) return
-  if (filters.endDate && v > filters.endDate) {
-    filters.endDate = v
-    endPicker.value = v
-  }
-  filters.startDate = v
-  endPicker.min = v
-  startPicker.show = false
+function applyPreset(preset: Preset) {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(end.getDate() - (preset.days - 1))
+  filters.startDate = dateKey(start)
+  filters.endDate = dateKey(end)
   autoSearch()
 }
 
-function onEndChange(value: string | string[]) {
-  const v = Array.isArray(value) ? value[0] : value
-  if (!v) return
-  if (filters.startDate && v < filters.startDate) {
+function isPresetActive(preset: Preset) {
+  if (preset.days === 0) {
+    return filters.startDate === filters.endDate && filters.endDate === todayKey
+  }
+  const expected = new Date()
+  expected.setDate(expected.getDate() - (preset.days - 1))
+  return filters.startDate === dateKey(expected) && filters.endDate === todayKey
+}
+
+function onStartChange(value: string) {
+  if (filters.endDate && value > filters.endDate) {
+    filters.endDate = value
+  }
+  autoSearch()
+}
+
+function onEndChange(value: string) {
+  if (filters.startDate && value < filters.startDate) {
     Snackbar.warning('结束日期不能早于开始日期')
-    endPicker.value = filters.endDate
     return
   }
-  filters.endDate = v
-  endPicker.show = false
   autoSearch()
 }
 const result = reactive<SiteStatisticsResponse>({
