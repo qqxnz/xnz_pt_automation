@@ -21,6 +21,9 @@ export type SiteStatisticsResponse = {
   totalUploaded: number
   totalDownloaded: number
   siteCount: number
+  allTimeUploaded: number
+  allTimeDownloaded: number
+  allTimeSiteCount: number
   total: number
   page: number
   pageSize: number

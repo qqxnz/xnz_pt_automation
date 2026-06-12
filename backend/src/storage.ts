@@ -1683,6 +1683,17 @@ export async function readSiteStatistics(query: SiteStatisticsQuery) {
     FROM site_torrent_traffic_daily daily
     WHERE daily.date BETWEEN ? AND ? ${siteClause}
   `).get(...params) as any
+  const allTimeClause = query.siteId ? 'WHERE daily.site_id = ?' : ''
+  const allTimeParams: Array<string | number> = []
+  if (query.siteId) allTimeParams.push(query.siteId)
+  const allTimeRow = db.prepare(`
+    SELECT
+      COALESCE(SUM(daily.uploaded), 0) AS uploaded,
+      COALESCE(SUM(daily.downloaded), 0) AS downloaded,
+      COUNT(DISTINCT daily.site_id) AS siteCount
+    FROM site_torrent_traffic_daily daily
+    ${allTimeClause}
+  `).get(...allTimeParams) as any
   const siteIds = rows.map((row) => String(row.site_id))
   const siteOptions = (db.prepare(`
     SELECT daily.site_id, MAX(daily.site_name) AS site_name, CASE WHEN sites.id IS NULL THEN 1 ELSE 0 END AS site_deleted
@@ -1710,6 +1721,9 @@ export async function readSiteStatistics(query: SiteStatisticsQuery) {
     totalUploaded: Number(totals.uploaded ?? 0),
     totalDownloaded: Number(totals.downloaded ?? 0),
     siteCount: total,
+    allTimeUploaded: Number(allTimeRow.uploaded ?? 0),
+    allTimeDownloaded: Number(allTimeRow.downloaded ?? 0),
+    allTimeSiteCount: Number(allTimeRow.siteCount ?? 0),
     total,
     page,
     pageSize,

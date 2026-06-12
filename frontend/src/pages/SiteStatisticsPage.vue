@@ -8,45 +8,20 @@
         </div>
       </div>
 
-      <section class="site-stats">
-        <article class="metric-card"><span>区间上传</span><strong class="success">{{ formatBytes(result.totalUploaded) }}</strong></article>
-        <article class="metric-card"><span>区间下载</span><strong>{{ formatBytes(result.totalDownloaded) }}</strong></article>
-        <article class="metric-card"><span>涉及站点</span><strong>{{ result.siteCount }}</strong></article>
-        <article class="metric-card"><span>统计区间</span><strong class="statistics-date-value">{{ filters.startDate }} 至 {{ filters.endDate }}</strong></article>
+      <section class="site-stats statistics-summary">
+        <article class="metric-card"><span>总上传</span><strong class="success">{{ formatBytes(result.allTimeUploaded) }}</strong></article>
+        <article class="metric-card"><span>总下载</span><strong>{{ formatBytes(result.allTimeDownloaded) }}</strong></article>
+        <article class="metric-card"><span>总站点数</span><strong>{{ result.allTimeSiteCount }}</strong></article>
       </section>
 
       <section class="sites-toolbar statistics-toolbar panel">
-        <label><span>开始日期</span><input v-model="filters.startDate" type="date" /></label>
-        <label><span>结束日期</span><input v-model="filters.endDate" type="date" /></label>
-        <label>
-          <span>站点</span>
-          <select v-model="filters.siteId">
-            <option value="">全部站点</option>
-            <option v-for="site in result.siteOptions" :key="site.siteId" :value="site.siteId">
-              {{ site.siteName }}{{ site.siteDeleted ? '（已删除）' : '' }}
-            </option>
-          </select>
-        </label>
-        <button class="secondary-button" type="button" :disabled="loading" @click="search">
-          {{ loading ? '查询中...' : '查询' }}
-        </button>
+        <label><span>开始日期</span><input v-model="filters.startDate" type="date" @change="autoSearch" /></label>
+        <label><span>结束日期</span><input v-model="filters.endDate" type="date" @change="autoSearch" /></label>
       </section>
 
       <section class="panel statistics-chart-panel">
         <div class="panel-title-row">
           <h2>流量趋势</h2>
-          <div class="statistics-granularity" role="tablist" aria-label="流量粒度">
-            <button
-              v-for="option in granularityOptions"
-              :key="option.value"
-              type="button"
-              role="tab"
-              :aria-selected="filters.granularity === option.value"
-              :class="{ active: filters.granularity === option.value }"
-              :disabled="loading"
-              @click="setGranularity(option.value)"
-            >{{ option.label }}</button>
-          </div>
         </div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadStatistics">重试</button></div>
         <div class="statistics-pie-grid">
@@ -106,14 +81,6 @@ import AppLayout from '../components/AppLayout.vue'
 import StatisticsPieChart, { type PieSlice } from '../components/StatisticsPieChart.vue'
 import { getSiteStatistics, type SiteStatisticsResponse } from '../api/siteStatistics'
 
-type Granularity = 'day' | 'week' | 'month'
-
-const granularityOptions: Array<{ value: Granularity; label: string }> = [
-  { value: 'day', label: '按日' },
-  { value: 'week', label: '按周' },
-  { value: 'month', label: '按月' }
-]
-
 function dateKey(value: Date) {
   const year = value.getFullYear()
   const month = String(value.getMonth() + 1).padStart(2, '0')
@@ -121,38 +88,13 @@ function dateKey(value: Date) {
   return `${year}-${month}-${day}`
 }
 
-function parseDateKey(value: string) {
-  const [y, m, d] = value.split('-').map(Number)
-  return new Date(y, (m ?? 1) - 1, d ?? 1)
-}
-
-function isoWeekKey(value: Date) {
-  const target = new Date(value.getFullYear(), value.getMonth(), value.getDate())
-  const dayOfWeek = (target.getDay() + 6) % 7
-  target.setDate(target.getDate() - dayOfWeek)
-  const startKey = dateKey(target)
-  const end = new Date(target)
-  end.setDate(end.getDate() + 6)
-  const endKey = dateKey(end)
-  return { key: startKey, label: `${startKey.slice(5)} ~ ${endKey.slice(5)}` }
-}
-
-function monthKey(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
-}
-
-const MAX_BUCKETS = 180
-
 const today = new Date()
-const start = new Date(today)
-start.setDate(start.getDate() - 29)
 const filters = reactive({
-  startDate: dateKey(start),
+  startDate: dateKey(today),
   endDate: dateKey(today),
   siteId: '',
   page: 1,
-  pageSize: 20,
-  granularity: 'day' as Granularity
+  pageSize: 20
 })
 const result = reactive<SiteStatisticsResponse>({
   startDate: filters.startDate,
@@ -160,6 +102,9 @@ const result = reactive<SiteStatisticsResponse>({
   totalUploaded: 0,
   totalDownloaded: 0,
   siteCount: 0,
+  allTimeUploaded: 0,
+  allTimeDownloaded: 0,
+  allTimeSiteCount: 0,
   total: 0,
   page: 1,
   pageSize: 20,
@@ -174,7 +119,14 @@ async function loadStatistics() {
   loading.value = true
   error.value = ''
   try {
-    Object.assign(result, await getSiteStatistics(filters))
+    const data = await getSiteStatistics({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      siteId: filters.siteId || undefined,
+      page: filters.page,
+      pageSize: filters.pageSize
+    })
+    Object.assign(result, data)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '流量加载失败'
   } finally {
@@ -182,7 +134,7 @@ async function loadStatistics() {
   }
 }
 
-function search() {
+function autoSearch() {
   filters.page = 1
   void loadStatistics()
 }
@@ -190,11 +142,6 @@ function search() {
 function changePage(page: number) {
   filters.page = page
   void loadStatistics()
-}
-
-function setGranularity(value: Granularity) {
-  if (filters.granularity === value) return
-  filters.granularity = value
 }
 
 function formatBytes(value = 0) {
@@ -208,8 +155,6 @@ function formatShare(value: number) {
   const total = result.totalUploaded + result.totalDownloaded
   return total > 0 ? `${((value / total) * 100).toFixed(1)}%` : '0%'
 }
-
-type BucketAccumulator = { label: string; uploaded: number; downloaded: number }
 
 const PIE_PALETTE = ['#3f7cff', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f43f5e', '#a3a3a3']
 const MAX_PIE_SLICES = 8
