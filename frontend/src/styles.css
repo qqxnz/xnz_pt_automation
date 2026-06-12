@@ -658,69 +658,56 @@ a {
   align-items: end;
 }
 
-.statistics-toolbar label {
+.statistics-date-cell {
   display: grid;
   gap: 7px;
+  min-width: 0;
+}
+
+.statistics-date-label {
   color: #6b7280;
   font-size: 12px;
   font-weight: 850;
-  min-width: 0;
+  letter-spacing: 0.01em;
 }
 
-.statistics-date-field {
-  position: relative;
+.statistics-date-trigger {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  min-height: 46px;
+  min-height: 48px;
   min-width: 0;
+  padding: 0 14px;
   border: 1px solid #dbe4f0;
   border-radius: 14px;
-  padding: 0 14px;
   background: #f9fafb;
   color: #111827;
+  font: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
 }
 
-.statistics-date-field:hover {
+.statistics-date-trigger:hover {
   border-color: #93b4ff;
 }
 
-.statistics-date-field:focus-within {
+.statistics-date-trigger:focus,
+.statistics-date-trigger:focus-visible {
+  outline: none;
   border-color: #3f7cff;
   background: #fff;
+  box-shadow: 0 0 0 3px rgba(63, 124, 255, 0.18);
 }
 
-.statistics-date-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  opacity: 0;
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.statistics-date-input::-webkit-calendar-picker-indicator {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  cursor: pointer;
-  opacity: 0;
+.statistics-date-trigger.is-empty {
+  color: #9ca3af;
+  font-weight: 500;
 }
 
 .statistics-date-text {
@@ -729,15 +716,56 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: inherit;
 }
 
 .statistics-date-icon {
   flex: 0 0 auto;
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
   line-height: 1;
-  filter: grayscale(0.4);
-  pointer-events: none;
+}
+
+.statistics-date-sheet {
+  background: #fff;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 18px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(85vh, 640px);
+  overflow: hidden;
+}
+
+.statistics-date-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.statistics-date-sheet-close {
+  border: 0;
+  background: #f1f5f9;
+  color: #475569;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.statistics-date-sheet-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .sites-toolbar input,
@@ -2533,7 +2561,7 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .statistics-date-field {
+  .statistics-date-trigger {
     min-height: 50px;
     font-size: 15px;
   }
@@ -2910,7 +2938,7 @@ a {
     gap: 12px;
   }
 
-  .statistics-date-field {
+  .statistics-date-trigger {
     min-height: 52px;
     font-size: 16px;
     padding: 0 14px;

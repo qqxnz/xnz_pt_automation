@@ -15,35 +15,87 @@
       </section>
 
       <section class="sites-toolbar statistics-toolbar panel">
-        <label>
-          <span>开始日期</span>
-          <span class="statistics-date-field" @click="openDatePicker($event)">
-            <input
-              ref="startDateInput"
-              v-model="filters.startDate"
-              type="date"
-              class="statistics-date-input"
-              @change="autoSearch"
-            />
-            <span class="statistics-date-text">{{ filters.startDate || '选择日期' }}</span>
-            <span class="statistics-date-icon" aria-hidden="true">📅</span>
-          </span>
-        </label>
-        <label>
-          <span>结束日期</span>
-          <span class="statistics-date-field" @click="openDatePicker($event)">
-            <input
-              ref="endDateInput"
-              v-model="filters.endDate"
-              type="date"
-              class="statistics-date-input"
-              @change="autoSearch"
-            />
-            <span class="statistics-date-text">{{ filters.endDate || '选择日期' }}</span>
-            <span class="statistics-date-icon" aria-hidden="true">📅</span>
-          </span>
-        </label>
+        <div class="statistics-date-cell">
+          <span class="statistics-date-label">开始日期</span>
+          <button
+            type="button"
+            class="statistics-date-trigger"
+            :class="{ 'is-empty': !filters.startDate }"
+            @click="openPicker('start')"
+          >
+            <span class="statistics-date-text">{{ filters.startDate || '选择开始日期' }}</span>
+            <span class="statistics-date-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            </span>
+          </button>
+        </div>
+        <div class="statistics-date-cell">
+          <span class="statistics-date-label">结束日期</span>
+          <button
+            type="button"
+            class="statistics-date-trigger"
+            :class="{ 'is-empty': !filters.endDate }"
+            @click="openPicker('end')"
+          >
+            <span class="statistics-date-text">{{ filters.endDate || '选择结束日期' }}</span>
+            <span class="statistics-date-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            </span>
+          </button>
+        </div>
       </section>
+
+      <VarPopup
+        v-model:show="startPicker.show"
+        position="bottom"
+        :overlay-style="{ background: 'rgba(15, 23, 42, 0.45)' }"
+        :close-on-click-overlay="true"
+        :safe-area="true"
+        @closed="startPicker.show = false"
+      >
+        <div class="statistics-date-sheet">
+          <div class="statistics-date-sheet-header">
+            <strong>选择开始日期</strong>
+            <button type="button" class="statistics-date-sheet-close" @click="startPicker.show = false">关闭</button>
+          </div>
+          <VarDatePicker
+            v-model="startPicker.value"
+            type="date"
+            :max="startPicker.max"
+            header-color="#3f7cff"
+            color="#3f7cff"
+            first-day-of-week="1"
+            :show-current="true"
+            @change="onStartChange"
+          />
+        </div>
+      </VarPopup>
+
+      <VarPopup
+        v-model:show="endPicker.show"
+        position="bottom"
+        :overlay-style="{ background: 'rgba(15, 23, 42, 0.45)' }"
+        :close-on-click-overlay="true"
+        :safe-area="true"
+        @closed="endPicker.show = false"
+      >
+        <div class="statistics-date-sheet">
+          <div class="statistics-date-sheet-header">
+            <strong>选择结束日期</strong>
+            <button type="button" class="statistics-date-sheet-close" @click="endPicker.show = false">关闭</button>
+          </div>
+          <VarDatePicker
+            v-model="endPicker.value"
+            type="date"
+            :min="endPicker.min"
+            header-color="#3f7cff"
+            color="#3f7cff"
+            first-day-of-week="1"
+            :show-current="true"
+            @change="onEndChange"
+          />
+        </div>
+      </VarPopup>
 
       <section class="panel statistics-chart-panel">
         <div class="panel-title-row">
@@ -105,6 +157,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import StatisticsPieChart, { type PieSlice } from '../components/StatisticsPieChart.vue'
 import { getSiteStatistics, type SiteStatisticsResponse } from '../api/siteStatistics'
+import { Popup as VarPopup, DatePicker as VarDatePicker, Snackbar } from '@varlet/ui'
 
 function dateKey(value: Date) {
   const year = value.getFullYear()
@@ -124,21 +177,52 @@ const filters = reactive({
 const startDateInput = ref<HTMLInputElement | null>(null)
 const endDateInput = ref<HTMLInputElement | null>(null)
 
-function openDatePicker(event: MouseEvent) {
-  const target = event.currentTarget as HTMLElement | null
-  const input = target?.querySelector('input[type="date"]') as HTMLInputElement | null
-  if (!input) return
-  event.preventDefault()
-  if (typeof input.showPicker === 'function') {
-    try {
-      input.showPicker()
-      return
-    } catch {
-      /* fall through */
-    }
+const startPicker = reactive<{ show: boolean; value: string; max: string }>({
+  show: false,
+  value: filters.startDate,
+  max: dateKey(today)
+})
+const endPicker = reactive<{ show: boolean; value: string; min?: string }>({
+  show: false,
+  value: filters.endDate,
+  min: filters.startDate
+})
+
+function openPicker(which: 'start' | 'end') {
+  if (which === 'start') {
+    startPicker.value = filters.startDate
+    startPicker.show = true
+  } else {
+    endPicker.value = filters.endDate
+    endPicker.min = filters.startDate || undefined
+    endPicker.show = true
   }
-  input.focus()
-  input.click()
+}
+
+function onStartChange(value: string | string[]) {
+  const v = Array.isArray(value) ? value[0] : value
+  if (!v) return
+  if (filters.endDate && v > filters.endDate) {
+    filters.endDate = v
+    endPicker.value = v
+  }
+  filters.startDate = v
+  endPicker.min = v
+  startPicker.show = false
+  autoSearch()
+}
+
+function onEndChange(value: string | string[]) {
+  const v = Array.isArray(value) ? value[0] : value
+  if (!v) return
+  if (filters.startDate && v < filters.startDate) {
+    Snackbar.warning('结束日期不能早于开始日期')
+    endPicker.value = filters.endDate
+    return
+  }
+  filters.endDate = v
+  endPicker.show = false
+  autoSearch()
 }
 const result = reactive<SiteStatisticsResponse>({
   startDate: filters.startDate,
