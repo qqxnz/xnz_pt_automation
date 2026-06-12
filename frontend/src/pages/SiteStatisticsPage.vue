@@ -49,7 +49,16 @@
           </div>
         </div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadStatistics">重试</button></div>
-        <StatisticsBarChart :buckets="chartBuckets" />
+        <div class="statistics-pie-grid">
+          <div class="statistics-pie-card">
+            <div class="statistics-pie-card-title">上传 共 <strong>{{ formatBytes(result.totalUploaded) }}</strong></div>
+            <StatisticsPieChart :slices="uploadSlices" empty-text="暂无上传数据" />
+          </div>
+          <div class="statistics-pie-card">
+            <div class="statistics-pie-card-title">下载 共 <strong>{{ formatBytes(result.totalDownloaded) }}</strong></div>
+            <StatisticsPieChart :slices="downloadSlices" empty-text="暂无下载数据" />
+          </div>
+        </div>
       </section>
 
       <section class="panel statistics-list-panel">
@@ -94,7 +103,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
-import StatisticsBarChart, { type ChartBucket } from '../components/StatisticsBarChart.vue'
+import StatisticsPieChart, { type PieSlice } from '../components/StatisticsPieChart.vue'
 import { getSiteStatistics, type SiteStatisticsResponse } from '../api/siteStatistics'
 
 type Granularity = 'day' | 'week' | 'month'
@@ -202,63 +211,39 @@ function formatShare(value: number) {
 
 type BucketAccumulator = { label: string; uploaded: number; downloaded: number }
 
-const chartBuckets = computed<ChartBucket[]>(() => {
-  const granularity = filters.granularity
-  const buckets: BucketAccumulator[] = []
+const PIE_PALETTE = ['#3f7cff', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f43f5e', '#a3a3a3']
+const MAX_PIE_SLICES = 8
 
-  if (granularity === 'day') {
-    const map = new Map<string, BucketAccumulator>()
-    for (const site of result.items) {
-      for (const day of site.daily) {
-        const existing = map.get(day.date) ?? { label: day.date.slice(5), uploaded: 0, downloaded: 0 }
-        existing.uploaded += day.uploaded
-        existing.downloaded += day.downloaded
-        map.set(day.date, existing)
-      }
-    }
-    for (const [key, value] of map.entries()) {
-      buckets.push({ ...value, label: key.slice(5) })
-    }
-    buckets.sort((a, b) => a.label.localeCompare(b.label))
-  } else if (granularity === 'week') {
-    const map = new Map<string, BucketAccumulator>()
-    for (const site of result.items) {
-      for (const day of site.daily) {
-        const date = parseDateKey(day.date)
-        const { key, label } = isoWeekKey(date)
-        const existing = map.get(key) ?? { label, uploaded: 0, downloaded: 0 }
-        existing.uploaded += day.uploaded
-        existing.downloaded += day.downloaded
-        map.set(key, existing)
-      }
-    }
-    for (const [key, value] of map.entries()) {
-      buckets.push({ ...value, label: `${key.slice(5)} 周` })
-    }
-    buckets.sort((a, b) => a.label.localeCompare(b.label))
-  } else {
-    const map = new Map<string, BucketAccumulator>()
-    for (const site of result.items) {
-      for (const day of site.daily) {
-        const date = parseDateKey(day.date)
-        const key = monthKey(date)
-        const existing = map.get(key) ?? { label: key, uploaded: 0, downloaded: 0 }
-        existing.uploaded += day.uploaded
-        existing.downloaded += day.downloaded
-        map.set(key, existing)
-      }
-    }
-    for (const [key, value] of map.entries()) {
-      buckets.push({ ...value, label: key })
-    }
-    buckets.sort((a, b) => a.label.localeCompare(b.label))
+function buildPieSlices(key: 'uploaded' | 'downloaded'): PieSlice[] {
+  const colorBySite = new Map<string, string>()
+  result.siteOptions.forEach((opt, i) => {
+    colorBySite.set(opt.siteId, PIE_PALETTE[i % PIE_PALETTE.length])
+  })
+  const total = result.items.reduce((sum, it) => sum + it[key], 0)
+  if (total <= 0) return []
+  const sorted = [...result.items].sort((a, b) => b[key] - a[key])
+  const top = sorted.slice(0, MAX_PIE_SLICES)
+  const rest = sorted.slice(MAX_PIE_SLICES)
+  const restSum = rest.reduce((sum, it) => sum + it[key], 0)
+  const slices: PieSlice[] = top.map((it) => ({
+    name: it.siteName,
+    value: it[key],
+    color: colorBySite.get(it.siteId) ?? PIE_PALETTE[0],
+    percent: (it[key] / total) * 100
+  }))
+  if (restSum > 0) {
+    slices.push({
+      name: `其他（${rest.length}）`,
+      value: restSum,
+      color: PIE_PALETTE[PIE_PALETTE.length - 1],
+      percent: (restSum / total) * 100
+    })
   }
+  return slices
+}
 
-  if (buckets.length > MAX_BUCKETS) {
-    return buckets.slice(buckets.length - MAX_BUCKETS)
-  }
-  return buckets
-})
+const uploadSlices = computed(() => buildPieSlices('uploaded'))
+const downloadSlices = computed(() => buildPieSlices('downloaded'))
 
 onMounted(loadStatistics)
 </script>
