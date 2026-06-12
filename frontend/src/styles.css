@@ -1367,6 +1367,29 @@ a {
   font-weight: 750;
 }
 
+.statistics-site-stat strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.statistics-site-divider {
+  color: #cbd5e1;
+  font-weight: 500;
+  margin: 0 2px;
+}
+
+.statistics-site-share {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statistics-site-stat strong.success .statistics-site-share {
+  color: #047857;
+}
+
 .statistics-site-name {
   display: flex !important;
   flex-direction: row;

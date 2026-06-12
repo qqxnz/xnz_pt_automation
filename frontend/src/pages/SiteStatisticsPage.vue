@@ -52,10 +52,8 @@
                 <strong>{{ site.siteName }}</strong>
                 <span v-if="site.siteDeleted" class="chip muted-chip">站点已删除</span>
               </span>
-              <span><small>上传</small><strong class="success">{{ formatBytes(site.uploaded) }}</strong></span>
-              <span><small>下载</small><strong>{{ formatBytes(site.downloaded) }}</strong></span>
-              <span><small>上传占比</small><strong class="success">{{ formatShare(site.uploaded, result.totalUploaded) }}</strong></span>
-              <span><small>下载占比</small><strong>{{ formatShare(site.downloaded, result.totalDownloaded) }}</strong></span>
+              <span class="statistics-site-stat"><small>上传</small><strong class="success">{{ formatBytes(site.uploaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.uploaded, result.totalUploaded) }}</span></strong></span>
+              <span class="statistics-site-stat"><small>下载</small><strong>{{ formatBytes(site.downloaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.downloaded, result.totalDownloaded) }}</span></strong></span>
             </summary>
             <div class="statistics-daily-table">
               <div class="statistics-daily-row statistics-daily-head"><span>日期</span><span>上传增量</span><span>下载增量</span></div>
