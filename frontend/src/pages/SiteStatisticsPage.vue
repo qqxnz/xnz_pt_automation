@@ -15,8 +15,34 @@
       </section>
 
       <section class="sites-toolbar statistics-toolbar panel">
-        <label><span>开始日期</span><input v-model="filters.startDate" type="date" @change="autoSearch" /></label>
-        <label><span>结束日期</span><input v-model="filters.endDate" type="date" @change="autoSearch" /></label>
+        <label>
+          <span>开始日期</span>
+          <span class="statistics-date-field" @click="openDatePicker($event)">
+            <input
+              ref="startDateInput"
+              v-model="filters.startDate"
+              type="date"
+              class="statistics-date-input"
+              @change="autoSearch"
+            />
+            <span class="statistics-date-text">{{ filters.startDate || '选择日期' }}</span>
+            <span class="statistics-date-icon" aria-hidden="true">📅</span>
+          </span>
+        </label>
+        <label>
+          <span>结束日期</span>
+          <span class="statistics-date-field" @click="openDatePicker($event)">
+            <input
+              ref="endDateInput"
+              v-model="filters.endDate"
+              type="date"
+              class="statistics-date-input"
+              @change="autoSearch"
+            />
+            <span class="statistics-date-text">{{ filters.endDate || '选择日期' }}</span>
+            <span class="statistics-date-icon" aria-hidden="true">📅</span>
+          </span>
+        </label>
       </section>
 
       <section class="panel statistics-chart-panel">
@@ -95,6 +121,25 @@ const filters = reactive({
   page: 1,
   pageSize: 20
 })
+const startDateInput = ref<HTMLInputElement | null>(null)
+const endDateInput = ref<HTMLInputElement | null>(null)
+
+function openDatePicker(event: MouseEvent) {
+  const target = event.currentTarget as HTMLElement | null
+  const input = target?.querySelector('input[type="date"]') as HTMLInputElement | null
+  if (!input) return
+  event.preventDefault()
+  if (typeof input.showPicker === 'function') {
+    try {
+      input.showPicker()
+      return
+    } catch {
+      /* fall through */
+    }
+  }
+  input.focus()
+  input.click()
+}
 const result = reactive<SiteStatisticsResponse>({
   startDate: filters.startDate,
   endDate: filters.endDate,
