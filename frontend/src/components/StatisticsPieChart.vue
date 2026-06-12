@@ -2,7 +2,7 @@
   <div ref="containerRef" class="statistics-pie">
     <div v-if="!slices.length" class="statistics-pie-empty">{{ emptyText || '暂无流量数据' }}</div>
     <div v-else class="statistics-pie-body">
-      <div class="statistics-pie-chart">
+      <div ref="chartEl" class="statistics-pie-chart">
         <svg
           class="statistics-pie-svg"
           :viewBox="`0 0 ${width} ${height}`"
@@ -11,7 +11,6 @@
           role="img"
           aria-label="流量占比饼图"
           @mouseleave="onSvgLeave"
-          @click="onSvgClick"
         >
           <g class="pie-slices">
             <path
@@ -24,7 +23,9 @@
               stroke="#ffffff"
               stroke-width="1"
               @mouseenter="setHover(index)"
+              @mouseleave="onSliceMouseLeave(index)"
               @click.stop="onSliceClick(index)"
+              @touchstart.stop.prevent="onSliceTouch(index)"
             />
           </g>
           <g v-if="calloutLine" class="pie-callout">
@@ -54,7 +55,7 @@
           </g>
         </svg>
         <div
-          v-if="calloutBox"
+          v-if="calloutBox && activeIndex >= 0"
           class="statistics-pie-callout-box"
           :style="{
             left: `${calloutBox.x}px`,
@@ -75,6 +76,7 @@
           @mouseenter="setHover(index)"
           @mouseleave="onLegendLeave(index)"
           @click="onSliceClick(index)"
+          @touchstart.stop.prevent="onSliceTouch(index)"
         >
           <i :style="{ background: slice.color }" />
           <span>{{ slice.name }}</span>
@@ -103,11 +105,14 @@ const props = withDefaults(
 )
 
 const containerRef = ref<HTMLDivElement | null>(null)
+const chartEl = ref<HTMLDivElement | null>(null)
 const containerWidth = ref(360)
+const svgRenderedWidth = ref(360)
 const hoverIndex = ref(-1)
 const pinnedIndex = ref(-1)
 
 let resizeObserver: ResizeObserver | null = null
+let outsideHandler: ((e: Event) => void) | null = null
 
 const height = 240
 const padding = 12
@@ -185,27 +190,41 @@ const calloutName = computed(() => callout.value?.name ?? '')
 const calloutValueText = computed(() => (callout.value ? formatValue(callout.value.value) : ''))
 const calloutLine = computed(() => callout.value?.line ?? null)
 
+function viewBoxToPixel(vx: number, vy: number) {
+  const scale = svgRenderedWidth.value / width.value
+  return { x: vx * scale, y: vy * scale }
+}
+
 const calloutBox = computed(() => {
   if (!callout.value) return null
   const slice = angleSlices.value[activeIndex.value]
-  const tip = polar(slice.midAngle, radius.value + 18)
+  const tipVb = polar(slice.midAngle, radius.value + 18)
+  const tip = viewBoxToPixel(tipVb.x, tipVb.y)
   const halfW = 64
   const halfH = 22
   let x = tip.x
   let y = tip.y - halfH
   const dirX = Math.cos(slice.midAngle)
   if (dirX >= 0) {
-    x = tip.x + 4
+    x = tip.x + 6
   } else {
-    x = tip.x - 4 - halfW * 2
+    x = tip.x - 6 - halfW * 2
   }
-  x = Math.min(Math.max(x, 4), width.value - halfW * 2 - 4)
-  y = Math.min(Math.max(y, 4), height - halfH * 2 - 4)
+  const maxX = Math.max(0, svgRenderedWidth.value - halfW * 2 - 4)
+  const maxY = Math.max(0, height - halfH * 2 - 4)
+  x = Math.min(Math.max(x, 4), maxX)
+  y = Math.min(Math.max(y, 4), maxY)
   return { x, y }
 })
 
 function setHover(index: number) {
   hoverIndex.value = index
+}
+
+function onSliceMouseLeave(index: number) {
+  if (hoverIndex.value === index && pinnedIndex.value < 0) {
+    hoverIndex.value = -1
+  }
 }
 
 function onLegendLeave(index: number) {
@@ -226,10 +245,37 @@ function onSliceClick(index: number) {
   } else {
     pinnedIndex.value = index
   }
+  registerOutsideHandler()
 }
 
-function onSvgClick(event: MouseEvent) {
-  if ((event.target as Element | null)?.tagName !== 'svg' && (event.target as Element | null)?.closest('.pie-slice')) return
+function onSliceTouch(index: number) {
+  if (pinnedIndex.value === index) {
+    pinnedIndex.value = -1
+  } else {
+    pinnedIndex.value = index
+  }
+  registerOutsideHandler()
+}
+
+function registerOutsideHandler() {
+  if (outsideHandler) return
+  outsideHandler = (e: Event) => {
+    if (!containerRef.value) return
+    const target = e.target as Node | null
+    if (target && containerRef.value.contains(target)) return
+    pinnedIndex.value = -1
+    hoverIndex.value = -1
+  }
+  setTimeout(() => {
+    if (outsideHandler) document.addEventListener('click', outsideHandler)
+  }, 0)
+}
+
+function unregisterOutsideHandler() {
+  if (outsideHandler) {
+    document.removeEventListener('click', outsideHandler)
+    outsideHandler = null
+  }
 }
 
 function formatValue(value: number) {
@@ -242,6 +288,10 @@ function formatValue(value: number) {
 function measure() {
   if (containerRef.value) {
     containerWidth.value = containerRef.value.clientWidth
+  }
+  if (chartEl.value) {
+    const svg = chartEl.value.querySelector('svg')
+    if (svg) svgRenderedWidth.value = svg.clientWidth || svgRenderedWidth.value
   }
 }
 
@@ -256,6 +306,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  unregisterOutsideHandler()
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
