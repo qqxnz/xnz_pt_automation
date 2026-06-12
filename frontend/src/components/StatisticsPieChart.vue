@@ -10,18 +10,37 @@
           :height="height"
           role="img"
           aria-label="流量占比饼图"
-          @mouseleave="hoverIndex = -1"
+          @mouseleave="onSvgLeave"
+          @click="onSvgClick"
         >
           <g class="pie-slices">
             <path
               v-for="(slice, index) in slices"
               :key="`s-${index}`"
               class="pie-slice"
+              :class="{ active: activeIndex === index }"
               :d="slicePath(index)"
               :fill="slice.color"
               stroke="#ffffff"
               stroke-width="1"
-              @mouseenter="hoverIndex = index"
+              @mouseenter="setHover(index)"
+              @click.stop="onSliceClick(index)"
+            />
+          </g>
+          <g v-if="calloutLine" class="pie-callout">
+            <line
+              :x1="calloutLine.x1"
+              :y1="calloutLine.y1"
+              :x2="calloutLine.x2"
+              :y2="calloutLine.y2"
+              :stroke="calloutColor"
+              stroke-width="1.5"
+            />
+            <circle
+              :cx="calloutLine.x1"
+              :cy="calloutLine.y1"
+              :r="3"
+              :fill="calloutColor"
             />
           </g>
           <g class="pie-labels">
@@ -35,21 +54,27 @@
           </g>
         </svg>
         <div
-          v-if="hoverIndex >= 0 && slices[hoverIndex]"
-          class="statistics-pie-tooltip"
-          :style="{ left: `${tooltipLeft}%` }"
+          v-if="calloutBox"
+          class="statistics-pie-callout-box"
+          :style="{
+            left: `${calloutBox.x}px`,
+            top: `${calloutBox.y}px`,
+            background: calloutColor,
+            borderColor: calloutColor
+          }"
         >
-          <strong>{{ slices[hoverIndex].name }}</strong>
-          <span>{{ formatValue(slices[hoverIndex].value) }} · {{ slices[hoverIndex].percent.toFixed(1) }}%</span>
+          <strong>{{ calloutName }}</strong>
+          <span>{{ calloutValueText }}</span>
         </div>
       </div>
       <ul class="statistics-pie-legend">
         <li
           v-for="(slice, index) in slices"
           :key="`lg-${index}`"
-          :class="{ active: hoverIndex === index }"
-          @mouseenter="hoverIndex = index"
-          @mouseleave="hoverIndex = -1"
+          :class="{ active: activeIndex === index }"
+          @mouseenter="setHover(index)"
+          @mouseleave="onLegendLeave(index)"
+          @click="onSliceClick(index)"
         >
           <i :style="{ background: slice.color }" />
           <span>{{ slice.name }}</span>
@@ -80,6 +105,7 @@ const props = withDefaults(
 const containerRef = ref<HTMLDivElement | null>(null)
 const containerWidth = ref(360)
 const hoverIndex = ref(-1)
+const pinnedIndex = ref(-1)
 
 let resizeObserver: ResizeObserver | null = null
 
@@ -138,12 +164,73 @@ function labelPosition(slice: AngleSlice) {
 
 const labelSlices = computed(() => angleSlices.value.filter((s) => s.percent >= 8))
 
-const tooltipLeft = computed(() => {
-  if (hoverIndex.value < 0 || !angleSlices.value[hoverIndex.value]) return 0
-  const slice = angleSlices.value[hoverIndex.value]
-  const pos = polar(slice.midAngle, radius.value * 0.62)
-  return Math.min(Math.max((pos.x / width.value) * 100, 12), 88)
+const activeIndex = computed(() => (pinnedIndex.value >= 0 ? pinnedIndex.value : hoverIndex.value))
+
+const callout = computed(() => {
+  if (activeIndex.value < 0) return null
+  const slice = angleSlices.value[activeIndex.value]
+  if (!slice) return null
+  const edge = polar(slice.midAngle, radius.value)
+  const tip = polar(slice.midAngle, radius.value + 18)
+  return {
+    color: slice.color,
+    name: slice.name,
+    value: slice.value,
+    line: { x1: edge.x, y1: edge.y, x2: tip.x, y2: tip.y }
+  }
 })
+
+const calloutColor = computed(() => callout.value?.color ?? '#3f7cff')
+const calloutName = computed(() => callout.value?.name ?? '')
+const calloutValueText = computed(() => (callout.value ? formatValue(callout.value.value) : ''))
+const calloutLine = computed(() => callout.value?.line ?? null)
+
+const calloutBox = computed(() => {
+  if (!callout.value) return null
+  const slice = angleSlices.value[activeIndex.value]
+  const tip = polar(slice.midAngle, radius.value + 18)
+  const halfW = 64
+  const halfH = 22
+  let x = tip.x
+  let y = tip.y - halfH
+  const dirX = Math.cos(slice.midAngle)
+  if (dirX >= 0) {
+    x = tip.x + 4
+  } else {
+    x = tip.x - 4 - halfW * 2
+  }
+  x = Math.min(Math.max(x, 4), width.value - halfW * 2 - 4)
+  y = Math.min(Math.max(y, 4), height - halfH * 2 - 4)
+  return { x, y }
+})
+
+function setHover(index: number) {
+  hoverIndex.value = index
+}
+
+function onLegendLeave(index: number) {
+  if (hoverIndex.value === index && pinnedIndex.value < 0) {
+    hoverIndex.value = -1
+  }
+}
+
+function onSvgLeave() {
+  if (pinnedIndex.value < 0) {
+    hoverIndex.value = -1
+  }
+}
+
+function onSliceClick(index: number) {
+  if (pinnedIndex.value === index) {
+    pinnedIndex.value = -1
+  } else {
+    pinnedIndex.value = index
+  }
+}
+
+function onSvgClick(event: MouseEvent) {
+  if ((event.target as Element | null)?.tagName !== 'svg' && (event.target as Element | null)?.closest('.pie-slice')) return
+}
 
 function formatValue(value: number) {
   if (!value) return '0'
