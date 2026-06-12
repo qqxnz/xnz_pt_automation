@@ -1345,7 +1345,7 @@ a {
 
 .statistics-site-card summary {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(130px, 0.7fr));
+  grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(110px, 0.7fr));
   gap: 18px;
   align-items: center;
   padding: 20px;

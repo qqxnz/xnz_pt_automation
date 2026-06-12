@@ -54,7 +54,8 @@
               </span>
               <span><small>上传</small><strong class="success">{{ formatBytes(site.uploaded) }}</strong></span>
               <span><small>下载</small><strong>{{ formatBytes(site.downloaded) }}</strong></span>
-              <span><small>流量占比</small><strong>{{ formatShare(site.uploaded + site.downloaded) }}</strong></span>
+              <span><small>上传占比</small><strong class="success">{{ formatShare(site.uploaded, result.totalUploaded) }}</strong></span>
+              <span><small>下载占比</small><strong>{{ formatShare(site.downloaded, result.totalDownloaded) }}</strong></span>
             </summary>
             <div class="statistics-daily-table">
               <div class="statistics-daily-row statistics-daily-head"><span>日期</span><span>上传增量</span><span>下载增量</span></div>
@@ -151,8 +152,7 @@ function formatBytes(value = 0) {
   return `${(value / 1024 ** index).toFixed(index > 2 ? 2 : 1)} ${units[index]}`
 }
 
-function formatShare(value: number) {
-  const total = result.totalUploaded + result.totalDownloaded
+function formatShare(value: number, total: number) {
   return total > 0 ? `${((value / total) * 100).toFixed(1)}%` : '0%'
 }
 

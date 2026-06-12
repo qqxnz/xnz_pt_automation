@@ -28,7 +28,7 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.2.4
+ARG VERSION=0.2.5
 ARG DATA_DIR=/data
 
 ENV NODE_ENV=production \
