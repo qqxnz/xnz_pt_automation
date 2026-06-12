@@ -119,41 +119,47 @@ function dateKey(value: Date) {
   return `${year}-${month}-${day}`
 }
 
-const today = new Date()
-const todayKey = dateKey(today)
+function getTodayKey() {
+  return dateKey(new Date())
+}
+
+const todayKey = ref(getTodayKey())
 const filters = reactive({
-  startDate: todayKey,
-  endDate: todayKey,
+  startDate: todayKey.value,
+  endDate: todayKey.value,
   siteId: '',
   page: 1,
   pageSize: 20
 })
 
-type Preset = { key: string; label: string; days: number }
+type Preset = { key: string; label: string; offset: number; span: number }
 
 const presets: Preset[] = [
-  { key: 'today', label: '今天', days: 0 },
-  { key: 'yesterday', label: '昨天', days: 1 },
-  { key: '7d', label: '最近 7 天', days: 7 },
-  { key: '30d', label: '最近 30 天', days: 30 }
+  { key: 'today', label: '今天', offset: 0, span: 1 },
+  { key: 'yesterday', label: '昨天', offset: 1, span: 1 },
+  { key: '7d', label: '最近 7 天', offset: 0, span: 7 },
+  { key: '30d', label: '最近 30 天', offset: 0, span: 30 }
 ]
 
-function applyPreset(preset: Preset) {
+function computePresetRange(preset: Preset) {
   const end = new Date()
-  const start = new Date()
-  start.setDate(end.getDate() - (preset.days - 1))
-  filters.startDate = dateKey(start)
-  filters.endDate = dateKey(end)
+  end.setDate(end.getDate() - preset.offset)
+  const start = new Date(end)
+  start.setDate(end.getDate() - (preset.span - 1))
+  return { startKey: dateKey(start), endKey: dateKey(end) }
+}
+
+function applyPreset(preset: Preset) {
+  todayKey.value = getTodayKey()
+  const { startKey, endKey } = computePresetRange(preset)
+  filters.startDate = startKey
+  filters.endDate = endKey
   autoSearch()
 }
 
 function isPresetActive(preset: Preset) {
-  if (preset.days === 0) {
-    return filters.startDate === filters.endDate && filters.endDate === todayKey
-  }
-  const expected = new Date()
-  expected.setDate(expected.getDate() - (preset.days - 1))
-  return filters.startDate === dateKey(expected) && filters.endDate === todayKey
+  const { startKey, endKey } = computePresetRange(preset)
+  return filters.startDate === startKey && filters.endDate === endKey
 }
 
 function onStartChange(value: string) {

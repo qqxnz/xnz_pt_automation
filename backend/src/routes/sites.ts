@@ -19,7 +19,13 @@ import { isSiteSigninRunning, signinSiteById } from './signin/index.js'
 export const sitesRouter = Router()
 
 const SITE_AUTO_UPDATE_COOLDOWN_MS = 6 * 60 * 60 * 1000
+const SITE_FETCH_TIMEOUT_MS = 25 * 1000
+const SITE_UPDATE_OVERALL_TIMEOUT_MS = 90 * 1000
+const SITE_UPDATE_WATCHDOG_INTERVAL_MS = 60 * 1000
+const SITE_UPDATE_WATCHDOG_MAX_AGE_MS = 5 * 60 * 1000
+const SITE_UPDATE_BATCH_CONCURRENCY = 5
 const siteUpdatePromises = new Map<string, Promise<SiteUpdateResult>>()
+const siteUpdateStartedAt = new Map<string, number>()
 const queuedSiteUpdateIds = new Set<string>()
 const siteUpdateRerunIds = new Set<string>()
 let siteUpdateBatchPromise: Promise<SiteUpdateSummary> | undefined
@@ -312,7 +318,7 @@ async function updateSiteStats(siteId: string): Promise<SiteUpdateResult> {
   const existing = siteUpdatePromises.get(siteId)
   if (existing) return existing
 
-  const promise = (async () => {
+  const work = (async (): Promise<SiteUpdateResult> => {
     const requestedSite = await getSiteFromDb(siteId)
     if (!requestedSite) return { siteId, siteName: siteId, ok: false, errorMessage: '站点不存在' }
 
@@ -344,12 +350,31 @@ async function updateSiteStats(siteId: string): Promise<SiteUpdateResult> {
       await updateSiteInDb(site)
       return { siteId: site.id, siteName: siteDisplayName(site), ok: false, errorMessage: site.lastConnectError }
     }
-  })().finally(() => {
-    siteUpdatePromises.delete(siteId)
-    if (siteUpdateRerunIds.delete(siteId)) queueSiteUpdate(siteId)
+  })()
+
+  let overallTimer: NodeJS.Timeout | undefined
+  const overallTimeout = new Promise<SiteUpdateResult>((_, reject) => {
+    overallTimer = setTimeout(() => {
+      reject(new Error(`站点更新整体超时（${SITE_UPDATE_OVERALL_TIMEOUT_MS / 1000}s）`))
+    }, SITE_UPDATE_OVERALL_TIMEOUT_MS)
   })
 
+  const promise = Promise.race([work, overallTimeout])
+    .catch((error): SiteUpdateResult => ({
+      siteId,
+      siteName: siteId,
+      ok: false,
+      errorMessage: error instanceof Error ? error.message : '站点更新失败'
+    }))
+    .finally(() => {
+      if (overallTimer) clearTimeout(overallTimer)
+      siteUpdatePromises.delete(siteId)
+      siteUpdateStartedAt.delete(siteId)
+      if (siteUpdateRerunIds.delete(siteId)) queueSiteUpdate(siteId)
+    })
+
   siteUpdatePromises.set(siteId, promise)
+  siteUpdateStartedAt.set(siteId, Date.now())
   return promise
 }
 
@@ -376,22 +401,32 @@ async function runSiteUpdateBatch(sites: SiteRecord[]): Promise<SiteUpdateSummar
   let failedCount = 0
   const errors: SiteUpdateSummary['errors'] = []
 
-  for (const site of sites) {
-    try {
-      const result = await updateSiteStats(site.id)
-      if (result.ok) {
-        successCount += 1
-      } else {
+  const queue = [...sites]
+  async function worker() {
+    while (queue.length > 0) {
+      const site = queue.shift()
+      if (!site) break
+      try {
+        const result = await updateSiteStats(site.id)
+        if (result.ok) {
+          successCount += 1
+        } else {
+          failedCount += 1
+          errors.push({ siteId: result.siteId, siteName: result.siteName, message: result.errorMessage ?? '站点更新失败' })
+        }
+      } catch (error) {
         failedCount += 1
-        errors.push({ siteId: result.siteId, siteName: result.siteName, message: result.errorMessage ?? '站点更新失败' })
+        errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: error instanceof Error ? error.message : '站点更新失败' })
+      } finally {
+        queuedSiteUpdateIds.delete(site.id)
       }
-    } catch (error) {
-      failedCount += 1
-      errors.push({ siteId: site.id, siteName: siteDisplayName(site), message: error instanceof Error ? error.message : '站点更新失败' })
-    } finally {
-      queuedSiteUpdateIds.delete(site.id)
     }
   }
+
+  const concurrency = Math.max(1, Math.min(SITE_UPDATE_BATCH_CONCURRENCY, sites.length))
+  const workers = Array.from({ length: concurrency }, () => worker())
+  await Promise.all(workers)
+
   return { successCount, failedCount, syncedAt, errors }
 }
 
@@ -446,6 +481,27 @@ export async function syncSiteTrafficStats(options: { staleOnly?: boolean } = {}
   })
   return siteUpdateBatchPromise
 }
+
+// 看门狗：兜底清理那些因极端情况（事件循环异常、模块热重载等）而残留过久的 in-flight 标记，
+// 防止前端轮询永远停不下来导致按钮持续显示「更新中...」
+function siteUpdateWatchdogTick() {
+  const now = Date.now()
+  for (const [siteId, startedAt] of siteUpdateStartedAt) {
+    if (now - startedAt >= SITE_UPDATE_WATCHDOG_MAX_AGE_MS) {
+      logger.warn('sites', '检测到站点更新长时间未完成，强制释放', {
+        siteId,
+        ageMs: now - startedAt
+      })
+      siteUpdatePromises.delete(siteId)
+      siteUpdateStartedAt.delete(siteId)
+      queuedSiteUpdateIds.delete(siteId)
+      siteUpdateRerunIds.delete(siteId)
+    }
+  }
+}
+
+const siteUpdateWatchdogTimer = setInterval(siteUpdateWatchdogTick, SITE_UPDATE_WATCHDOG_INTERVAL_MS)
+if (typeof siteUpdateWatchdogTimer.unref === 'function') siteUpdateWatchdogTimer.unref()
 
 async function listItem(site: SiteRecord) {
   const deltas = await trafficDeltas(site)
@@ -703,6 +759,8 @@ async function fetchWithCookie(site: SiteRecord, path: string): Promise<{ text: 
   if (!cookie) throw new Error('Cookie 未配置或不可用')
   const errors: string[] = []
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), SITE_FETCH_TIMEOUT_MS)
     try {
       const response = await fetch(resolveSiteUrl(site, path), {
         headers: {
@@ -711,13 +769,19 @@ async function fetchWithCookie(site: SiteRecord, path: string): Promise<{ text: 
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
         },
-        redirect: 'follow'
+        redirect: 'follow',
+        signal: controller.signal
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return { text: await response.text(), finalUrl: response.url, httpStatus: response.status }
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : 'fetch failed')
+      const msg = error instanceof Error
+        ? (error.name === 'AbortError' ? `请求超时（${SITE_FETCH_TIMEOUT_MS / 1000}s）` : error.message)
+        : 'fetch failed'
+      errors.push(msg)
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+    } finally {
+      clearTimeout(timer)
     }
   }
   throw new Error(`Cookie 访问失败：${errors.at(-1) ?? 'fetch failed'}`)
@@ -742,14 +806,27 @@ async function fetchNexusProfileHtml(site: SiteRecord, profilePath: string): Pro
 
 async function fetchMTeamProfile(site: SiteRecord): Promise<TrafficStats> {
   if (!site.apiKey?.trim()) throw new Error('API Key 未配置或不可用')
-  const response = await fetch('https://api.m-team.cc/api/member/profile', {
-    method: 'POST',
-    headers: {
-      'x-api-key': site.apiKey,
-      'User-Agent': site.userAgent || 'Mozilla/5.0',
-      Accept: 'application/json'
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), SITE_FETCH_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch('https://api.m-team.cc/api/member/profile', {
+      method: 'POST',
+      headers: {
+        'x-api-key': site.apiKey,
+        'User-Agent': site.userAgent || 'Mozilla/5.0',
+        Accept: 'application/json'
+      },
+      signal: controller.signal
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`API Key 访问失败：请求超时（${SITE_FETCH_TIMEOUT_MS / 1000}s）`)
     }
-  })
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
   if (!response.ok) throw new Error(`API Key 访问失败：HTTP ${response.status}`)
   const result = (await response.json()) as {
     code?: string | number

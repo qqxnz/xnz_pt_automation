@@ -28,12 +28,20 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.3.0
+ARG VERSION=0.3.1
 ARG DATA_DIR=/data
+
+# 强制使用 Asia/Shanghai 时区，避免容器默认 UTC 与用户本地时区错位
+# 导致「今日流量」按字符串日期匹配时查不到数据
+RUN apk add --no-cache tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    apk del tzdata
 
 ENV NODE_ENV=production \
     PORT=3180 \
     DATA_DIR=${DATA_DIR} \
+    TZ=Asia/Shanghai \
     # 优化5：Node.js 生产环境优化
     NODE_OPTIONS="--max-old-space-size=512"
 

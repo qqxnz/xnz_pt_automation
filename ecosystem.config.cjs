@@ -13,7 +13,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: process.env.PORT || '3180',
-        DATA_DIR: process.env.DATA_DIR || '/data'
+        DATA_DIR: process.env.DATA_DIR || '/data',
+        TZ: process.env.TZ || 'Asia/Shanghai'
       }
     }
   ]
