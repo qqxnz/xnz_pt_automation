@@ -124,22 +124,21 @@
           <p>种子同步产生上传或下载增量后，会在这里按日期累计。</p>
         </div>
         <div v-else class="statistics-site-list">
-          <details v-for="site in result.items" :key="site.siteId" class="statistics-site-card">
-            <summary>
-              <span class="statistics-site-name">
-                <strong>{{ site.siteName }}</strong>
-                <span v-if="site.siteDeleted" class="chip muted-chip">站点已删除</span>
-              </span>
-              <span class="statistics-site-stat"><small>上传</small><strong class="success">{{ formatBytes(site.uploaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.uploaded, result.totalUploaded) }}</span></strong></span>
-              <span class="statistics-site-stat"><small>下载</small><strong>{{ formatBytes(site.downloaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.downloaded, result.totalDownloaded) }}</span></strong></span>
-            </summary>
+          <div class="statistics-site-head"><span>站点</span><span>上传</span><span>下载</span></div>
+          <div v-for="site in result.items" :key="site.siteId" class="statistics-site-card">
+            <div class="statistics-site-name">
+              <strong>{{ site.siteName }}</strong>
+              <span v-if="site.siteDeleted" class="chip muted-chip">站点已删除</span>
+            </div>
+            <div class="statistics-site-stat"><small>上传</small><strong class="success">{{ formatBytes(site.uploaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.uploaded, result.totalUploaded) }}</span></strong></div>
+            <div class="statistics-site-stat"><small>下载</small><strong>{{ formatBytes(site.downloaded) }}<span class="statistics-site-divider">|</span><span class="statistics-site-share">{{ formatShare(site.downloaded, result.totalDownloaded) }}</span></strong></div>
             <div class="statistics-daily-table">
               <div class="statistics-daily-row statistics-daily-head"><span>日期</span><span>上传增量</span><span>下载增量</span></div>
               <div v-for="day in site.daily" :key="day.date" class="statistics-daily-row">
                 <span>{{ day.date }}</span><span>{{ formatBytes(day.uploaded) }}</span><span>{{ formatBytes(day.downloaded) }}</span>
               </div>
             </div>
-          </details>
+          </div>
         </div>
 
         <div v-if="result.total > filters.pageSize" class="pagination">
