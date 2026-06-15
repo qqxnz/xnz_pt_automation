@@ -1834,9 +1834,19 @@ a {
   background: #f1f8e9;
 }
 
+.test-result-list article.is-pushable {
+  border-color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.test-result-list article.is-skipped {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 .test-result-list article .match-badge {
   display: inline-block;
-  margin-right: 8px;
+  margin-right: 6px;
   padding: 1px 8px;
   border-radius: 999px;
   background: #2e7d32;
@@ -1844,6 +1854,18 @@ a {
   font-size: 12px;
   font-weight: 600;
   vertical-align: middle;
+}
+
+.test-result-list article .match-badge.badge-skipped {
+  background: #9ca3af;
+}
+
+.test-result-list article .match-badge.badge-matched {
+  background: #1976d2;
+}
+
+.test-result-list article .match-badge.badge-pushable {
+  background: #2e7d32;
 }
 
 .site-row {

@@ -157,15 +157,9 @@
             <label>做种人数<input v-model.number="form.seederCount" min="0" type="number" /></label>
             <label>种子最小体积（GB）<input v-model.number="form.sizeMinGb" min="0" step="1" type="number" /></label>
             <label>种子最大体积（GB）<input v-model.number="form.sizeMaxGb" min="0" step="1" type="number" /></label>
-            <label>种子个数条件
-              <select v-model="form.torrentCountCondition">
-                <option value="">不限制</option>
-                <option value="GT">大于</option>
-                <option value="EQ">等于</option>
-                <option value="LT">小于</option>
-              </select>
+            <label>入库数量
+              <input v-model.number="form.torrentCount" min="0" step="1" type="number" placeholder="0 表示不限制" />
             </label>
-            <label>种子个数<input v-model.number="form.torrentCount" min="1" step="1" type="number" /></label>
             <label>即将过期阈值<input v-model.number="form.expiringSoonMinutes" min="1" type="number" /></label>
           </section>
         </div>
@@ -189,15 +183,17 @@
               <span class="stat">抓取 {{ testResult.fetchedCount }} 个</span>
               <span v-if="(testResult.skippedExistingCount ?? 0) > 0" class="stat">去重 {{ testResult.skippedExistingCount }} 个</span>
               <span class="stat">命中 {{ testResult.matchedCount }} 个</span>
-              <span class="stat stat-pushable">推送候选 {{ testResult.pushableCount }} 个</span>
+              <span class="stat stat-pushable">待入库 {{ testResult.pushableCount }} 个</span>
             </p>
           </div>
           <button type="button" @click="testResult = undefined">×</button>
         </div>
         <div class="test-result-list">
-          <article v-for="item in testResult.items" :key="item.torrentId" :class="{ 'is-matched': item.matched }">
+          <article v-for="item in testResult.items" :key="item.torrentId" :class="{ 'is-matched': item.matched, 'is-pushable': item.pushable, 'is-skipped': item.skippedExisting }">
             <strong>
-              <span v-if="item.matched" class="match-badge">✓ 命中</span>
+              <span v-if="item.skippedExisting" class="match-badge badge-skipped">去重</span>
+              <span v-if="item.matched" class="match-badge badge-matched">命中</span>
+              <span v-if="item.pushable" class="match-badge badge-pushable">待入库</span>
               {{ item.title }}
             </strong>
             <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · {{ freeEndText(item) }} · 做种 {{ item.seeders ?? 0 }}</span>
@@ -226,7 +222,6 @@ import {
   updateTaskAutoRun,
   type DiscountType,
   type SeederCondition,
-  type TorrentCountCondition,
   type TaskItem,
   type TaskPayload,
   type TaskStats,
@@ -263,7 +258,7 @@ const form = reactive<TaskPayload & { torrentCount: number }>({
   sizeMinGb: 0,
   sizeMaxGb: 0,
   torrentCountCondition: '',
-  torrentCount: 1,
+  torrentCount: 0,
   expiringSoonMinutes: 120,
   savePathOverride: ''
 })
@@ -281,11 +276,6 @@ const seederConditionText: Record<SeederCondition, string> = {
   LT: '小于'
 }
 
-const torrentCountConditionText: Record<TorrentCountCondition, string> = {
-  GT: '大于',
-  EQ: '等于',
-  LT: '小于'
-}
 
 const statCards = computed(() => [
   { label: '全部任务', value: stats.value.total, className: '' },
@@ -311,7 +301,7 @@ function resetForm() {
     sizeMinGb: 0,
     sizeMaxGb: 0,
     torrentCountCondition: '',
-    torrentCount: 1,
+    torrentCount: 0,
     expiringSoonMinutes: 120,
     savePathOverride: '',
     categoryOverride: undefined,
@@ -343,7 +333,7 @@ function openEdit(task: TaskItem) {
     sizeMinGb: task.sizeMinGb ?? 0,
     sizeMaxGb: task.sizeMaxGb ?? 0,
     torrentCountCondition: task.torrentCountCondition ?? '',
-    torrentCount: task.torrentCount ?? 1,
+    torrentCount: task.torrentCount ?? 0,
     expiringSoonMinutes: task.expiringSoonMinutes ?? 120,
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
@@ -362,7 +352,7 @@ function validateForm() {
   if (!Number.isInteger(form.sizeMinGb) || (form.sizeMinGb ?? 0) < 0) return '种子最小体积必须是大于等于 0 的整数'
   if (!Number.isInteger(form.sizeMaxGb) || (form.sizeMaxGb ?? 0) < 0) return '种子最大体积必须是大于等于 0 的整数'
   if ((form.sizeMinGb ?? 0) > 0 && (form.sizeMaxGb ?? 0) > 0 && (form.sizeMinGb ?? 0) > (form.sizeMaxGb ?? 0)) return '种子最小体积不能大于种子最大体积'
-  if (form.torrentCountCondition && (!Number.isInteger(form.torrentCount) || (form.torrentCount ?? 0) < 1)) return '种子个数必须是大于等于 1 的整数'
+  if ((form.torrentCount ?? 0) > 0 && !Number.isInteger(form.torrentCount)) return '入库数量必须是非负整数'
   return ''
 }
 
@@ -412,7 +402,7 @@ async function saveTask() {
       seederCount: form.seederCount,
       sizeMinGb: form.sizeMinGb,
       sizeMaxGb: form.sizeMaxGb,
-      torrentCountCondition: form.torrentCountCondition,
+      torrentCountCondition: (form.torrentCount ?? 0) > 0 ? 'LT' : '',
       torrentCount: form.torrentCount,
       expiringSoonMinutes: form.expiringSoonMinutes,
       savePathOverride: form.savePathOverride,
@@ -510,7 +500,7 @@ function rangeText(task: TaskItem) {
     else if (sizeMin > 0) parts.push(`体积 ≥ ${sizeMin} GB`)
     else parts.push(`体积 ≤ ${sizeMax} GB`)
   }
-  if (task.torrentCountCondition) parts.push(`个数${torrentCountConditionText[task.torrentCountCondition]} ${task.torrentCount ?? 0}`)
+  if (task.torrentCountCondition && (task.torrentCount ?? 0) > 0) parts.push(`入库数量 ${task.torrentCount}`)
   return parts.join(' · ')
 }
 

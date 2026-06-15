@@ -232,12 +232,9 @@ function torrentHash(site: SiteRecord, item: CandidateTorrent) {
 
 function applyTorrentCountCondition(task: TaskRecord, items: CandidateTorrent[]) {
   if (!task.torrentCountCondition) return items
-  const target = task.torrentCount ?? 1
-  const actual = items.length
-  if (task.torrentCountCondition === 'GT' && !(actual > target)) return []
-  if (task.torrentCountCondition === 'EQ' && !(actual === target)) return []
-  if (task.torrentCountCondition === 'LT' && !(actual < target)) return []
-  return items
+  const target = Math.max(0, task.torrentCount ?? 0)
+  if (target <= 0) return []
+  return items.slice(0, Math.min(items.length, target))
 }
 
 function torrentFilename(title: string, fallback: string) {
@@ -451,7 +448,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       await insertTorrents(pushedTorrentRecords)
     }
     const finishedAt = new Date().toISOString()
-    const baseSummary = `抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，推送候选 ${pushable.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const baseSummary = `抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，待入库 ${pushable.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     const failureSummary = pushErrorMessages.length ? `；失败原因：${pushErrorMessages.slice(0, 3).join('；')}${pushErrorMessages.length > 3 ? `；另有 ${pushErrorMessages.length - 3} 条失败` : ''}` : ''
     const summary = `${baseSummary}${failureSummary}`
     task.running = false
@@ -779,9 +776,16 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
     const matched = matchedCandidates(task, deduped)
     const pushable = applyTorrentCountCondition(task, matched)
     const pushableCount = pushable.length
-    const matchedTorrentIds = new Set(pushable.map((item) => item.torrentId))
-    const items = fetched.map((item) => ({ ...item, matched: matchedTorrentIds.has(item.torrentId) }))
-    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，测试列表展示全部抓取种子`)
+    const dedupedIds = new Set(deduped.map((item) => item.torrentId))
+    const matchedIds = new Set(matched.map((item) => item.torrentId))
+    const pushableIds = new Set(pushable.map((item) => item.torrentId))
+    const items = fetched.map((item) => ({
+      ...item,
+      skippedExisting: !dedupedIds.has(item.torrentId),
+      matched: matchedIds.has(item.torrentId),
+      pushable: pushableIds.has(item.torrentId)
+    }))
+    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，待入库 ${pushableCount} 个，测试列表展示全部抓取种子`)
     return res.json({
       taskId: task.id,
       taskName: task.name,

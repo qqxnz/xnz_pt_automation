@@ -95,7 +95,9 @@ export type TaskTestResult = {
     seeders?: number
     leechers?: number
     linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+    skippedExisting: boolean
     matched: boolean
+    pushable: boolean
   }>
 }
 
