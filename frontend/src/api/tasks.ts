@@ -18,6 +18,9 @@ export type TaskItem = {
   intervalMinutes: number
   freeOnly: boolean
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
   autoPush: boolean
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition
@@ -49,6 +52,9 @@ export type TaskPayload = {
   intervalMinutes: number
   freeOnly: boolean
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number | null
+  lowUploadMinutes?: number | null
   autoPush: boolean
   discountTypes: DiscountType[]
   seederCondition?: SeederCondition | ''

@@ -16,6 +16,10 @@ export type TorrentItem = {
   pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
+  lowUploadSince?: string
   detailUrl?: string
   downloaderId?: string
   downloaderName?: string
@@ -94,10 +98,23 @@ export function pushTorrent(id: string, options?: { downloaderId?: string; taskS
   })
 }
 
-export function updateTorrentSettings(id: string, options: { downloaderId?: string; taskSavePath?: string }) {
-  const body: { downloaderId?: string; taskSavePath?: string } = {}
+export type TorrentSettingsUpdate = {
+  downloaderId?: string
+  taskSavePath?: string
+  onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number | null
+  lowUploadMinutes?: number | null
+}
+
+export function updateTorrentSettings(id: string, options: TorrentSettingsUpdate) {
+  const body: Record<string, unknown> = {}
   if (options.downloaderId !== undefined) body.downloaderId = options.downloaderId
   if (options.taskSavePath !== undefined) body.taskSavePath = options.taskSavePath
+  if (options.onlyFreeDownload !== undefined) body.onlyFreeDownload = options.onlyFreeDownload
+  if (options.deleteOnFreeExpire !== undefined) body.deleteOnFreeExpire = options.deleteOnFreeExpire
+  if (options.lowUploadKbps !== undefined) body.lowUploadKbps = options.lowUploadKbps
+  if (options.lowUploadMinutes !== undefined) body.lowUploadMinutes = options.lowUploadMinutes
   return apiRequest<TorrentItem>(`/api/torrents/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(body)

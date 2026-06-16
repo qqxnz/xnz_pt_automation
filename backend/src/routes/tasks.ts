@@ -16,7 +16,7 @@ import {
   type TorrentRecord,
   updateTaskFieldsInDb
 } from '../storage.js'
-import { logger, recordOperationLog, recordScheduleLog, recordTaskLog } from '../utils/logger.js'
+import { logger, recordOperationLog, recordScheduleLog, recordTaskLog, recordTorrentLog } from '../utils/logger.js'
 import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
 import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
 
@@ -32,6 +32,9 @@ type TaskPayload = {
   intervalMinutes?: number
   freeOnly?: boolean
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number | null
+  lowUploadMinutes?: number | null
   autoPush?: boolean
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT' | ''
@@ -109,6 +112,15 @@ function validatePayload(
   if (payload.torrentCountCondition && !['GT', 'EQ', 'LT'].includes(payload.torrentCountCondition)) return '种子个数条件不合法'
   const torrentCount = Number(payload.torrentCount)
   if (payload.torrentCountCondition && (!Number.isInteger(torrentCount) || torrentCount < 1)) return '种子个数必须是大于等于 1 的整数'
+  const lowUploadKbpsRaw = payload.lowUploadKbps
+  const lowUploadMinutesRaw = payload.lowUploadMinutes
+  const lowUploadKbpsEnabled = lowUploadKbpsRaw !== undefined && lowUploadKbpsRaw !== null && Number(lowUploadKbpsRaw) > 0
+  const lowUploadMinutesEnabled = lowUploadMinutesRaw !== undefined && lowUploadMinutesRaw !== null && Number(lowUploadMinutesRaw) > 0
+  if (lowUploadKbpsEnabled !== lowUploadMinutesEnabled) return '低速删除的速度阈值和持续时间需同时填写'
+  if (lowUploadKbpsEnabled) {
+    if (!Number.isFinite(Number(lowUploadKbpsRaw)) || !Number.isInteger(Number(lowUploadKbpsRaw)) || Number(lowUploadKbpsRaw) < 1) return '低速删除的速度阈值必须是大于等于 1 的整数'
+    if (!Number.isFinite(Number(lowUploadMinutesRaw)) || !Number.isInteger(Number(lowUploadMinutesRaw)) || Number(lowUploadMinutesRaw) < 1) return '低速删除的持续时间必须是大于等于 1 的整数'
+  }
   return undefined
 }
 
@@ -135,6 +147,13 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
   const sizeMaxGb = hasSizeMaxGb ? Number(payload.sizeMaxGb ?? 0) : existing?.sizeMaxGb ?? 0
   const hasTorrentCountCondition = Object.hasOwn(payload, 'torrentCountCondition')
   const torrentCountCondition = hasTorrentCountCondition ? payload.torrentCountCondition || undefined : existing?.torrentCountCondition
+  const hasLowUploadKbps = Object.hasOwn(payload, 'lowUploadKbps')
+  const hasLowUploadMinutes = Object.hasOwn(payload, 'lowUploadMinutes')
+  const rawKbps = hasLowUploadKbps ? payload.lowUploadKbps : existing?.lowUploadKbps
+  const rawMinutes = hasLowUploadMinutes ? payload.lowUploadMinutes : existing?.lowUploadMinutes
+  const lowUploadKbps = rawKbps !== undefined && rawKbps !== null && Number(rawKbps) > 0 ? Number(rawKbps) : undefined
+  const lowUploadMinutes = rawMinutes !== undefined && rawMinutes !== null && Number(rawMinutes) > 0 ? Number(rawMinutes) : undefined
+  const bothLow = lowUploadKbps !== undefined && lowUploadMinutes !== undefined
   return {
     id: existing?.id ?? randomUUID(),
     name: payload.name!.trim(),
@@ -146,6 +165,9 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     intervalMinutes,
     freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
     onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? true,
+    deleteOnFreeExpire: payload.deleteOnFreeExpire ?? existing?.deleteOnFreeExpire ?? false,
+    lowUploadKbps: bothLow ? lowUploadKbps : undefined,
+    lowUploadMinutes: bothLow ? lowUploadMinutes : undefined,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
     seederCondition,
@@ -425,6 +447,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         pushStatus: pushed ? 'PUSHED' : failedPush ? 'PUSH_FAILED' : 'NEW',
         linkStatus: item.linkStatus,
         onlyFreeDownload: task.onlyFreeDownload ?? false,
+        deleteOnFreeExpire: task.deleteOnFreeExpire ?? false,
+        lowUploadKbps: task.lowUploadKbps,
+        lowUploadMinutes: task.lowUploadMinutes,
         detailUrl: item.detailUrl,
         downloaderId: downloader?.id,
         downloaderName: downloader?.name,
@@ -443,6 +468,41 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         downloadUrl: item.downloadUrl
       }
       pushedTorrentRecords.push(record)
+      await recordTorrentLog({
+        torrentId: record.id,
+        siteId: record.siteId,
+        siteName: record.siteName,
+        torrentTitle: record.title,
+        event: 'INSERTED',
+        status: 'SUCCESS',
+        source: 'TASK',
+        message: `任务【${task.name}】入库种子「${readableTorrentTitle(record.title)}」`
+      })
+      if (task.autoPush) {
+        if (pushed) {
+          await recordTorrentLog({
+            torrentId: record.id,
+            siteId: record.siteId,
+            siteName: record.siteName,
+            torrentTitle: record.title,
+            event: 'PUSHED',
+            status: 'SUCCESS',
+            source: 'TASK',
+            message: `任务自动推送种子「${readableTorrentTitle(record.title)}」到「${downloader?.name ?? '下载器'}」`
+          })
+        } else if (failedPush) {
+          await recordTorrentLog({
+            torrentId: record.id,
+            siteId: record.siteId,
+            siteName: record.siteName,
+            torrentTitle: record.title,
+            event: 'PUSH_FAILED',
+            status: 'FAILED',
+            source: 'TASK',
+            message: `任务自动推送种子「${readableTorrentTitle(record.title)}」失败：${pushError ?? '未知原因'}`
+          })
+        }
+      }
     }
     if (pushedTorrentRecords.length) {
       await insertTorrents(pushedTorrentRecords)

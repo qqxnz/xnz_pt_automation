@@ -83,6 +83,32 @@ export type SigninLogRecord = {
   createdAt: string
 }
 
+export type TorrentLogEvent =
+  | 'INSERTED'
+  | 'PUSHED'
+  | 'PUSH_FAILED'
+  | 'AUTO_DELETE_TASK'
+  | 'MANUAL_DELETE_TASK'
+  | 'DELETE_RECORD'
+  | 'UPDATE_SETTINGS'
+
+export type TorrentLogRecord = {
+  id: string
+  type: 'TORRENT'
+  torrentId?: string
+  siteId?: string
+  siteName?: string
+  torrentTitle: string
+  event: TorrentLogEvent
+  status: 'SUCCESS' | 'FAILED'
+  message: string
+  reason?: string
+  source?: 'AUTO' | 'MANUAL' | 'SCHEDULER' | 'TASK'
+  actorId?: string
+  actorName?: string
+  createdAt: string
+}
+
 export type TaskRecord = {
   id: string
   name: string
@@ -94,6 +120,9 @@ export type TaskRecord = {
   intervalMinutes: number
   freeOnly: boolean
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
   autoPush: boolean
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
   seederCondition?: 'GT' | 'EQ' | 'LT'
@@ -135,6 +164,10 @@ export type TorrentRecord = {
   pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
   onlyFreeDownload?: boolean
+  deleteOnFreeExpire?: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
+  lowUploadSince?: string
   detailUrl?: string
   downloaderId?: string
   downloaderName?: string
@@ -266,7 +299,7 @@ type AppStateMigrationPayload = {
   systemSettingsUpdatedAt?: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule' | 'signin'
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent'
 
 export type LogQuery = {
   type: LogType
@@ -325,7 +358,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 10
+const schemaVersion = 11
 
 export const storagePaths = {
   root,
@@ -374,6 +407,9 @@ function normalizeMigratedState(state: Partial<AppStateMigrationPayload>): AppSt
       return {
         ...task,
         onlyFreeDownload: Boolean(task.onlyFreeDownload),
+        deleteOnFreeExpire: Boolean(task.deleteOnFreeExpire),
+        lowUploadKbps: Number.isFinite(Number(task.lowUploadKbps)) && Number(task.lowUploadKbps) > 0 ? Number(task.lowUploadKbps) : undefined,
+        lowUploadMinutes: Number.isFinite(Number(task.lowUploadMinutes)) && Number(task.lowUploadMinutes) >= 1 ? Number(task.lowUploadMinutes) : undefined,
         discountTypes: normalizedDiscountTypes,
         sizeCondition: undefined,
         sizeMb: undefined,
@@ -399,7 +435,13 @@ function normalizeMigratedState(state: Partial<AppStateMigrationPayload>): AppSt
     tasks,
     torrents: (state.torrents ?? [])
       .filter((torrent) => typeof torrent.title === 'string')
-      .map((torrent) => ({ ...torrent, onlyFreeDownload: Boolean(torrent.onlyFreeDownload) })),
+      .map((torrent) => ({
+        ...torrent,
+        onlyFreeDownload: Boolean(torrent.onlyFreeDownload),
+        deleteOnFreeExpire: Boolean(torrent.deleteOnFreeExpire),
+        lowUploadKbps: Number.isFinite(Number(torrent.lowUploadKbps)) && Number(torrent.lowUploadKbps) > 0 ? Number(torrent.lowUploadKbps) : undefined,
+        lowUploadMinutes: Number.isFinite(Number(torrent.lowUploadMinutes)) && Number(torrent.lowUploadMinutes) >= 1 ? Number(torrent.lowUploadMinutes) : undefined
+      })),
     siteTrafficSnapshots: (state.siteTrafficSnapshots ?? []).filter((snapshot) => typeof snapshot.siteId === 'string' && typeof snapshot.date === 'string'),
     systemSettings,
     systemSettingsUpdatedAt: state.systemSettingsUpdatedAt
@@ -551,6 +593,9 @@ function createStructuredTables(db: DatabaseSync) {
       interval_minutes INTEGER NOT NULL,
       free_only INTEGER NOT NULL,
       only_free_download INTEGER NOT NULL,
+      delete_on_free_expire INTEGER NOT NULL DEFAULT 0,
+      low_upload_kbps INTEGER,
+      low_upload_minutes INTEGER,
       auto_push INTEGER NOT NULL,
       discount_types_json TEXT NOT NULL,
       seeder_condition TEXT,
@@ -590,6 +635,10 @@ function createStructuredTables(db: DatabaseSync) {
       push_status TEXT NOT NULL,
       link_status TEXT NOT NULL,
       only_free_download INTEGER NOT NULL,
+      delete_on_free_expire INTEGER NOT NULL DEFAULT 0,
+      low_upload_kbps INTEGER,
+      low_upload_minutes INTEGER,
+      low_upload_since TEXT,
       detail_url TEXT,
       downloader_id TEXT,
       downloader_name TEXT,
@@ -682,6 +731,21 @@ function createStructuredTables(db: DatabaseSync) {
       duration_ms INTEGER,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS torrent_logs (
+      id TEXT PRIMARY KEY,
+      torrent_id TEXT,
+      site_id TEXT,
+      site_name TEXT,
+      torrent_title TEXT NOT NULL,
+      event TEXT NOT NULL,
+      status TEXT NOT NULL,
+      message TEXT NOT NULL,
+      reason TEXT,
+      source TEXT,
+      actor_id TEXT,
+      actor_name TEXT,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS site_traffic_snapshots (
       id TEXT PRIMARY KEY,
       site_id TEXT NOT NULL,
@@ -731,6 +795,8 @@ function createStructuredTables(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_schedule_logs_created ON schedule_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_site_signin_logs_created ON site_signin_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_site_signin_logs_site ON site_signin_logs(site_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_torrent_logs_created ON torrent_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_torrent_logs_torrent ON torrent_logs(torrent_id, created_at DESC);
   `)
 }
 
@@ -944,6 +1010,35 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
         WHERE trim(name) = ''
       `)
     }
+    if (currentVersion < 11) {
+      // v11 下载器删除条件组：tasks/torrents 增加新列；新增 torrent_logs 表
+      if (!tableHasColumn(db, 'tasks', 'delete_on_free_expire')) db.exec('ALTER TABLE tasks ADD COLUMN delete_on_free_expire INTEGER NOT NULL DEFAULT 0')
+      if (!tableHasColumn(db, 'tasks', 'low_upload_kbps')) db.exec('ALTER TABLE tasks ADD COLUMN low_upload_kbps INTEGER')
+      if (!tableHasColumn(db, 'tasks', 'low_upload_minutes')) db.exec('ALTER TABLE tasks ADD COLUMN low_upload_minutes INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'delete_on_free_expire')) db.exec('ALTER TABLE torrents ADD COLUMN delete_on_free_expire INTEGER NOT NULL DEFAULT 0')
+      if (!tableHasColumn(db, 'torrents', 'low_upload_kbps')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_kbps INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'low_upload_minutes')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_minutes INTEGER')
+      if (!tableHasColumn(db, 'torrents', 'low_upload_since')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_since TEXT')
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS torrent_logs (
+          id TEXT PRIMARY KEY,
+          torrent_id TEXT,
+          site_id TEXT,
+          site_name TEXT,
+          torrent_title TEXT NOT NULL,
+          event TEXT NOT NULL,
+          status TEXT NOT NULL,
+          message TEXT NOT NULL,
+          reason TEXT,
+          source TEXT,
+          actor_id TEXT,
+          actor_name TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_torrent_logs_created ON torrent_logs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_torrent_logs_torrent ON torrent_logs(torrent_id, created_at DESC);
+      `)
+    }
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', migratedAt)
@@ -993,17 +1088,17 @@ function upsertDownloader(db: DatabaseSync, item: DownloaderRecord) {
 }
 
 function upsertTask(db: DatabaseSync, item: TaskRecord) {
-  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, free_only, only_free_download, auto_push, discount_types_json, seeder_condition, seeder_count, size_min_gb, size_max_gb, torrent_count_condition, torrent_count, expiring_soon_minutes, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, free_only = excluded.free_only, only_free_download = excluded.only_free_download, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_condition = excluded.seeder_condition, seeder_count = excluded.seeder_count, size_min_gb = excluded.size_min_gb, size_max_gb = excluded.size_max_gb, torrent_count_condition = excluded.torrent_count_condition, torrent_count = excluded.torrent_count, expiring_soon_minutes = excluded.expiring_soon_minutes, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.freeOnly), bool(item.onlyFreeDownload), bool(item.autoPush), json(item.discountTypes), optional(item.seederCondition), optional(item.seederCount), item.sizeMinGb ?? 0, item.sizeMaxGb ?? 0, optional(item.torrentCountCondition), optional(item.torrentCount), optional(item.expiringSoonMinutes), optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
+  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, free_only, only_free_download, delete_on_free_expire, low_upload_kbps, low_upload_minutes, auto_push, discount_types_json, seeder_condition, seeder_count, size_min_gb, size_max_gb, torrent_count_condition, torrent_count, expiring_soon_minutes, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, free_only = excluded.free_only, only_free_download = excluded.only_free_download, delete_on_free_expire = excluded.delete_on_free_expire, low_upload_kbps = excluded.low_upload_kbps, low_upload_minutes = excluded.low_upload_minutes, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_condition = excluded.seeder_condition, seeder_count = excluded.seeder_count, size_min_gb = excluded.size_min_gb, size_max_gb = excluded.size_max_gb, torrent_count_condition = excluded.torrent_count_condition, torrent_count = excluded.torrent_count, expiring_soon_minutes = excluded.expiring_soon_minutes, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.freeOnly), bool(item.onlyFreeDownload), bool(item.deleteOnFreeExpire), optional(item.lowUploadKbps), optional(item.lowUploadMinutes), bool(item.autoPush), json(item.discountTypes), optional(item.seederCondition), optional(item.seederCount), item.sizeMinGb ?? 0, item.sizeMaxGb ?? 0, optional(item.torrentCountCondition), optional(item.torrentCount), optional(item.expiringSoonMinutes), optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
 }
 
 function upsertTorrent(db: DatabaseSync, item: TorrentRecord) {
-  db.prepare(`INSERT INTO torrents (id, site_id, site_name, torrent_id, title, title_lc, size, discount_type, is_free_now, current_state, free_end_at, seeders, leechers, push_status, link_status, only_free_download, detail_url, downloader_id, downloader_name, downloader_type, downloader_state, torrent_hash, download_progress, download_state, ratio, upload_speed, download_speed, uploaded, downloaded, task_save_path, downloader_save_path, download_stats_synced_at, source_task_id, source_task_name, source_run_mode, error_message, first_seen_at, last_seen_at, pushed_at, download_url_hash, download_url, has_ipv6_peers, ipv6_peer_count, total_peer_count, peer_sync_rid, peer_synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, torrent_id = excluded.torrent_id, title = excluded.title, title_lc = excluded.title_lc, size = excluded.size, discount_type = excluded.discount_type, is_free_now = excluded.is_free_now, current_state = excluded.current_state, free_end_at = excluded.free_end_at, seeders = excluded.seeders, leechers = excluded.leechers, push_status = excluded.push_status, link_status = excluded.link_status, only_free_download = excluded.only_free_download, detail_url = excluded.detail_url, downloader_id = excluded.downloader_id, downloader_name = excluded.downloader_name, downloader_type = excluded.downloader_type, downloader_state = excluded.downloader_state, torrent_hash = excluded.torrent_hash, download_progress = excluded.download_progress, download_state = excluded.download_state, ratio = excluded.ratio, upload_speed = excluded.upload_speed, download_speed = excluded.download_speed, uploaded = excluded.uploaded, downloaded = excluded.downloaded, task_save_path = excluded.task_save_path, downloader_save_path = excluded.downloader_save_path, download_stats_synced_at = excluded.download_stats_synced_at, source_task_id = excluded.source_task_id, source_task_name = excluded.source_task_name, source_run_mode = excluded.source_run_mode, error_message = excluded.error_message, first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at, pushed_at = excluded.pushed_at, download_url_hash = excluded.download_url_hash, download_url = excluded.download_url, has_ipv6_peers = excluded.has_ipv6_peers, ipv6_peer_count = excluded.ipv6_peer_count, total_peer_count = excluded.total_peer_count, peer_sync_rid = excluded.peer_sync_rid, peer_synced_at = excluded.peer_synced_at`)
-    .run(item.id, item.siteId, item.siteName, optional(item.torrentId), item.title, item.title.toLowerCase(), item.size, item.discountType, bool(item.isFreeNow), item.currentState, optional(item.freeEndAt), optional(item.seeders), optional(item.leechers), item.pushStatus, item.linkStatus, bool(item.onlyFreeDownload), optional(item.detailUrl), optional(item.downloaderId), optional(item.downloaderName), optional(item.downloaderType), optional(item.downloaderState), optional(item.torrentHash), optional(item.downloadProgress), optional(item.downloadState), optional(item.ratio), optional(item.uploadSpeed), optional(item.downloadSpeed), optional(item.uploaded), optional(item.downloaded), optional(item.taskSavePath), optional(item.downloaderSavePath), optional(item.downloadStatsSyncedAt), optional(item.sourceTaskId), optional(item.sourceTaskName), item.sourceRunMode, optional(item.errorMessage), item.firstSeenAt, item.lastSeenAt, optional(item.pushedAt), optional(item.downloadUrlHash), optional(item.downloadUrl), item.hasIpv6Peers === undefined ? null : bool(item.hasIpv6Peers), optional(item.ipv6PeerCount), optional(item.totalPeerCount), optional(item.peerSyncRid), optional(item.peerSyncedAt))
+  db.prepare(`INSERT INTO torrents (id, site_id, site_name, torrent_id, title, title_lc, size, discount_type, is_free_now, current_state, free_end_at, seeders, leechers, push_status, link_status, only_free_download, delete_on_free_expire, low_upload_kbps, low_upload_minutes, low_upload_since, detail_url, downloader_id, downloader_name, downloader_type, downloader_state, torrent_hash, download_progress, download_state, ratio, upload_speed, download_speed, uploaded, downloaded, task_save_path, downloader_save_path, download_stats_synced_at, source_task_id, source_task_name, source_run_mode, error_message, first_seen_at, last_seen_at, pushed_at, download_url_hash, download_url, has_ipv6_peers, ipv6_peer_count, total_peer_count, peer_sync_rid, peer_synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, torrent_id = excluded.torrent_id, title = excluded.title, title_lc = excluded.title_lc, size = excluded.size, discount_type = excluded.discount_type, is_free_now = excluded.is_free_now, current_state = excluded.current_state, free_end_at = excluded.free_end_at, seeders = excluded.seeders, leechers = excluded.leechers, push_status = excluded.push_status, link_status = excluded.link_status, only_free_download = excluded.only_free_download, delete_on_free_expire = excluded.delete_on_free_expire, low_upload_kbps = excluded.low_upload_kbps, low_upload_minutes = excluded.low_upload_minutes, low_upload_since = excluded.low_upload_since, detail_url = excluded.detail_url, downloader_id = excluded.downloader_id, downloader_name = excluded.downloader_name, downloader_type = excluded.downloader_type, downloader_state = excluded.downloader_state, torrent_hash = excluded.torrent_hash, download_progress = excluded.download_progress, download_state = excluded.download_state, ratio = excluded.ratio, upload_speed = excluded.upload_speed, download_speed = excluded.download_speed, uploaded = excluded.uploaded, downloaded = excluded.downloaded, task_save_path = excluded.task_save_path, downloader_save_path = excluded.downloader_save_path, download_stats_synced_at = excluded.download_stats_synced_at, source_task_id = excluded.source_task_id, source_task_name = excluded.source_task_name, source_run_mode = excluded.source_run_mode, error_message = excluded.error_message, first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at, pushed_at = excluded.pushed_at, download_url_hash = excluded.download_url_hash, download_url = excluded.download_url, has_ipv6_peers = excluded.has_ipv6_peers, ipv6_peer_count = excluded.ipv6_peer_count, total_peer_count = excluded.total_peer_count, peer_sync_rid = excluded.peer_sync_rid, peer_synced_at = excluded.peer_synced_at`)
+    .run(item.id, item.siteId, item.siteName, optional(item.torrentId), item.title, item.title.toLowerCase(), item.size, item.discountType, bool(item.isFreeNow), item.currentState, optional(item.freeEndAt), optional(item.seeders), optional(item.leechers), item.pushStatus, item.linkStatus, bool(item.onlyFreeDownload), bool(item.deleteOnFreeExpire), optional(item.lowUploadKbps), optional(item.lowUploadMinutes), optional(item.lowUploadSince), optional(item.detailUrl), optional(item.downloaderId), optional(item.downloaderName), optional(item.downloaderType), optional(item.downloaderState), optional(item.torrentHash), optional(item.downloadProgress), optional(item.downloadState), optional(item.ratio), optional(item.uploadSpeed), optional(item.downloadSpeed), optional(item.uploaded), optional(item.downloaded), optional(item.taskSavePath), optional(item.downloaderSavePath), optional(item.downloadStatsSyncedAt), optional(item.sourceTaskId), optional(item.sourceTaskName), item.sourceRunMode, optional(item.errorMessage), item.firstSeenAt, item.lastSeenAt, optional(item.pushedAt), optional(item.downloadUrlHash), optional(item.downloadUrl), item.hasIpv6Peers === undefined ? null : bool(item.hasIpv6Peers), optional(item.ipv6PeerCount), optional(item.totalPeerCount), optional(item.peerSyncRid), optional(item.peerSyncedAt))
 }
 
 function upsertOperationLog(db: DatabaseSync, item: OperationLogRecord) {
@@ -1032,6 +1127,13 @@ function upsertSigninLog(db: DatabaseSync, item: SigninLogRecord) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, run_mode = excluded.run_mode, trigger_source = excluded.trigger_source, status = excluded.status, message = excluded.message, error_message = excluded.error_message, started_at = excluded.started_at, finished_at = excluded.finished_at, duration_ms = excluded.duration_ms, created_at = excluded.created_at`)
     .run(item.id, item.siteId, item.siteName, item.runMode, item.triggerSource, item.status, item.message, optional(item.errorMessage), item.startedAt, optional(item.finishedAt), optional(item.durationMs), item.createdAt)
+}
+
+function upsertTorrentLog(db: DatabaseSync, item: TorrentLogRecord) {
+  db.prepare(`INSERT INTO torrent_logs (id, torrent_id, site_id, site_name, torrent_title, event, status, message, reason, source, actor_id, actor_name, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET torrent_id = excluded.torrent_id, site_id = excluded.site_id, site_name = excluded.site_name, torrent_title = excluded.torrent_title, event = excluded.event, status = excluded.status, message = excluded.message, reason = excluded.reason, source = excluded.source, actor_id = excluded.actor_id, actor_name = excluded.actor_name, created_at = excluded.created_at`)
+    .run(item.id, optional(item.torrentId), optional(item.siteId), optional(item.siteName), item.torrentTitle, item.event, item.status, item.message, optional(item.reason), optional(item.source), optional(item.actorId), optional(item.actorName), item.createdAt)
 }
 
 function upsertSnapshot(db: DatabaseSync, item: SiteTrafficSnapshotRecord) {
@@ -1130,6 +1232,9 @@ function tasksFromDb(db: DatabaseSync): TaskRecord[] {
     intervalMinutes: row.interval_minutes,
     freeOnly: fromBool(row.free_only),
     onlyFreeDownload: fromBool(row.only_free_download),
+    deleteOnFreeExpire: fromBool(row.delete_on_free_expire),
+    lowUploadKbps: row.low_upload_kbps ?? undefined,
+    lowUploadMinutes: row.low_upload_minutes ?? undefined,
     autoPush: fromBool(row.auto_push),
     discountTypes: parseJson(row.discount_types_json, defaultTaskDiscountTypes),
     seederCondition: row.seeder_condition ?? undefined,
@@ -1171,6 +1276,10 @@ function torrentFromRow(row: any): TorrentRecord {
     pushStatus: row.push_status,
     linkStatus: row.link_status,
     onlyFreeDownload: fromBool(row.only_free_download),
+    deleteOnFreeExpire: fromBool(row.delete_on_free_expire),
+    lowUploadKbps: row.low_upload_kbps ?? undefined,
+    lowUploadMinutes: row.low_upload_minutes ?? undefined,
+    lowUploadSince: row.low_upload_since ?? undefined,
     detailUrl: row.detail_url ?? undefined,
     downloaderId: row.downloader_id ?? undefined,
     downloaderName: row.downloader_name ?? undefined,
@@ -1285,6 +1394,25 @@ function signinLogFromRow(row: any): SigninLogRecord {
   }
 }
 
+function torrentLogFromRow(row: any): TorrentLogRecord {
+  return {
+    id: row.id,
+    type: 'TORRENT',
+    torrentId: row.torrent_id ?? undefined,
+    siteId: row.site_id ?? undefined,
+    siteName: row.site_name ?? undefined,
+    torrentTitle: row.torrent_title,
+    event: row.event,
+    status: row.status,
+    message: row.message,
+    reason: row.reason ?? undefined,
+    source: row.source ?? undefined,
+    actorId: row.actor_id ?? undefined,
+    actorName: row.actor_name ?? undefined,
+    createdAt: row.created_at
+  }
+}
+
 function snapshotsFromDb(db: DatabaseSync): SiteTrafficSnapshotRecord[] {
   return (db.prepare('SELECT * FROM site_traffic_snapshots ORDER BY date DESC, id').all() as any[]).map((row) => ({
     id: row.id,
@@ -1318,7 +1446,9 @@ function logTable(type: LogType) {
       ? 'schedule_logs'
       : type === 'signin'
         ? 'site_signin_logs'
-        : 'operation_logs'
+        : type === 'torrent'
+          ? 'torrent_logs'
+          : 'operation_logs'
 }
 
 function logWhere(query: LogQuery) {
@@ -1359,6 +1489,11 @@ function logWhere(query: LogQuery) {
     }
     if (keyword) {
       clauses.push("lower(site_name || ' ' || message || ' ' || coalesce(error_message, '')) LIKE ?")
+      params.push(`%${keyword}%`)
+    }
+  } else if (query.type === 'torrent') {
+    if (keyword) {
+      clauses.push("lower(torrent_title || ' ' || coalesce(site_name, '') || ' ' || message || ' ' || coalesce(reason, '') || ' ' || coalesce(event, '') || ' ' || coalesce(actor_name, '')) LIKE ?")
       params.push(`%${keyword}%`)
     }
   } else if (keyword) {
@@ -1508,6 +1643,19 @@ export async function appendSigninLog(payload: Omit<SigninLogRecord, 'id' | 'typ
   return log
 }
 
+export async function appendTorrentLog(payload: Omit<TorrentLogRecord, 'id' | 'type' | 'createdAt'>) {
+  const db = await readyDb()
+  const log: TorrentLogRecord = {
+    id: randomUUID(),
+    type: 'TORRENT',
+    createdAt: new Date().toISOString(),
+    ...payload
+  }
+  upsertTorrentLog(db, log)
+  pruneLogTable(db, 'torrent_logs')
+  return log
+}
+
 export async function listLatestSigninLogBySiteAndDate(siteId: string, dateKey: string): Promise<SigninLogRecord | undefined> {
   const db = await readyDb()
   const row = db.prepare(
@@ -1524,7 +1672,7 @@ export async function clearLogsByType(type: LogType) {
   return { clearedCount: Number(row.total ?? 0) }
 }
 
-export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord>(query: LogQuery) {
+export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord>(query: LogQuery) {
   const db = await readyDb()
   const table = logTable(query.type)
   const where = logWhere(query)
@@ -1540,11 +1688,13 @@ export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | S
         ? rows.map(scheduleLogFromRow)
         : query.type === 'signin'
           ? rows.map(signinLogFromRow)
-          : rows.map(operationLogFromRow)
+          : query.type === 'torrent'
+            ? rows.map(torrentLogFromRow)
+            : rows.map(operationLogFromRow)
   return { items: items as T[], total: Number(totalRow.total ?? 0), page, pageSize }
 }
 
-export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord>(type: LogType) {
+export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord>(type: LogType) {
   const db = await readyDb()
   const rows = db.prepare(`SELECT * FROM ${logTable(type)} ORDER BY created_at DESC, id DESC`).all() as any[]
   const items =
@@ -1554,7 +1704,9 @@ export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord 
         ? rows.map(scheduleLogFromRow)
         : type === 'signin'
           ? rows.map(signinLogFromRow)
-          : rows.map(operationLogFromRow)
+          : type === 'torrent'
+            ? rows.map(torrentLogFromRow)
+            : rows.map(operationLogFromRow)
   return items as T[]
 }
 
@@ -1795,6 +1947,9 @@ export async function updateTaskFieldsInDb(
       | 'intervalMinutes'
       | 'freeOnly'
       | 'onlyFreeDownload'
+      | 'deleteOnFreeExpire'
+      | 'lowUploadKbps'
+      | 'lowUploadMinutes'
       | 'autoPush'
       | 'discountTypes'
       | 'seederCondition'
@@ -1850,6 +2005,9 @@ const taskFieldToColumn: Record<string, string> = {
   intervalMinutes: 'interval_minutes',
   freeOnly: 'free_only',
   onlyFreeDownload: 'only_free_download',
+  deleteOnFreeExpire: 'delete_on_free_expire',
+  lowUploadKbps: 'low_upload_kbps',
+  lowUploadMinutes: 'low_upload_minutes',
   autoPush: 'auto_push',
   discountTypes: 'discount_types_json',
   seederCondition: 'seeder_condition',
@@ -1874,7 +2032,7 @@ const taskFieldToColumn: Record<string, string> = {
 
 function taskFieldToDbValue(key: string, value: unknown): unknown {
   if (key === 'discountTypes' || key === 'tagsOverride') return json(value ?? null)
-  if (key === 'autoRunEnabled' || key === 'freeOnly' || key === 'onlyFreeDownload' || key === 'autoPush' || key === 'running') {
+  if (key === 'autoRunEnabled' || key === 'freeOnly' || key === 'onlyFreeDownload' || key === 'deleteOnFreeExpire' || key === 'autoPush' || key === 'running') {
     return bool(value as boolean | undefined)
   }
   return value === undefined ? null : value
@@ -1892,6 +2050,9 @@ function taskFromRow(row: any): TaskRecord {
     intervalMinutes: row.interval_minutes,
     freeOnly: fromBool(row.free_only),
     onlyFreeDownload: fromBool(row.only_free_download),
+    deleteOnFreeExpire: fromBool(row.delete_on_free_expire),
+    lowUploadKbps: row.low_upload_kbps ?? undefined,
+    lowUploadMinutes: row.low_upload_minutes ?? undefined,
     autoPush: fromBool(row.auto_push),
     discountTypes: parseJson(row.discount_types_json, defaultTaskDiscountTypes),
     seederCondition: row.seeder_condition ?? undefined,

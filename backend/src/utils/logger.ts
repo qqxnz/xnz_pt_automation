@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express'
-import { appendOperationLog, appendScheduleLog, appendTaskLog, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord } from '../storage.js'
+import { appendOperationLog, appendScheduleLog, appendTaskLog, appendTorrentLog, type OperationLogRecord, type ScheduleLogRecord, type TaskLogRecord, type TorrentLogRecord } from '../storage.js'
 
 type ConsoleLogLevel = 'info' | 'warn' | 'error'
 
@@ -10,6 +10,8 @@ type OperationLogPayload = Omit<OperationLogRecord, 'id' | 'type' | 'createdAt'>
 type TaskLogPayload = Omit<TaskLogRecord, 'id' | 'type' | 'createdAt'>
 
 type ScheduleLogPayload = Omit<ScheduleLogRecord, 'id' | 'type' | 'createdAt'>
+
+type TorrentLogPayload = Omit<TorrentLogRecord, 'id' | 'type' | 'createdAt'>
 
 function timestamp() {
   return new Date().toISOString()
@@ -80,6 +82,30 @@ export async function recordScheduleLog(payload: ScheduleLogPayload) {
       error: error instanceof Error ? error.message : String(error)
     })
     return undefined
+  })
+  return log
+}
+
+export async function recordTorrentLog(payload: TorrentLogPayload) {
+  const log = await appendTorrentLog(payload).catch((error) => {
+    logger.error('torrent', '种子日志写入失败', {
+      torrentId: payload.torrentId,
+      title: payload.torrentTitle,
+      event: payload.event,
+      status: payload.status,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return undefined
+  })
+  const level: ConsoleLogLevel = payload.status === 'FAILED' ? 'error' : 'info'
+  logger[level]('torrent', payload.message, {
+    torrentId: payload.torrentId,
+    title: payload.torrentTitle,
+    event: payload.event,
+    status: payload.status,
+    reason: payload.reason,
+    source: payload.source,
+    actorName: payload.actorName
   })
   return log
 }

@@ -80,7 +80,7 @@
             <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
             <span>
               <strong>{{ torrent.title }}</strong>
-              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ onlyFreeDownloadText(torrent) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
+              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ deleteRulesText(torrent) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
             </span>
             <span>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
@@ -125,7 +125,7 @@
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
               <span v-if="torrent.hasIpv6Peers" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
             </div>
-            <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ onlyFreeDownloadText(torrent) }}</p>
+            <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ deleteRulesText(torrent) }}</p>
             <dl class="site-stat-grid">
               <div>
                 <dt>来源</dt>
@@ -215,7 +215,7 @@
           <article><strong>{{ detail.title }}</strong><span>{{ formatBytes(detail.size) }} · {{ discountText(detail.discountType) }}</span></article>
           <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
           <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
-          <article><strong>下载限制</strong><span>{{ onlyFreeDownloadText(detail) }}</span></article>
+          <article><strong>下载限制</strong><span>{{ deleteRulesText(detail) }}</span></article>
           <article><strong>下载状态</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
           <article><strong>任务保存位置</strong><span>{{ taskSavePathText(detail) }}</span></article>
           <article><strong>实际保存位置</strong><span>{{ downloaderSavePathText(detail) }}</span></article>
@@ -259,6 +259,22 @@
               <input v-model.trim="pushForm.taskSavePath" :disabled="pushForm.submitting" placeholder="留空则使用下载器默认保存位置" />
             </label>
             <p class="inline-hint">仅写入该条种子记录的【任务保存位置】字段，不会修改来源任务或下载器配置。保存后点击【推送】才会真正推送到下载器。</p>
+          </section>
+          <section class="rule-section">
+            <h3>下载器删除条件</h3>
+            <fieldset class="rule-group">
+              <legend>任一命中即删除任务+文件</legend>
+              <label class="inline-check"><input v-model="pushForm.onlyFreeDownload" :disabled="pushForm.submitting" type="checkbox" /> 仅免费下载（已过免费期且未下载完成）</label>
+              <label class="inline-check"><input v-model="pushForm.deleteOnFreeExpire" :disabled="pushForm.submitting" type="checkbox" /> 免费到期（无视下载进度）</label>
+              <div class="inline-row">
+                <span>上传速度低于</span>
+                <input v-model.number="pushForm.lowUploadKbps" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                <span>KB/秒，持续</span>
+                <input v-model.number="pushForm.lowUploadMinutes" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                <span>分钟</span>
+              </div>
+            </fieldset>
+            <p v-if="pushForm.lowUploadError" class="inline-hint">{{ pushForm.lowUploadError }}</p>
           </section>
         </div>
         <div class="form-foot">
@@ -323,6 +339,11 @@ type PushFormState = {
   torrent: TorrentItem
   downloaderId: string
   taskSavePath: string
+  onlyFreeDownload: boolean
+  deleteOnFreeExpire: boolean
+  lowUploadKbps: number
+  lowUploadMinutes: number
+  lowUploadError: string
   submitting: boolean
 }
 const pushForm = ref<PushFormState>()
@@ -408,6 +429,11 @@ function openPushForm(torrent: TorrentItem) {
     torrent,
     downloaderId: initialDownloaderId,
     taskSavePath: torrent.taskSavePath ?? '',
+    onlyFreeDownload: Boolean(torrent.onlyFreeDownload),
+    deleteOnFreeExpire: Boolean(torrent.deleteOnFreeExpire),
+    lowUploadKbps: torrent.lowUploadKbps ?? 0,
+    lowUploadMinutes: torrent.lowUploadMinutes ?? 0,
+    lowUploadError: '',
     submitting: false
   }
 }
@@ -424,11 +450,33 @@ async function submitPushForm() {
     Snackbar.warning('请选择下载器')
     return
   }
+  const kbps = Number(form.lowUploadKbps) || 0
+  const mins = Number(form.lowUploadMinutes) || 0
+  if ((kbps > 0) !== (mins > 0)) {
+    form.lowUploadError = '低速删除的速度阈值和持续时间需同时填写'
+    Snackbar.warning(form.lowUploadError)
+    return
+  }
+  if (kbps > 0 && (!Number.isInteger(kbps) || kbps < 1)) {
+    form.lowUploadError = '低速删除的速度阈值必须是大于等于 1 的整数'
+    Snackbar.warning(form.lowUploadError)
+    return
+  }
+  if (mins > 0 && (!Number.isInteger(mins) || mins < 1)) {
+    form.lowUploadError = '低速删除的持续时间必须是大于等于 1 的整数'
+    Snackbar.warning(form.lowUploadError)
+    return
+  }
+  form.lowUploadError = ''
   form.submitting = true
   try {
     await updateTorrentSettings(form.torrent.id, {
       downloaderId: form.downloaderId,
-      taskSavePath: form.taskSavePath
+      taskSavePath: form.taskSavePath,
+      onlyFreeDownload: form.onlyFreeDownload,
+      deleteOnFreeExpire: form.deleteOnFreeExpire,
+      lowUploadKbps: kbps > 0 ? kbps : null,
+      lowUploadMinutes: mins > 0 ? mins : null
     })
     Snackbar.success('已保存修改')
     pushForm.value = undefined
@@ -598,8 +646,13 @@ function downloaderStatusText(status: DownloaderListItem['status']) {
   return status === 'ONLINE' ? '在线' : status === 'OFFLINE' ? '离线' : status === 'AUTH_FAILED' ? '认证失败' : '未知'
 }
 
-function onlyFreeDownloadText(torrent: Pick<TorrentItem, 'onlyFreeDownload'>) {
-  return torrent.onlyFreeDownload ? '仅免费下载' : '允许非免费继续下载'
+function deleteRulesText(torrent: Pick<TorrentItem, 'onlyFreeDownload' | 'deleteOnFreeExpire' | 'lowUploadKbps' | 'lowUploadMinutes'>) {
+  const parts: string[] = []
+  if (torrent.onlyFreeDownload) parts.push('仅免费')
+  if (torrent.deleteOnFreeExpire) parts.push('免费到期')
+  if (torrent.lowUploadKbps && torrent.lowUploadMinutes) parts.push(`低速${torrent.lowUploadKbps}KB·${torrent.lowUploadMinutes}分`)
+  if (!parts.length) return '允许非免费继续下载'
+  return parts.join(' / ')
 }
 
 function linkText(value: TorrentItem['linkStatus']) {

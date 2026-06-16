@@ -39,6 +39,9 @@
           <button type="button" :class="{ active: activeType === 'signin' }" @click="switchType('signin')">
             签到日志
           </button>
+          <button type="button" :class="{ active: activeType === 'torrent' }" @click="switchType('torrent')">
+            种子日志
+          </button>
         </div>
         <span>{{ total }} 条记录</span>
       </div>
@@ -76,7 +79,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
-import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type ScheduleLog, type SigninLog, type TaskLog } from '../api/logs'
+import { clearLogs, exportLogs, getLogs, type LogType, type OperationLog, type ScheduleLog, type SigninLog, type TaskLog, type TorrentLog } from '../api/logs'
 
 const route = useRoute()
 const initialType: LogType =
@@ -86,12 +89,15 @@ const initialType: LogType =
       ? 'schedule'
       : route.query.type === 'signin'
         ? 'signin'
-        : 'operation'
+        : route.query.type === 'torrent'
+          ? 'torrent'
+          : 'operation'
 const activeType = ref<LogType>(initialType)
 const operationLogs = ref<OperationLog[]>([])
 const taskLogs = ref<TaskLog[]>([])
 const scheduleLogs = ref<ScheduleLog[]>([])
 const signinLogs = ref<SigninLog[]>([])
+const torrentLogs = ref<TorrentLog[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 const clearing = ref(false)
@@ -105,6 +111,7 @@ const items = computed(() => {
   if (activeType.value === 'operation') return operationLogs.value
   if (activeType.value === 'schedule') return scheduleLogs.value
   if (activeType.value === 'signin') return signinLogs.value
+  if (activeType.value === 'torrent') return torrentLogs.value
   return taskLogs.value
 })
 const totalPages = computed(() => Math.max(Math.ceil(total.value / pageSize), 1))
@@ -112,6 +119,7 @@ const activeTypeText = computed(() => {
   if (activeType.value === 'operation') return '操作日志'
   if (activeType.value === 'schedule') return '定时日志'
   if (activeType.value === 'signin') return '签到日志'
+  if (activeType.value === 'torrent') return '种子日志'
   return '任务日志'
 })
 const emptyText = computed(() => `暂无${activeTypeText.value}。`)
@@ -144,14 +152,15 @@ function statusText(status: OperationLog['status'] | TaskLog['status'] | Schedul
   return map[status as keyof typeof map] ?? status
 }
 
-function primaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
+function primaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog) {
   if (item.type === 'OPERATION') return item.action
   if (item.type === 'SCHEDULE') return scheduleJobText(item.jobName)
   if (item.type === 'SIGNIN') return item.siteName
+  if (item.type === 'TORRENT') return torrentEventText(item.event)
   return item.taskName
 }
 
-function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
+function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog) {
   if (item.type === 'TASK') {
     return [
       item.taskId ? `任务 ID：${item.taskId}` : '系统任务',
@@ -186,6 +195,16 @@ function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
       .filter(Boolean)
       .join(' / ')
   }
+  if (item.type === 'TORRENT') {
+    return [
+      item.siteName ? `站点：${item.siteName}` : '',
+      item.source ? `来源：${torrentSourceText(item.source)}` : '',
+      item.reason ? `原因：${item.reason}` : '',
+      item.actorName ? `操作者：${item.actorName}` : ''
+    ]
+      .filter(Boolean)
+      .join(' / ')
+  }
   return [item.actorName ? `操作者：${item.actorName}` : '操作者：未知', item.ip ? `IP：${item.ip}` : ''].filter(Boolean).join(' / ')
 }
 
@@ -194,11 +213,34 @@ function scheduleJobText(jobName: string) {
     'task-auto-run-scan': '自动任务扫描',
     'task-auto-run': '自动任务执行',
     'torrent-download-stats-sync': '种子下载器状态同步',
-    'expired-free-download-cleanup': '仅免费下载过期清理',
+    'expired-free-download-cleanup': '下载器自动清理',
     'site-traffic-sync': '站点流量统计同步',
     'site-auto-signin': '站点自动签到'
   }
   return map[jobName] ?? jobName
+}
+
+function torrentEventText(event: TorrentLog['event']) {
+  const map: Record<TorrentLog['event'], string> = {
+    INSERTED: '种子入库',
+    PUSHED: '推送下载器',
+    PUSH_FAILED: '推送失败',
+    AUTO_DELETE_TASK: '自动删除任务',
+    MANUAL_DELETE_TASK: '手动删除任务',
+    DELETE_RECORD: '删除种子记录',
+    UPDATE_SETTINGS: '修改种子设置'
+  }
+  return map[event] ?? event
+}
+
+function torrentSourceText(source: NonNullable<TorrentLog['source']>) {
+  const map: Record<NonNullable<TorrentLog['source']>, string> = {
+    AUTO: '自动',
+    MANUAL: '手动',
+    SCHEDULER: '调度器',
+    TASK: '任务'
+  }
+  return map[source] ?? source
 }
 
 function runModeText(mode: NonNullable<TaskLog['runMode']>) {
@@ -220,12 +262,15 @@ function taskResultText(item: TaskLog) {
   return parts.join('，')
 }
 
-function failureDetails(item: OperationLog | TaskLog | ScheduleLog | SigninLog) {
+function failureDetails(item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog) {
   if (item.type === 'SCHEDULE') {
     return item.details ? [JSON.stringify(item.details)] : []
   }
   if (item.type === 'SIGNIN') {
     return item.errorMessage ? [`签到失败：${item.errorMessage}`] : []
+  }
+  if (item.type === 'TORRENT') {
+    return item.reason ? [`原因：${item.reason}`] : []
   }
   if (item.type !== 'TASK') return []
   const details = [...(item.failureDetails ?? []), item.fetchErrorMessage ? `抓取失败：${item.fetchErrorMessage}` : '', ...(item.pushErrorMessages ?? [])].filter(Boolean)
@@ -286,6 +331,10 @@ async function loadLogs() {
     } else if (activeType.value === 'signin') {
       const result = await getLogs('signin', page.value, pageSize)
       signinLogs.value = result.items
+      total.value = result.total
+    } else if (activeType.value === 'torrent') {
+      const result = await getLogs('torrent', page.value, pageSize)
+      torrentLogs.value = result.items
       total.value = result.total
     } else {
       const result = await getLogs('task', page.value, pageSize)

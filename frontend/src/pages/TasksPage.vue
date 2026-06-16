@@ -136,11 +136,22 @@
             <h3>运行规则</h3>
             <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 自动执行开关</label>
             <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
-            <div class="inline-check-row">
-              <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载</label>
-              <button class="hint-button" type="button" aria-label="仅免费下载说明" @click="showOnlyFreeDownloadHint = !showOnlyFreeDownloadHint">?</button>
-            </div>
-            <p v-if="showOnlyFreeDownloadHint" class="inline-hint">定时检查过了免费时间，就删除下载器任务。</p>
+            <fieldset class="rule-group">
+              <legend>
+                下载器删除条件（任一命中即删除任务+文件）
+                <button class="hint-button" type="button" aria-label="删除条件说明" @click="showOnlyFreeDownloadHint = !showOnlyFreeDownloadHint">?</button>
+              </legend>
+              <p v-if="showOnlyFreeDownloadHint" class="inline-hint">满足任一条件就会自动删除该种子在下载器中的任务并删除已下载的文件。</p>
+              <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载（已过免费期且未下载完成）</label>
+              <label class="inline-check"><input v-model="form.deleteOnFreeExpire" type="checkbox" /> 免费到期（无视下载进度）</label>
+              <div class="inline-row">
+                <span>上传速度低于</span>
+                <input v-model.number="form.lowUploadKbps" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                <span>KB/秒，持续</span>
+                <input v-model.number="form.lowUploadMinutes" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                <span>分钟</span>
+              </div>
+            </fieldset>
             <div class="check-grid">
               <label v-for="type in discountOptions" :key="type.value" class="inline-check">
                 <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
@@ -243,7 +254,7 @@ const testingTaskId = ref<string>()
 const showOnlyFreeDownloadHint = ref(false)
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
-const form = reactive<TaskPayload & { torrentCount: number }>({
+const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: number; lowUploadMinutes: number }>({
   name: '',
   siteId: '',
   downloaderId: '',
@@ -251,6 +262,9 @@ const form = reactive<TaskPayload & { torrentCount: number }>({
   intervalMinutes: 30,
   freeOnly: true,
   onlyFreeDownload: true,
+  deleteOnFreeExpire: false,
+  lowUploadKbps: 0,
+  lowUploadMinutes: 0,
   autoPush: true,
   discountTypes: ['FREE', 'TWO_X_FREE'],
   seederCondition: '',
@@ -294,6 +308,9 @@ function resetForm() {
     intervalMinutes: 30,
     freeOnly: true,
     onlyFreeDownload: true,
+    deleteOnFreeExpire: false,
+    lowUploadKbps: 0,
+    lowUploadMinutes: 0,
     autoPush: true,
     discountTypes: ['FREE', 'TWO_X_FREE'],
     seederCondition: '',
@@ -326,6 +343,9 @@ function openEdit(task: TaskItem) {
     intervalMinutes: task.intervalMinutes,
     freeOnly: task.freeOnly,
     onlyFreeDownload: task.onlyFreeDownload ?? false,
+    deleteOnFreeExpire: task.deleteOnFreeExpire ?? false,
+    lowUploadKbps: task.lowUploadKbps ?? 0,
+    lowUploadMinutes: task.lowUploadMinutes ?? 0,
     autoPush: task.autoPush,
     discountTypes: [...task.discountTypes],
     seederCondition: task.seederCondition ?? '',
@@ -353,6 +373,11 @@ function validateForm() {
   if (!Number.isInteger(form.sizeMaxGb) || (form.sizeMaxGb ?? 0) < 0) return '种子最大体积必须是大于等于 0 的整数'
   if ((form.sizeMinGb ?? 0) > 0 && (form.sizeMaxGb ?? 0) > 0 && (form.sizeMinGb ?? 0) > (form.sizeMaxGb ?? 0)) return '种子最小体积不能大于种子最大体积'
   if ((form.torrentCount ?? 0) > 0 && !Number.isInteger(form.torrentCount)) return '入库数量必须是非负整数'
+  const kbps = Number(form.lowUploadKbps) || 0
+  const mins = Number(form.lowUploadMinutes) || 0
+  if ((kbps > 0) !== (mins > 0)) return '低速删除的速度阈值和持续时间需同时填写'
+  if (kbps > 0 && (!Number.isInteger(kbps) || kbps < 1)) return '低速删除的速度阈值必须是大于等于 1 的整数'
+  if (mins > 0 && (!Number.isInteger(mins) || mins < 1)) return '低速删除的持续时间必须是大于等于 1 的整数'
   return ''
 }
 
@@ -396,6 +421,9 @@ async function saveTask() {
       intervalMinutes: form.intervalMinutes,
       freeOnly: form.freeOnly,
       onlyFreeDownload: form.onlyFreeDownload,
+      deleteOnFreeExpire: form.deleteOnFreeExpire,
+      lowUploadKbps: (form.lowUploadKbps ?? 0) > 0 ? Number(form.lowUploadKbps) : null,
+      lowUploadMinutes: (form.lowUploadMinutes ?? 0) > 0 ? Number(form.lowUploadMinutes) : null,
       autoPush: form.autoPush,
       discountTypes: form.discountTypes,
       seederCondition: form.seederCondition,
@@ -492,6 +520,8 @@ function freeEndText(item: TaskTestResult['items'][number]) {
 function rangeText(task: TaskItem) {
   const parts = [task.discountTypes.map(discountText).join(', ')]
   if (task.onlyFreeDownload) parts.push('仅免费下载')
+  if (task.deleteOnFreeExpire) parts.push('免费到期')
+  if (task.lowUploadKbps && task.lowUploadMinutes) parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`)
   if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
   const sizeMin = task.sizeMinGb ?? 0
   const sizeMax = task.sizeMaxGb ?? 0

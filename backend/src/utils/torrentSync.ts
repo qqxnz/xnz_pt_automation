@@ -38,6 +38,22 @@ function applySnapshot(torrent: TorrentRecord, item: QbTorrentItem, syncedAt: st
   changed = assignIfChanged(torrent, 'downloaded', item.downloaded ?? 0) || changed
   changed = assignIfChanged(torrent, 'downloaderSavePath', item.savePath?.trim() || undefined) || changed
   changed = assignIfChanged(torrent, 'downloadStatsSyncedAt', syncedAt) || changed
+  // 维护低速删除窗口起点（每 3 秒同步时一同维护，避免与 guard 写入产生竞态）
+  const kbps = torrent.lowUploadKbps
+  const minutes = torrent.lowUploadMinutes
+  if (kbps && kbps > 0 && minutes && minutes >= 1) {
+    const threshold = kbps * 1024
+    const speed = item.uploadSpeed ?? 0
+    if (speed < threshold) {
+      if (!torrent.lowUploadSince) {
+        changed = assignIfChanged(torrent, 'lowUploadSince', syncedAt) || changed
+      }
+    } else if (torrent.lowUploadSince) {
+      changed = assignIfChanged(torrent, 'lowUploadSince', undefined) || changed
+    }
+  } else if (torrent.lowUploadSince) {
+    changed = assignIfChanged(torrent, 'lowUploadSince', undefined) || changed
+  }
   return changed
 }
 

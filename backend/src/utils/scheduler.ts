@@ -39,7 +39,7 @@ function readableJobName(name: string) {
     'task-stuck-check': '卡死任务巡检',
     'torrent-download-stats-sync': '种子下载器状态同步',
     'torrent-ipv6-peer-sync': '种子 IPV6 peer 同步',
-    'expired-free-download-cleanup': '仅免费下载过期清理',
+    'expired-free-download-cleanup': '下载器自动清理',
     'site-traffic-sync': '站点流量统计同步',
     'site-auto-signin': '站点自动签到'
   }

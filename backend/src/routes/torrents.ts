@@ -12,7 +12,7 @@ import {
   updateTorrents
 } from '../storage.js'
 import type { DownloaderRecord, SiteRecord, TorrentRecord } from '../storage.js'
-import { recordOperationLog } from '../utils/logger.js'
+import { recordOperationLog, recordTorrentLog } from '../utils/logger.js'
 import { addTorrentUrlToQb, deleteTorrentFromQb } from '../utils/qbittorrent.js'
 import { syncTorrentDownloadStats } from '../utils/torrentSync.js'
 
@@ -83,7 +83,14 @@ torrentsRouter.patch('/:id', requireAuth, async (req, res) => {
   const id = String(req.params.id)
   const torrent = await getTorrentById(id)
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
-  const body = (req.body ?? {}) as { downloaderId?: string | null; taskSavePath?: string | null }
+  const body = (req.body ?? {}) as {
+    downloaderId?: string | null
+    taskSavePath?: string | null
+    onlyFreeDownload?: boolean
+    deleteOnFreeExpire?: boolean
+    lowUploadKbps?: number | null
+    lowUploadMinutes?: number | null
+  }
   const updates: Partial<TorrentRecord> = {}
   let downloaderNameSnapshot: string | undefined
   let savePathSnapshot: string | undefined
@@ -115,6 +122,47 @@ torrentsRouter.patch('/:id', requireAuth, async (req, res) => {
       downloaderNameSnapshot = downloader.name
     }
   }
+  const ruleSummary: string[] = []
+  if (Object.prototype.hasOwnProperty.call(body, 'onlyFreeDownload')) {
+    if (typeof body.onlyFreeDownload !== 'boolean') return res.status(400).json({ message: '仅免费下载格式不正确' })
+    if (Boolean(torrent.onlyFreeDownload) !== body.onlyFreeDownload) {
+      updates.onlyFreeDownload = body.onlyFreeDownload
+      ruleSummary.push(`仅免费下载${body.onlyFreeDownload ? '已开启' : '已关闭'}`)
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'deleteOnFreeExpire')) {
+    if (typeof body.deleteOnFreeExpire !== 'boolean') return res.status(400).json({ message: '免费到期删除格式不正确' })
+    if (Boolean(torrent.deleteOnFreeExpire) !== body.deleteOnFreeExpire) {
+      updates.deleteOnFreeExpire = body.deleteOnFreeExpire
+      ruleSummary.push(`免费到期删除${body.deleteOnFreeExpire ? '已开启' : '已关闭'}`)
+    }
+  }
+  const hasKbps = Object.prototype.hasOwnProperty.call(body, 'lowUploadKbps')
+  const hasMinutes = Object.prototype.hasOwnProperty.call(body, 'lowUploadMinutes')
+  if (hasKbps || hasMinutes) {
+    const rawKbps = hasKbps ? body.lowUploadKbps : torrent.lowUploadKbps
+    const rawMinutes = hasMinutes ? body.lowUploadMinutes : torrent.lowUploadMinutes
+    const enabledKbps = rawKbps !== undefined && rawKbps !== null && Number(rawKbps) > 0
+    const enabledMinutes = rawMinutes !== undefined && rawMinutes !== null && Number(rawMinutes) > 0
+    if (enabledKbps !== enabledMinutes) return res.status(400).json({ message: '低速删除的速度阈值和持续时间需同时填写' })
+    if (enabledKbps) {
+      const k = Number(rawKbps)
+      const m = Number(rawMinutes)
+      if (!Number.isInteger(k) || k < 1) return res.status(400).json({ message: '低速删除的速度阈值必须是大于等于 1 的整数' })
+      if (!Number.isInteger(m) || m < 1) return res.status(400).json({ message: '低速删除的持续时间必须是大于等于 1 的整数' })
+      if (torrent.lowUploadKbps !== k || torrent.lowUploadMinutes !== m) {
+        updates.lowUploadKbps = k
+        updates.lowUploadMinutes = m
+        updates.lowUploadSince = undefined
+        ruleSummary.push(`低速删除：${k} KB/秒 持续 ${m} 分钟`)
+      }
+    } else if (torrent.lowUploadKbps || torrent.lowUploadMinutes) {
+      updates.lowUploadKbps = undefined
+      updates.lowUploadMinutes = undefined
+      updates.lowUploadSince = undefined
+      ruleSummary.push('低速删除已关闭')
+    }
+  }
   if (!Object.keys(updates).length) return res.json(safeTorrent(torrent))
   await updateTorrent({ ...torrent, ...updates })
   const summary: string[] = []
@@ -122,11 +170,24 @@ torrentsRouter.patch('/:id', requireAuth, async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(body, 'taskSavePath')) {
     summary.push(savePathSnapshot ? `保存位置改为「${savePathSnapshot}」` : '保存位置已清空')
   }
+  summary.push(...ruleSummary)
   await recordOperationLog({
     action: '修改种子设置',
     message: `修改种子「${torrent.title}」${summary.join('，')}`,
     status: 'SUCCESS',
     ...operationActor(res, req)
+  })
+  await recordTorrentLog({
+    torrentId: torrent.id,
+    siteId: torrent.siteId,
+    siteName: torrent.siteName,
+    torrentTitle: torrent.title,
+    event: 'UPDATE_SETTINGS',
+    status: 'SUCCESS',
+    source: 'MANUAL',
+    actorId: res.locals.user?.id,
+    actorName: res.locals.user?.username,
+    message: `修改种子设置：${summary.join('，')}`
   })
   res.json(safeTorrent({ ...torrent, ...updates }))
 })
@@ -156,6 +217,18 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     torrent.torrentHash = undefined
     torrent.downloaderState = undefined
     await updateTorrent(torrent)
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'PUSH_FAILED',
+      status: 'FAILED',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+    })
     return res.status(400).json({ message: torrent.errorMessage })
   }
   try {
@@ -172,6 +245,18 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     torrent.torrentHash = undefined
     torrent.downloaderState = undefined
     await updateTorrent(torrent)
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'PUSH_FAILED',
+      status: 'FAILED',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+    })
     return res.status(400).json({ message: torrent.errorMessage })
   }
   const now = new Date().toISOString()
@@ -191,6 +276,18 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     message: `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`,
     status: 'SUCCESS',
     ...operationActor(res, req)
+  })
+  await recordTorrentLog({
+    torrentId: torrent.id,
+    siteId: torrent.siteId,
+    siteName: torrent.siteName,
+    torrentTitle: torrent.title,
+    event: 'PUSHED',
+    status: 'SUCCESS',
+    source: 'MANUAL',
+    actorId: res.locals.user?.id,
+    actorName: res.locals.user?.username,
+    message: `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`
   })
   res.json(safeTorrent(syncedTorrent))
 })
@@ -220,6 +317,18 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       torrent.errorMessage = !downloader?.enabled ? '下载器不可用' : !site ? '种子来源站点不存在' : '缺少真实种子下载链接'
       updateBuffer.push(torrent)
       failed.push({ id: torrent.id, message: torrent.errorMessage })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'PUSH_FAILED',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+      })
       continue
     }
     try {
@@ -235,6 +344,18 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
       updateBuffer.push(torrent)
       failed.push({ id: torrent.id, message: torrent.errorMessage })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'PUSH_FAILED',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+      })
       continue
     }
     torrent.pushStatus = 'PUSHED'
@@ -247,6 +368,18 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     torrent.errorMessage = undefined
     updateBuffer.push(torrent)
     successCount += 1
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'PUSHED',
+      status: 'SUCCESS',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `批量推送种子「${torrent.title}」到「${downloader.name}」`
+    })
   }
   if (updateBuffer.length) await updateTorrents(updateBuffer)
   for (const downloaderId of [...new Set(updateBuffer.filter((torrent) => torrent.pushStatus === 'PUSHED' && torrent.downloaderId).map((torrent) => torrent.downloaderId!))]) {
@@ -264,6 +397,11 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
 torrentsRouter.post('/batch-delete', requireAuth, async (req, res) => {
   const ids = requestIds(req.body)
   if (!ids.length) return res.status(400).json({ message: '请选择要删除的种子记录' })
+  const snapshots: TorrentRecord[] = []
+  for (const id of ids) {
+    const t = await getTorrentById(id)
+    if (t) snapshots.push(t)
+  }
   const { deletedCount, missingIds } = await deleteTorrents(ids)
   await recordOperationLog({
     action: '删除种子记录',
@@ -271,6 +409,20 @@ torrentsRouter.post('/batch-delete', requireAuth, async (req, res) => {
     status: missingIds.length ? 'FAILED' : 'SUCCESS',
     ...operationActor(res, req)
   })
+  for (const t of snapshots) {
+    await recordTorrentLog({
+      torrentId: t.id,
+      siteId: t.siteId,
+      siteName: t.siteName,
+      torrentTitle: t.title,
+      event: 'DELETE_RECORD',
+      status: 'SUCCESS',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `删除种子记录「${t.title}」`
+    })
+  }
   res.json({ deletedCount, missingIds })
 })
 
@@ -291,28 +443,90 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
     const downloader = downloaderById.get(torrent.downloaderId ?? '')
     if (!downloader) {
       failed.push({ id, message: '种子绑定下载器不存在' })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'MANUAL_DELETE_TASK',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量删除下载器任务「${torrent.title}」失败：种子绑定下载器不存在`
+      })
       continue
     }
     if (!downloader.enabled) {
       failed.push({ id, message: '下载器已禁用' })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'MANUAL_DELETE_TASK',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量删除下载器任务「${torrent.title}」失败：下载器已禁用`
+      })
       continue
     }
     if (!torrent.torrentHash) {
       failed.push({ id, message: '缺少下载器任务 Hash，无法删除' })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'MANUAL_DELETE_TASK',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量删除下载器任务「${torrent.title}」失败：缺少下载器任务 Hash`
+      })
       continue
     }
     try {
       await deleteTorrentFromQb(downloader, torrent.torrentHash, true)
     } catch (error) {
-      failed.push({ id, message: error instanceof Error ? error.message : '删除下载器任务失败' })
+      const msg = error instanceof Error ? error.message : '删除下载器任务失败'
+      failed.push({ id, message: msg })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'MANUAL_DELETE_TASK',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `批量删除下载器任务「${torrent.title}」失败：${msg}`
+      })
       continue
     }
     torrent.pushStatus = 'DELETED'
     torrent.currentState = 'DOWNLOADER_DELETED'
     torrent.downloaderState = 'deleted'
     torrent.errorMessage = undefined
+    torrent.lowUploadSince = undefined
     updateBuffer.push(torrent)
     successCount += 1
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'MANUAL_DELETE_TASK',
+      status: 'SUCCESS',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `批量删除下载器任务「${torrent.title}」`
+    })
   }
   if (updateBuffer.length) await updateTorrents(updateBuffer)
   await recordOperationLog({
@@ -344,18 +558,43 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
       status: 'FAILED',
       ...operationActor(res, req)
     })
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'MANUAL_DELETE_TASK',
+      status: 'FAILED',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `删除下载器任务「${torrent.title}」失败：${message}`
+    })
     return res.status(400).json({ message })
   }
   torrent.pushStatus = 'DELETED'
   torrent.currentState = 'DOWNLOADER_DELETED'
   torrent.downloaderState = 'deleted'
   torrent.errorMessage = undefined
+  torrent.lowUploadSince = undefined
   await updateTorrent(torrent)
   await recordOperationLog({
     action: '删除下载器任务',
     message: deleteResult.alreadyMissing ? `下载器任务「${torrent.title}」已不存在，已同步本地状态` : `删除下载器任务「${torrent.title}」`,
     status: 'SUCCESS',
     ...operationActor(res, req)
+  })
+  await recordTorrentLog({
+    torrentId: torrent.id,
+    siteId: torrent.siteId,
+    siteName: torrent.siteName,
+    torrentTitle: torrent.title,
+    event: 'MANUAL_DELETE_TASK',
+    status: 'SUCCESS',
+    source: 'MANUAL',
+    actorId: res.locals.user?.id,
+    actorName: res.locals.user?.username,
+    message: deleteResult.alreadyMissing ? `下载器任务「${torrent.title}」已不存在，已同步本地状态` : `删除下载器任务「${torrent.title}」`
   })
   res.json(safeTorrent(torrent))
 })

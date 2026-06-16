@@ -69,7 +69,33 @@ export type SigninLog = {
   createdAt: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule' | 'signin'
+export type TorrentLogEvent =
+  | 'INSERTED'
+  | 'PUSHED'
+  | 'PUSH_FAILED'
+  | 'AUTO_DELETE_TASK'
+  | 'MANUAL_DELETE_TASK'
+  | 'DELETE_RECORD'
+  | 'UPDATE_SETTINGS'
+
+export type TorrentLog = {
+  id: string
+  type: 'TORRENT'
+  torrentId?: string
+  siteId?: string
+  siteName?: string
+  torrentTitle: string
+  event: TorrentLogEvent
+  status: 'SUCCESS' | 'FAILED'
+  message: string
+  reason?: string
+  source?: 'AUTO' | 'MANUAL' | 'SCHEDULER' | 'TASK'
+  actorId?: string
+  actorName?: string
+  createdAt: string
+}
+
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent'
 
 export type LogsResponse<T extends LogType> = {
   type: T
@@ -82,7 +108,9 @@ export type LogsResponse<T extends LogType> = {
       ? ScheduleLog[]
       : T extends 'signin'
         ? SigninLog[]
-        : OperationLog[]
+        : T extends 'torrent'
+          ? TorrentLog[]
+          : OperationLog[]
 }
 
 export function getLogs<T extends LogType>(type: T, page = 1, pageSize = 20) {
