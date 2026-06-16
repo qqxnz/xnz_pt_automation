@@ -58,7 +58,7 @@
           </div>
         </div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadTorrents">重试</button></div>
-        <div v-if="!items.length && !loading" class="sites-empty">
+        <div v-if="!items.length && !loading && initialLoaded" class="sites-empty">
           <h2>暂无种子记录</h2>
           <p>运行任务后，自动执行或手动运行产生的种子会出现在这里。</p>
           <router-link class="primary-button compact" to="/tasks">去运行任务</router-link>
@@ -328,6 +328,7 @@ const selectedIds = ref<string[]>([])
 const detail = ref<TorrentItem>()
 const total = ref(0)
 const loading = ref(false)
+const initialLoaded = ref(false)
 const batchPushing = ref(false)
 const batchDeletingRecords = ref(false)
 const batchDeletingTasks = ref(false)
@@ -388,6 +389,7 @@ async function loadTorrents() {
     error.value = err instanceof Error ? err.message : '种子列表加载失败'
   } finally {
     loading.value = false
+    initialLoaded.value = true
   }
 }
 
@@ -414,6 +416,14 @@ function refreshNow() {
 function changePage(page: number) {
   filters.page = Math.min(Math.max(page, 1), totalPages.value)
   loadTorrents()
+}
+
+async function reloadAfterMutation() {
+  await loadTorrents()
+  if (filters.page > totalPages.value) {
+    filters.page = Math.max(1, totalPages.value)
+    await loadTorrents()
+  }
 }
 
 function openPushForm(torrent: TorrentItem) {
@@ -532,7 +542,7 @@ async function batchDeleteRecords() {
     Snackbar[result.missingIds.length ? 'warning' : 'success'](`已删除 ${result.deletedCount} 条记录`)
     selectedIds.value = selectedIds.value.filter((id) => !ids.includes(id))
     if (detail.value && ids.includes(detail.value.id)) detail.value = undefined
-    await loadTorrents()
+    await reloadAfterMutation()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '删除记录失败')
   } finally {
@@ -550,7 +560,7 @@ async function batchDeleteTasks() {
     const result = await batchDeleteTorrentsFromDownloader(ids)
     Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
     selectedIds.value = []
-    await loadTorrents()
+    await reloadAfterMutation()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '批量删除任务失败')
   } finally {
@@ -566,7 +576,7 @@ async function deleteFromDownloader(torrent: TorrentItem) {
   try {
     await deleteTorrentFromDownloader(torrent.id)
     Snackbar.success('下载器任务已删除')
-    await loadTorrents()
+    await reloadAfterMutation()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '删除失败')
   } finally {
