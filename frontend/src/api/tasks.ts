@@ -4,6 +4,13 @@ export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
 export type SeederCondition = 'GT' | 'EQ' | 'LT'
 export type TorrentCountCondition = 'GT' | 'EQ' | 'LT'
 export type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
+export type TaskSortRule =
+  | 'SEEDERS_ASC'
+  | 'SEEDERS_DESC'
+  | 'CREATED_DESC'
+  | 'CREATED_ASC'
+  | 'SIZE_DESC'
+  | 'SIZE_ASC'
 
 export type TaskItem = {
   id: string
@@ -16,7 +23,6 @@ export type TaskItem = {
   autoRunStartedAt?: string
   nextRunAt?: string
   intervalMinutes: number
-  freeOnly: boolean
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
   lowUploadKbps?: number
@@ -29,7 +35,7 @@ export type TaskItem = {
   sizeMaxGb?: number
   torrentCountCondition?: TorrentCountCondition
   torrentCount?: number
-  expiringSoonMinutes?: number
+  sortRule?: TaskSortRule
   savePathOverride?: string
   categoryOverride?: string
   tagsOverride?: string[]
@@ -50,7 +56,6 @@ export type TaskPayload = {
   downloaderId: string
   autoRunEnabled: boolean
   intervalMinutes: number
-  freeOnly: boolean
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
   lowUploadKbps?: number | null
@@ -63,7 +68,7 @@ export type TaskPayload = {
   sizeMaxGb?: number
   torrentCountCondition?: TorrentCountCondition | ''
   torrentCount?: number
-  expiringSoonMinutes?: number
+  sortRule?: TaskSortRule | ''
   savePathOverride?: string
   categoryOverride?: string
   tagsOverride?: string[]

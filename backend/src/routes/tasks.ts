@@ -13,6 +13,7 @@ import {
   queryLogs,
   type SiteRecord,
   type TaskRecord,
+  type TaskSortRule,
   type TorrentRecord,
   updateTaskFieldsInDb
 } from '../storage.js'
@@ -30,10 +31,10 @@ type TaskPayload = {
   downloaderId?: string
   autoRunEnabled?: boolean
   intervalMinutes?: number
-  freeOnly?: boolean
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
   lowUploadKbps?: number | null
+  sortRule?: TaskSortRule | ''
   lowUploadMinutes?: number | null
   autoPush?: boolean
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
@@ -61,6 +62,7 @@ type CandidateTorrent = {
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
   detailUrl?: string
   downloadUrl?: string
+  createdAt?: string
 }
 
 const DEFAULT_INTERVAL_MINUTES = 30
@@ -121,6 +123,8 @@ function validatePayload(
     if (!Number.isFinite(Number(lowUploadKbpsRaw)) || !Number.isInteger(Number(lowUploadKbpsRaw)) || Number(lowUploadKbpsRaw) < 1) return '低速删除的速度阈值必须是大于等于 1 的整数'
     if (!Number.isFinite(Number(lowUploadMinutesRaw)) || !Number.isInteger(Number(lowUploadMinutesRaw)) || Number(lowUploadMinutesRaw) < 1) return '低速删除的持续时间必须是大于等于 1 的整数'
   }
+  const validSortRules: TaskSortRule[] = ['SEEDERS_ASC', 'SEEDERS_DESC', 'CREATED_DESC', 'CREATED_ASC', 'SIZE_DESC', 'SIZE_ASC']
+  if (payload.sortRule && !validSortRules.includes(payload.sortRule)) return '排序规则不合法'
   return undefined
 }
 
@@ -163,7 +167,6 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     autoRunStartedAt,
     nextRunAt: autoRunEnabled ? addMinutes(now, intervalMinutes) : undefined,
     intervalMinutes,
-    freeOnly: payload.freeOnly ?? existing?.freeOnly ?? true,
     onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? true,
     deleteOnFreeExpire: payload.deleteOnFreeExpire ?? existing?.deleteOnFreeExpire ?? false,
     lowUploadKbps: bothLow ? lowUploadKbps : undefined,
@@ -176,7 +179,7 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     sizeMaxGb,
     torrentCountCondition,
     torrentCount: torrentCountCondition ? Number(payload.torrentCount ?? existing?.torrentCount ?? 1) : undefined,
-    expiringSoonMinutes: payload.expiringSoonMinutes ?? existing?.expiringSoonMinutes ?? 120,
+    sortRule: Object.hasOwn(payload, 'sortRule') ? payload.sortRule || undefined : existing?.sortRule,
     savePathOverride: payload.savePathOverride?.trim() || undefined,
     categoryOverride: payload.categoryOverride?.trim() || undefined,
     tagsOverride: payload.tagsOverride?.map((tag) => tag.trim()).filter(Boolean) ?? existing?.tagsOverride,
@@ -226,7 +229,8 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
       leechers: item.leechers ?? 0,
       linkStatus: downloadUrl ? 'SAVED' : 'MISSING',
       detailUrl: resolveSiteUrl(site, `/details.php?id=${encodeURIComponent(item.id)}`),
-      downloadUrl
+      downloadUrl,
+      createdAt: item.createdAt
     }
   })
 }
@@ -257,6 +261,38 @@ function applyTorrentCountCondition(task: TaskRecord, items: CandidateTorrent[])
   const target = Math.max(0, task.torrentCount ?? 0)
   if (target <= 0) return []
   return items.slice(0, Math.min(items.length, target))
+}
+
+function sortCandidatesByRule(rule: TaskSortRule | undefined, items: CandidateTorrent[]) {
+  if (!rule) return items
+  const sorted = [...items]
+  switch (rule) {
+    case 'SEEDERS_ASC':
+      sorted.sort((a, b) => a.seeders - b.seeders)
+      break
+    case 'SEEDERS_DESC':
+      sorted.sort((a, b) => b.seeders - a.seeders)
+      break
+    case 'CREATED_DESC':
+      sorted.sort((a, b) => parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt))
+      break
+    case 'CREATED_ASC':
+      sorted.sort((a, b) => parseCreatedAt(a.createdAt) - parseCreatedAt(b.createdAt))
+      break
+    case 'SIZE_DESC':
+      sorted.sort((a, b) => b.size - a.size)
+      break
+    case 'SIZE_ASC':
+      sorted.sort((a, b) => a.size - b.size)
+      break
+  }
+  return sorted
+}
+
+function parseCreatedAt(value?: string) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 function torrentFilename(title: string, fallback: string) {
@@ -395,6 +431,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     } catch (error) {
       throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
     }
+    fetched = sortCandidatesByRule(task.sortRule, fetched)
     const existingTorrents = await listAllTorrents({ siteId: site.id })
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
@@ -828,7 +865,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   const site = sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
   try {
-    const fetched = await candidatesForTask(site, { includeDownloadUrl: false })
+    const fetched = sortCandidatesByRule(task.sortRule, await candidatesForTask(site, { includeDownloadUrl: false }))
     const existingTorrents = await listAllTorrents({ siteId: site.id })
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))

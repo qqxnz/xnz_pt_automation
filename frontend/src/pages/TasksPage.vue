@@ -123,25 +123,74 @@
           </div>
           <button type="button" @click="formVisible = false">×</button>
         </div>
-        <div class="form-grid">
-          <section>
+        <div class="task-form-sections">
+          <section class="form-section">
             <h3>基础配置</h3>
-            <label>任务名称<input v-model.trim="form.name" placeholder="例如 MTeam 免费自动推送" /></label>
-            <label>站点<select v-model="form.siteId"><option value="">请选择站点</option><option v-for="site in sites" :key="site.id" :value="site.id">{{ site.displayName }}</option></select></label>
-            <label>下载器<select v-model="form.downloaderId"><option value="">请选择下载器</option><option v-for="downloader in downloaders" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option></select></label>
-            <label>执行间隔分钟<input v-model.number="form.intervalMinutes" min="10" type="number" /></label>
+            <div class="form-grid two-col">
+              <label>任务名称<input v-model.trim="form.name" placeholder="例如 MTeam 免费自动推送" /></label>
+              <label>执行间隔（分钟）<input v-model.number="form.intervalMinutes" min="10" type="number" /></label>
+              <label>站点<select v-model="form.siteId"><option value="">请选择站点</option><option v-for="site in sites" :key="site.id" :value="site.id">{{ site.displayName }}</option></select></label>
+              <label>下载器<select v-model="form.downloaderId"><option value="">请选择下载器</option><option v-for="downloader in downloaders" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option></select></label>
+            </div>
+            <div class="check-grid">
+              <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 启用自动执行</label>
+              <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
+            </div>
             <label>默认保存路径<input v-model.trim="form.savePathOverride" placeholder="不填则使用下载器 QB/TR 默认路径" /></label>
           </section>
-          <section>
-            <h3>运行规则</h3>
-            <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 自动执行开关</label>
-            <label class="inline-check"><input v-model="form.autoPush" type="checkbox" /> 自动推送到下载器</label>
+
+          <section class="form-section">
+            <h3>抓取规则</h3>
+            <div class="form-grid two-col">
+              <label class="full">排序规则
+                <select v-model="form.sortRule">
+                  <option value="">不排序（按抓取顺序）</option>
+                  <option v-for="opt in sortRuleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </label>
+              <label>入库数量
+                <input v-model.number="form.torrentCount" min="0" step="1" type="number" placeholder="0 表示不限制" />
+              </label>
+            </div>
             <fieldset class="rule-group">
-              <legend>
-                下载器删除条件（任一命中即删除任务+文件）
-                <button class="hint-button" type="button" aria-label="删除条件说明" @click="showOnlyFreeDownloadHint = !showOnlyFreeDownloadHint">?</button>
-              </legend>
-              <p v-if="showOnlyFreeDownloadHint" class="inline-hint">满足任一条件就会自动删除该种子在下载器中的任务并删除已下载的文件。</p>
+              <legend>优惠类型（任选其一命中即可）</legend>
+              <div class="check-grid">
+                <label v-for="type in discountOptions" :key="type.value" class="inline-check">
+                  <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
+                </label>
+              </div>
+            </fieldset>
+            <fieldset class="rule-group">
+              <legend>种子体积（GB，0 表示不限制）</legend>
+              <div class="form-grid two-col">
+                <label>最小体积<input v-model.number="form.sizeMinGb" min="0" step="1" type="number" /></label>
+                <label>最大体积<input v-model.number="form.sizeMaxGb" min="0" step="1" type="number" /></label>
+              </div>
+            </fieldset>
+            <fieldset class="rule-group">
+              <legend>做种人数（不设置则不限）</legend>
+              <div class="form-grid two-col">
+                <label>条件
+                  <select v-model="form.seederCondition">
+                    <option value="">不限制</option>
+                    <option value="GT">大于</option>
+                    <option value="EQ">等于</option>
+                    <option value="LT">小于</option>
+                  </select>
+                </label>
+                <label>阈值<input v-model.number="form.seederCount" min="0" type="number" :disabled="!form.seederCondition" /></label>
+              </div>
+            </fieldset>
+          </section>
+
+          <section class="form-section">
+            <h3>
+              删除规则
+              <button class="hint-button" type="button" aria-label="删除条件说明" @click="showOnlyFreeDownloadHint = !showOnlyFreeDownloadHint">?</button>
+            </h3>
+            <p v-if="showOnlyFreeDownloadHint" class="inline-hint">满足任一条件就会自动删除该种子在下载器中的任务并删除已下载的文件。</p>
+            <fieldset class="rule-group">
+              <legend>下载器删除条件（任一命中即删除任务+文件）</legend>
               <label class="inline-check"><input v-model="form.onlyFreeDownload" type="checkbox" /> 仅免费下载（已过免费期且未下载完成）</label>
               <label class="inline-check"><input v-model="form.deleteOnFreeExpire" type="checkbox" /> 免费到期（无视下载进度）</label>
               <div class="inline-row">
@@ -152,26 +201,6 @@
                 <span>分钟</span>
               </div>
             </fieldset>
-            <div class="check-grid">
-              <label v-for="type in discountOptions" :key="type.value" class="inline-check">
-                <input v-model="form.discountTypes" type="checkbox" :value="type.value" /> {{ type.label }}
-              </label>
-            </div>
-            <label>做种人数条件
-              <select v-model="form.seederCondition">
-                <option value="">不限制</option>
-                <option value="GT">大于</option>
-                <option value="EQ">等于</option>
-                <option value="LT">小于</option>
-              </select>
-            </label>
-            <label>做种人数<input v-model.number="form.seederCount" min="0" type="number" /></label>
-            <label>种子最小体积（GB）<input v-model.number="form.sizeMinGb" min="0" step="1" type="number" /></label>
-            <label>种子最大体积（GB）<input v-model.number="form.sizeMaxGb" min="0" step="1" type="number" /></label>
-            <label>入库数量
-              <input v-model.number="form.torrentCount" min="0" step="1" type="number" placeholder="0 表示不限制" />
-            </label>
-            <label>即将过期阈值<input v-model.number="form.expiringSoonMinutes" min="1" type="number" /></label>
           </section>
         </div>
         <div class="form-foot">
@@ -235,6 +264,7 @@ import {
   type SeederCondition,
   type TaskItem,
   type TaskPayload,
+  type TaskSortRule,
   type TaskStats,
   type TaskTestResult
 } from '../api/tasks'
@@ -254,13 +284,12 @@ const testingTaskId = ref<string>()
 const showOnlyFreeDownloadHint = ref(false)
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
-const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: number; lowUploadMinutes: number }>({
+const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: number; lowUploadMinutes: number; sortRule: TaskSortRule | '' }>({
   name: '',
   siteId: '',
   downloaderId: '',
   autoRunEnabled: false,
   intervalMinutes: 30,
-  freeOnly: true,
   onlyFreeDownload: true,
   deleteOnFreeExpire: false,
   lowUploadKbps: 0,
@@ -273,7 +302,7 @@ const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: numbe
   sizeMaxGb: 0,
   torrentCountCondition: '',
   torrentCount: 0,
-  expiringSoonMinutes: 120,
+  sortRule: '',
   savePathOverride: ''
 })
 
@@ -289,6 +318,15 @@ const seederConditionText: Record<SeederCondition, string> = {
   EQ: '等于',
   LT: '小于'
 }
+
+const sortRuleOptions: Array<{ value: TaskSortRule; label: string }> = [
+  { value: 'SEEDERS_ASC', label: '做种人数最少在前' },
+  { value: 'SEEDERS_DESC', label: '做种人数最多在前' },
+  { value: 'CREATED_DESC', label: '发布时间最新在前' },
+  { value: 'CREATED_ASC', label: '发布时间最久在前' },
+  { value: 'SIZE_DESC', label: '种子体积最大在前' },
+  { value: 'SIZE_ASC', label: '种子体积最小在前' }
+]
 
 
 const statCards = computed(() => [
@@ -306,7 +344,6 @@ function resetForm() {
     downloaderId: downloaders.value[0]?.id || '',
     autoRunEnabled: false,
     intervalMinutes: 30,
-    freeOnly: true,
     onlyFreeDownload: true,
     deleteOnFreeExpire: false,
     lowUploadKbps: 0,
@@ -319,7 +356,7 @@ function resetForm() {
     sizeMaxGb: 0,
     torrentCountCondition: '',
     torrentCount: 0,
-    expiringSoonMinutes: 120,
+    sortRule: '',
     savePathOverride: '',
     categoryOverride: undefined,
     tagsOverride: undefined
@@ -341,7 +378,6 @@ function openEdit(task: TaskItem) {
     downloaderId: task.downloaderId,
     autoRunEnabled: task.autoRunEnabled,
     intervalMinutes: task.intervalMinutes,
-    freeOnly: task.freeOnly,
     onlyFreeDownload: task.onlyFreeDownload ?? false,
     deleteOnFreeExpire: task.deleteOnFreeExpire ?? false,
     lowUploadKbps: task.lowUploadKbps ?? 0,
@@ -354,7 +390,7 @@ function openEdit(task: TaskItem) {
     sizeMaxGb: task.sizeMaxGb ?? 0,
     torrentCountCondition: task.torrentCountCondition ?? '',
     torrentCount: task.torrentCount ?? 0,
-    expiringSoonMinutes: task.expiringSoonMinutes ?? 120,
+    sortRule: task.sortRule ?? '',
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
     tagsOverride: task.tagsOverride
@@ -419,7 +455,6 @@ async function saveTask() {
       downloaderId: form.downloaderId,
       autoRunEnabled: form.autoRunEnabled,
       intervalMinutes: form.intervalMinutes,
-      freeOnly: form.freeOnly,
       onlyFreeDownload: form.onlyFreeDownload,
       deleteOnFreeExpire: form.deleteOnFreeExpire,
       lowUploadKbps: (form.lowUploadKbps ?? 0) > 0 ? Number(form.lowUploadKbps) : null,
@@ -432,7 +467,7 @@ async function saveTask() {
       sizeMaxGb: form.sizeMaxGb,
       torrentCountCondition: (form.torrentCount ?? 0) > 0 ? 'LT' : '',
       torrentCount: form.torrentCount,
-      expiringSoonMinutes: form.expiringSoonMinutes,
+      sortRule: form.sortRule || undefined,
       savePathOverride: form.savePathOverride,
       categoryOverride: form.categoryOverride,
       tagsOverride: form.tagsOverride
@@ -531,6 +566,10 @@ function rangeText(task: TaskItem) {
     else parts.push(`体积 ≤ ${sizeMax} GB`)
   }
   if (task.torrentCountCondition && (task.torrentCount ?? 0) > 0) parts.push(`入库数量 ${task.torrentCount}`)
+  if (task.sortRule) {
+    const opt = sortRuleOptions.find((item) => item.value === task.sortRule)
+    if (opt) parts.push(`排序：${opt.label}`)
+  }
   return parts.join(' · ')
 }
 
