@@ -18,11 +18,19 @@
 
       <section class="sites-toolbar panel">
         <input v-model.trim="filters.keyword" placeholder="搜索任务 / 站点 / 下载器" @keyup.enter="loadTasks" />
-        <select v-model="filters.autoRun" @change="loadTasks">
+        <select v-if="isDesktop" v-model="filters.autoRun" @change="loadTasks" aria-label="按自动执行状态过滤">
           <option value="ALL">自动执行：全部</option>
           <option value="ON">已开启</option>
           <option value="OFF">已关闭</option>
         </select>
+        <SegmentedButtons
+          v-else
+          class="toolbar-filter-segmented"
+          v-model="filters.autoRun"
+          :options="autoRunFilterOptions"
+          size="small"
+          @change="loadTasks"
+        />
         <button class="secondary-button" type="button" :disabled="loading" @click="loadTasks">{{ loading ? '刷新中...' : '刷新' }}</button>
       </section>
 
@@ -129,8 +137,22 @@
             <div class="form-grid two-col">
               <label>任务名称<input v-model.trim="form.name" placeholder="例如 MTeam 免费自动推送" /></label>
               <label>执行间隔（分钟）<input v-model.number="form.intervalMinutes" min="10" type="number" /></label>
-              <label>站点<select v-model="form.siteId"><option value="">请选择站点</option><option v-for="site in sites" :key="site.id" :value="site.id">{{ site.displayName }}</option></select></label>
-              <label>下载器<select v-model="form.downloaderId"><option value="">请选择下载器</option><option v-for="downloader in downloaders" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option></select></label>
+              <label>站点
+                <AppSelect
+                  v-model="form.siteId"
+                  placeholder="请选择站点"
+                  :options="siteOptions"
+                  :rules="[(v) => !!v || '请选择站点']"
+                />
+              </label>
+              <label>下载器
+                <AppSelect
+                  v-model="form.downloaderId"
+                  placeholder="请选择下载器"
+                  :options="downloaderOptions"
+                  :rules="[(v) => !!v || '请选择下载器']"
+                />
+              </label>
             </div>
             <div class="check-grid">
               <label class="inline-check"><input v-model="form.autoRunEnabled" type="checkbox" /> 启用自动执行</label>
@@ -143,10 +165,12 @@
             <h3>抓取规则</h3>
             <div class="form-grid two-col">
               <label class="full">排序规则
-                <select v-model="form.sortRule">
-                  <option value="">不排序（按抓取顺序）</option>
-                  <option v-for="opt in sortRuleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                </select>
+                <AppSelect
+                  v-model="form.sortRule"
+                  placeholder="不排序（按抓取顺序）"
+                  :options="sortRuleSelectOptions"
+                  clearable
+                />
               </label>
               <label>入库数量
                 <input v-model.number="form.torrentCount" min="0" step="1" type="number" placeholder="0 表示不限制" />
@@ -171,12 +195,12 @@
               <legend>做种人数（不设置则不限）</legend>
               <div class="form-grid two-col">
                 <label>条件
-                  <select v-model="form.seederCondition">
-                    <option value="">不限制</option>
-                    <option value="GT">大于</option>
-                    <option value="EQ">等于</option>
-                    <option value="LT">小于</option>
-                  </select>
+                  <AppSelect
+                    v-model="form.seederCondition"
+                    placeholder="不限制"
+                    :options="seederConditionOptions"
+                    clearable
+                  />
                 </label>
                 <label>阈值<input v-model.number="form.seederCount" min="0" type="number" :disabled="!form.seederCondition" /></label>
               </div>
@@ -248,6 +272,9 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
+import { SegmentedButtons } from '@varlet/ui'
+import AppSelect from '../components/AppSelect.vue'
+import { useMediaQuery } from '../composables/useMediaQuery'
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import { getDownloaders, type DownloaderListItem } from '../api/downloaders'
@@ -328,6 +355,24 @@ const sortRuleOptions: Array<{ value: TaskSortRule; label: string }> = [
   { value: 'SIZE_ASC', label: '种子体积最小在前' }
 ]
 
+// 工具栏过滤器段控件选项
+const autoRunFilterOptions = [
+  { label: '全部', value: 'ALL' },
+  { label: '已开启', value: 'ON' },
+  { label: '已关闭', value: 'OFF' }
+]
+
+// 表单内 Select 选项
+const siteOptions = computed(() => sites.value.map((s) => ({ label: s.displayName, value: s.id })))
+const downloaderOptions = computed(() => downloaders.value.map((d) => ({ label: d.name, value: d.id })))
+const sortRuleSelectOptions = sortRuleOptions.map((o) => ({ label: o.label, value: o.value }))
+const seederConditionOptions = [
+  { label: '不限制', value: '' },
+  { label: '大于', value: 'GT' },
+  { label: '等于', value: 'EQ' },
+  { label: '小于', value: 'LT' }
+]
+
 
 const statCards = computed(() => [
   { label: '全部任务', value: stats.value.total, className: '' },
@@ -335,6 +380,9 @@ const statCards = computed(() => [
   { label: '运行中', value: stats.value.running, className: 'warning' },
   { label: '失败', value: stats.value.failed, className: 'danger' }
 ])
+
+// 响应式判断：移动端 < 768px 使用 varlet 组件优化体验
+const isDesktop = useMediaQuery('(min-width: 768px)')
 
 function resetForm() {
   editingTaskId.value = undefined

@@ -749,6 +749,139 @@ a {
   display: none;
 }
 
+/* 表单内 var-select 适配现有 46px 输入框风格（仅移动端 < 768px） */
+.site-form .var-select {
+  --field-decorator-border-color: #dbe4f0;
+  --field-decorator-border-radius: 14px;
+  --field-decorator-normal-padding-x: 16px;
+}
+
+.site-form .var-field-decorator {
+  min-height: 46px;
+}
+
+.site-form .var-field-decorator__field {
+  min-height: 46px;
+}
+
+/* 移动端工具栏过滤器段控件：占满一整行 */
+.toolbar-filter-segmented {
+  width: 100%;
+}
+
+/* ============================================
+   移动端 Varlet Select 风格适配
+   与项目现有 input 视觉统一：
+   - 14px 圆角 + #dbe4f0 边框 + #f9fafb 浅灰背景
+   - 主文字色 #111827 / placeholder 色 #6b7280
+   - 主色聚焦 #3f7cff
+   - Picker 弹层与项目卡片一致
+   ============================================ */
+.app-select-mobile,
+.toolbar-filter-segmented {
+  width: 100%;
+  /* 主题色 token（沿用 Varlet 默认值即项目主色 #3f7cff） */
+  --color-primary: #3f7cff;
+  --color-on-primary: #ffffff;
+  /* 文本与 placeholder */
+  --field-decorator-text-color: #111827;
+  --field-decorator-blur-color: #6b7280;
+  --field-decorator-focus-color: #3f7cff;
+  --field-decorator-placeholder-size: 14px;
+  --field-decorator-outlined-normal-padding-left: 16px;
+  --field-decorator-outlined-normal-padding-right: 40px;
+  --field-decorator-outlined-small-padding-left: 14px;
+  --field-decorator-outlined-small-padding-right: 36px;
+}
+
+/* 触发器高度对齐项目 46px input */
+.app-select-mobile .var-field-decorator,
+.toolbar-filter-segmented .var-field-decorator {
+  min-height: 46px;
+}
+
+/* controller 容器：项目 input 风格（边框 + 圆角 + 浅灰背景） */
+.app-select-mobile .var-field-decorator__controller,
+.toolbar-filter-segmented .var-field-decorator__controller {
+  background: #f9fafb;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* 聚焦时边框变蓝 */
+.app-select-mobile.var-select--focus .var-field-decorator__controller,
+.toolbar-filter-segmented.var-select--focus .var-field-decorator__controller {
+  border-color: #3f7cff;
+  background: #fff;
+}
+
+/* 选中文字颜色（项目主文字色） */
+.app-select-mobile .var-select__select,
+.toolbar-filter-segmented .var-select__select {
+  color: #111827;
+  font-weight: 600;
+}
+
+/* placeholder 绝对定位：水平偏移跟 controller padding 对齐 */
+.app-select-mobile .var-select__placeholder,
+.toolbar-filter-segmented .var-select__placeholder {
+  left: 16px !important;
+  right: 40px !important;
+  max-width: calc(100% - 56px);
+  color: #6b7280 !important;
+  font-weight: 600;
+}
+
+/* 选中态 chip 也需要缩进 */
+.app-select-mobile .var-select__chips,
+.toolbar-filter-segmented .var-select__chips {
+  padding-left: 0;
+}
+
+/* 箭头颜色 */
+.app-select-mobile .var-select__arrow,
+.toolbar-filter-segmented .var-select__arrow {
+  color: #6b7280;
+}
+
+/* 移动端 Picker 弹层：白底圆角阴影 */
+.app-select-mobile .var-select__scroller,
+.toolbar-filter-segmented .var-select__scroller {
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+}
+
+/* 选项尺寸、字体与项目一致 */
+.app-select-mobile .var-option,
+.toolbar-filter-segmented .var-option {
+  height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* 选中态：浅蓝背景 + 项目主色文字 */
+.app-select-mobile .var-option--selected-color,
+.toolbar-filter-segmented .var-option--selected-color {
+  color: #3f7cff;
+  background: #eef4ff;
+}
+
+.app-select-mobile .var-option--selected-background,
+.toolbar-filter-segmented .var-option--selected-background {
+  background: #eef4ff;
+}
+
+/* 取消 Varlet 默认 primary 浅蓝（alpha）— 用实色更协调 */
+.app-select-mobile .var-option__cover,
+.toolbar-filter-segmented .var-option__cover {
+  display: none;
+}
+
 .site-form .password-input input {
   padding-right: 72px;
 }

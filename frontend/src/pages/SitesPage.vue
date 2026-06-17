@@ -18,23 +18,49 @@
 
       <section class="sites-toolbar panel">
         <input v-model.trim="filters.keyword" placeholder="搜索站点 / 域名" @keyup.enter="loadSites" />
-        <select v-model="filters.connectivityStatus" @change="loadSites">
+        <select v-if="isDesktop" v-model="filters.connectivityStatus" @change="loadSites" aria-label="按连通状态过滤">
           <option value="ALL">状态：全部</option>
           <option value="ONLINE">在线</option>
           <option value="AUTH_FAILED">认证失败</option>
           <option value="OFFLINE">离线</option>
           <option value="UNKNOWN">未检测</option>
         </select>
-        <select v-model="filters.enabled" @change="loadSites">
+        <Select
+          v-else
+          class="toolbar-filter-segmented"
+          variant="outlined"
+          :hint="false"
+          :line="false"
+          v-model="filters.connectivityStatus"
+          :options="connectivityFilterOptions"
+          @update:model-value="loadSites"
+        />
+        <select v-if="isDesktop" v-model="filters.enabled" @change="loadSites" aria-label="按启用状态过滤">
           <option value="ALL">启用：全部</option>
           <option value="ENABLED">已启用</option>
           <option value="DISABLED">已禁用</option>
         </select>
-        <select v-model="filters.signinEnabled" @change="loadSites">
+        <SegmentedButtons
+          v-else
+          class="toolbar-filter-segmented"
+          v-model="filters.enabled"
+          :options="enabledFilterOptions"
+          size="small"
+          @change="loadSites"
+        />
+        <select v-if="isDesktop" v-model="filters.signinEnabled" @change="loadSites" aria-label="按签到启用过滤">
           <option value="ALL">签到：全部</option>
           <option value="ENABLED">已开启</option>
           <option value="DISABLED">已关闭</option>
         </select>
+        <SegmentedButtons
+          v-else
+          class="toolbar-filter-segmented"
+          v-model="filters.signinEnabled"
+          :options="signinFilterOptions"
+          size="small"
+          @change="loadSites"
+        />
         <button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
           {{ loading ? '刷新中...' : '刷新' }}
         </button>
@@ -226,9 +252,7 @@
         </div>
         <div class="browse-toolbar">
           <input v-model.trim="browseFilters.keyword" placeholder="搜索关键字" @keyup.enter="loadBrowseTorrents" />
-          <select v-model="browseFilters.category">
-            <option value="">资源分类</option>
-          </select>
+          <AppSelect v-model="browseFilters.category" placeholder="资源分类" :options="browseCategoryOptions" />
           <button class="primary-button compact" type="button" :disabled="browseLoading" @click="loadBrowseTorrents">
             {{ browseLoading ? '搜索中...' : '搜索' }}
           </button>
@@ -267,9 +291,12 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
+import { Select, SegmentedButtons } from '@varlet/ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
+import AppSelect from '../components/AppSelect.vue'
+import { useMediaQuery } from '../composables/useMediaQuery'
 import {
   browseSiteTorrents,
   createSite,
@@ -342,6 +369,34 @@ const statCards = computed(() => [
   { label: '离线站点', value: stats.value.offline, className: 'danger' },
   { label: '未知状态', value: stats.value.unknown, className: '' }
 ])
+
+// 移动端过滤选项：桌面端用原生 select，移动端用 SegmentedButtons（≤3 选项）或 Varlet Select（动态/多选项）
+const isDesktop = useMediaQuery('(min-width: 768px)')
+
+const connectivityFilterOptions = [
+  { label: '全部', value: 'ALL' },
+  { label: '在线', value: 'ONLINE' },
+  { label: '认证失败', value: 'AUTH_FAILED' },
+  { label: '离线', value: 'OFFLINE' },
+  { label: '未检测', value: 'UNKNOWN' }
+]
+
+const enabledFilterOptions = [
+  { label: '全部', value: 'ALL' },
+  { label: '已启用', value: 'ENABLED' },
+  { label: '已禁用', value: 'DISABLED' }
+]
+
+const signinFilterOptions = [
+  { label: '全部', value: 'ALL' },
+  { label: '已开启', value: 'ENABLED' },
+  { label: '已关闭', value: 'DISABLED' }
+]
+
+// 浏览弹窗的分类选项（暂无分类则只显示"全部"）
+const browseCategoryOptions = computed(() => {
+  return [{ label: '资源分类', value: '' }]
+})
 
 function resetForm() {
   editingSiteId.value = undefined

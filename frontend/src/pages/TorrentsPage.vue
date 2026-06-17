@@ -17,25 +17,68 @@
 
       <section class="sites-toolbar panel torrents-toolbar">
         <input v-model.trim="filters.keyword" placeholder="搜索标题" @keyup.enter="resetPageAndLoad" />
-        <select v-model="filters.siteId" @change="resetPageAndLoad">
+        <select v-if="isDesktop" v-model="filters.siteId" @change="resetPageAndLoad" aria-label="按站点过滤">
           <option value="">站点：全部</option>
           <option v-for="site in siteOptions" :key="site.id" :value="site.id">{{ site.displayName }}</option>
         </select>
-        <select v-model="filters.taskId" @change="resetPageAndLoad">
+        <Select
+          v-else
+          class="toolbar-filter-segmented"
+          variant="outlined"
+          :hint="false"
+          :line="false"
+          v-model="filters.siteId"
+          placeholder="站点"
+          :options="siteFilterOptions"
+          @update:model-value="resetPageAndLoad"
+        />
+        <select v-if="isDesktop" v-model="filters.taskId" @change="resetPageAndLoad" aria-label="按任务过滤">
           <option value="">任务：全部</option>
           <option v-for="task in taskOptions" :key="task.id" :value="task.id">{{ task.name }}</option>
         </select>
-        <select v-model="filters.downloaderId" @change="resetPageAndLoad">
-          <option value="">下载器：全部</option>
+        <Select
+          v-else
+          class="toolbar-filter-segmented"
+          variant="outlined"
+          :hint="false"
+          :line="false"
+          v-model="filters.taskId"
+          placeholder="任务"
+          :options="taskFilterOptions"
+          @update:model-value="resetPageAndLoad"
+        />
+        <select v-if="isDesktop" v-model="filters.downloaderId" @change="resetPageAndLoad" aria-label="按下载器过滤">
+          <option value="ALL">下载器：全部</option>
           <option v-for="downloader in downloaderOptions" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option>
         </select>
-        <select v-model="filters.pushStatus" @change="resetPageAndLoad">
+        <Select
+          v-else
+          class="toolbar-filter-segmented"
+          variant="outlined"
+          :hint="false"
+          :line="false"
+          v-model="filters.downloaderId"
+          placeholder="下载器"
+          :options="downloaderFilterOptions"
+          @update:model-value="resetPageAndLoad"
+        />
+        <select v-if="isDesktop" v-model="filters.pushStatus" @change="resetPageAndLoad" aria-label="按推送状态过滤">
           <option value="ALL">状态：全部</option>
           <option value="NEW">等待推送</option>
           <option value="PUSHED">推送成功</option>
           <option value="PUSH_FAILED">推送失败</option>
           <option value="DELETED">已删除</option>
         </select>
+        <Select
+          v-else
+          class="toolbar-filter-segmented"
+          variant="outlined"
+          :hint="false"
+          :line="false"
+          v-model="filters.pushStatus"
+          :options="pushStatusFilterOptions"
+          @update:model-value="resetPageAndLoad"
+        />
         <button class="secondary-button" type="button" :disabled="loading" @click="refreshNow">
           {{ loading ? '刷新中...' : '刷新列表' }}
         </button>
@@ -257,12 +300,12 @@
               <h3>下载器</h3>
               <label>
                 选择下载器
-                <select v-model="pushForm.downloaderId" :required="!pushForm.locked" :disabled="pushForm.submitting || pushForm.locked || !enabledDownloaderOptions.length">
-                  <option v-if="!enabledDownloaderOptions.length" value="">暂无可用下载器</option>
-                  <option v-for="downloader in enabledDownloaderOptions" :key="downloader.id" :value="downloader.id">
-                    {{ downloader.name }}{{ downloader.status !== 'ONLINE' ? `（${downloaderStatusText(downloader.status)}）` : '' }}
-                  </option>
-                </select>
+                <AppSelect
+                  v-model="pushForm.downloaderId"
+                  :placeholder="enabledDownloaderOptions.length ? '请选择下载器' : '暂无可用下载器'"
+                  :options="enabledDownloaderSelectOptions"
+                  :disabled="pushForm.submitting || pushForm.locked || !enabledDownloaderOptions.length"
+                />
               </label>
               <p v-if="!pushForm.locked && !enabledDownloaderOptions.length" class="inline-hint">没有启用的下载器，请先在【下载器】中启用至少一个。</p>
             </section>
@@ -306,8 +349,11 @@
 
 <script setup lang="ts">
 import { Snackbar } from '@varlet/ui'
+import { Select } from '@varlet/ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
+import AppSelect from '../components/AppSelect.vue'
+import { useMediaQuery } from '../composables/useMediaQuery'
 import { getDownloaders, type DownloaderListItem } from '../api/downloaders'
 import { getSites, type SiteListItem } from '../api/sites'
 import { getTasks, type TaskItem } from '../api/tasks'
@@ -372,9 +418,9 @@ const pushForm = ref<PushFormState>()
 let refreshTimer: number | undefined
 const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'pushStatus' | 'page' | 'pageSize'>>>({
   keyword: '',
-  siteId: '',
-  downloaderId: '',
-  taskId: '',
+  siteId: 'ALL',
+  downloaderId: 'ALL',
+  taskId: 'ALL',
   pushStatus: 'ALL',
   page: 1,
   pageSize: 20
@@ -397,11 +443,49 @@ const isCurrentPageAllSelected = computed(() => Boolean(items.value.length) && i
 const isCurrentPagePartiallySelected = computed(() => !isCurrentPageAllSelected.value && items.value.some((item) => selectedIds.value.includes(item.id)))
 const enabledDownloaderOptions = computed(() => downloaderOptions.value.filter((downloader) => downloader.enabled))
 
+// 响应式判断：移动端用 Varlet Select 优化体验
+const isDesktop = useMediaQuery('(min-width: 768px)')
+
+// 移动端过滤器选项
+const siteFilterOptions = computed(() => [
+  { label: '全部站点', value: 'ALL' },
+  ...siteOptions.value.map((site) => ({ label: site.displayName, value: site.id }))
+])
+const taskFilterOptions = computed(() => [
+  { label: '全部任务', value: 'ALL' },
+  ...taskOptions.value.map((task) => ({ label: task.name, value: task.id }))
+])
+const downloaderFilterOptions = computed(() => [
+  { label: '全部下载器', value: 'ALL' },
+  ...downloaderOptions.value.map((downloader) => ({ label: downloader.name, value: downloader.id }))
+])
+const pushStatusFilterOptions = [
+  { label: '状态：全部', value: 'ALL' },
+  { label: '等待推送', value: 'NEW' },
+  { label: '推送成功', value: 'PUSHED' },
+  { label: '推送失败', value: 'PUSH_FAILED' },
+  { label: '已删除', value: 'DELETED' }
+]
+
+// 表单内下载器选项（移动端 Picker 用）
+const enabledDownloaderSelectOptions = computed(() =>
+  enabledDownloaderOptions.value.map((downloader) => ({
+    label: downloader.status !== 'ONLINE' ? `${downloader.name}（${downloaderStatusText(downloader.status)}）` : downloader.name,
+    value: downloader.id
+  }))
+)
+
 async function loadTorrents() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getTorrents(filters)
+    // 'ALL' 是前端"全部"语义；调用后端时转换成空字符串（不过滤）
+    const result = await getTorrents({
+      ...filters,
+      siteId: filters.siteId === 'ALL' ? '' : filters.siteId,
+      taskId: filters.taskId === 'ALL' ? '' : filters.taskId,
+      downloaderId: filters.downloaderId === 'ALL' ? '' : filters.downloaderId
+    })
     items.value = result.items
     total.value = result.total
     stats.value = result.stats
