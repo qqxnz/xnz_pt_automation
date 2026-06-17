@@ -733,6 +733,22 @@ a {
   background: #fff;
 }
 
+.sites-toolbar select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
+  text-overflow: ellipsis;
+}
+
+.sites-toolbar select::-ms-expand {
+  display: none;
+}
+
 .site-form .password-input input {
   padding-right: 72px;
 }
@@ -2893,6 +2909,18 @@ a {
     gap: 16px;
   }
 
+  .torrents-toolbar {
+    padding: 14px 16px;
+  }
+
+  .torrents-toolbar input,
+  .torrents-toolbar select {
+    min-height: 44px;
+    font-size: 16px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .security-alert {
     align-items: flex-start;
     flex-direction: column;
@@ -3100,6 +3128,28 @@ a {
   flex-shrink: 0;
 }
 
+.detail-foot {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 20px 32px;
+}
+
+.detail-foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.detail-foot-actions button {
+  min-height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+
 @media (max-width: 720px) {
   .push-form {
     width: 100vw;
@@ -3160,6 +3210,21 @@ a {
   }
 
   .push-form .form-foot-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .detail-foot {
+    padding: 14px 20px;
+    justify-content: stretch;
+  }
+
+  .detail-foot-actions {
+    flex-direction: column-reverse;
+    width: 100%;
+  }
+
+  .detail-foot-actions button {
     width: 100%;
     min-height: 44px;
   }

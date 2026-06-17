@@ -68,11 +68,11 @@
             <input v-model="selectedIds" type="checkbox" :value="torrent.id" />
             <span>
               <strong>{{ torrent.title }}</strong>
-              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ deleteRulesText(torrent) }} · 链接{{ linkText(torrent.linkStatus) }}</small>
+              <small>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ deleteRulesText(torrent) }} · 入库 {{ formatDate(torrent.firstSeenAt) }}</small>
             </span>
             <span>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
-              <span v-if="torrent.hasIpv6Peers" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
+              <span v-if="torrent.hasIpv6Peers && torrent.pushStatus !== 'DELETED'" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
               <small>{{ torrent.errorMessage || freeText(torrent) }}</small>
             </span>
             <span>
@@ -111,7 +111,7 @@
                 <strong>{{ torrent.title }}</strong>
               </label>
               <span class="chip" :class="pushClass(torrent.pushStatus)">{{ pushText(torrent.pushStatus) }}</span>
-              <span v-if="torrent.hasIpv6Peers" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
+              <span v-if="torrent.hasIpv6Peers && torrent.pushStatus !== 'DELETED'" class="chip ipv6-chip" :title="`${torrent.ipv6PeerCount ?? 0}/${torrent.totalPeerCount ?? 0} 个 peer 含 IPV6`">IPv6</span>
             </div>
             <p>{{ torrent.siteName }} · {{ formatBytes(torrent.size) }} · {{ discountText(torrent.discountType) }} · {{ deleteRulesText(torrent) }}</p>
             <dl class="site-stat-grid">
@@ -128,8 +128,8 @@
                 <dd>{{ torrent.downloaderName || '-' }}</dd>
               </div>
               <div>
-                <dt>链接</dt>
-                <dd>{{ linkText(torrent.linkStatus) }}</dd>
+                <dt>入库</dt>
+                <dd>{{ formatDate(torrent.firstSeenAt) }}</dd>
               </div>
               <div>
                 <dt>下载进度</dt>
@@ -203,19 +203,38 @@
           <button type="button" @click="detail = undefined">×</button>
         </div>
         <div class="test-result-list">
-          <article><strong>{{ detail.title }}</strong><span>{{ formatBytes(detail.size) }} · {{ discountText(detail.discountType) }}</span></article>
-          <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
+          <article><strong>标题</strong><span>{{ detail.title }}</span></article>
+          <article><strong>大小</strong><span>{{ formatBytes(detail.size) }}</span></article>
+          <article><strong>优惠类型</strong><span>{{ discountText(detail.discountType) }}</span></article>
+          <article><strong>做种/下载</strong><span>{{ detail.seeders ?? 0 }} / {{ detail.leechers ?? 0 }}</span></article>
+          <article><strong>入库时间</strong><span>{{ formatDate(detail.firstSeenAt) }}</span></article>
+          <article><strong>最后见到</strong><span>{{ formatDate(detail.lastSeenAt) }}</span></article>
+          <article v-if="detail.pushedAt"><strong>推送时间</strong><span>{{ formatDate(detail.pushedAt) }}</span></article>
+          <article v-if="detail.downloadStatsSyncedAt"><strong>统计同步</strong><span>{{ formatDate(detail.downloadStatsSyncedAt) }}</span></article>
           <article><strong>免费状态</strong><span>{{ freeText(detail) }} · {{ stateText(detail.currentState) }}</span></article>
-          <article><strong>下载限制</strong><span>{{ deleteRulesText(detail) }}</span></article>
-          <article><strong>下载状态</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
+          <article><strong>推送状态</strong><span>{{ pushText(detail.pushStatus) }} · {{ detail.downloaderName || '-' }}</span></article>
+          <article v-if="detail.downloaderState"><strong>下载器状态</strong><span>{{ detail.downloaderState }}</span></article>
+          <article v-if="detail.torrentHash"><strong>种子 Hash</strong><span>{{ detail.torrentHash.slice(0, 8) }}</span></article>
           <article><strong>任务保存位置</strong><span>{{ taskSavePathText(detail) }}</span></article>
           <article><strong>实际保存位置</strong><span>{{ downloaderSavePathText(detail) }}</span></article>
-          <article><strong>分享率</strong><span>{{ formatRatio(detail.ratio) }}</span></article>
+          <article><strong>下载进度</strong><span>{{ formatProgress(detail.downloadProgress) }} · {{ downloadStateText(detail) }}</span></article>
           <article><strong>速度</strong><span>↑ {{ formatSpeed(detail.uploadSpeed) }} / ↓ {{ formatSpeed(detail.downloadSpeed) }}</span></article>
+          <article><strong>分享率</strong><span>{{ formatRatio(detail.ratio) }}</span></article>
           <article><strong>总上传/下载</strong><span>{{ formatBytes(detail.uploaded) }} / {{ formatBytes(detail.downloaded) }}</span></article>
-          <article><strong>同步时间</strong><span>{{ formatDate(detail.downloadStatsSyncedAt) }}</span></article>
-          <article><strong>种链接状态</strong><span>{{ linkText(detail.linkStatus) }}</span></article>
+          <article v-if="detail.hasIpv6Peers && detail.pushStatus !== 'DELETED'"><strong>IPv6 peer</strong><span>{{ detail.ipv6PeerCount ?? 0 }} / {{ detail.totalPeerCount ?? 0 }} 个 peer · {{ formatDate(detail.peerSyncedAt) }}</span></article>
+          <article><strong>仅免费下载</strong><span>{{ detail.onlyFreeDownload ? '已开启' : '已关闭' }}</span></article>
+          <article><strong>免费到期删除</strong><span>{{ detail.deleteOnFreeExpire ? '已开启' : '已关闭' }}</span></article>
+          <article v-if="detail.lowUploadKbps && detail.lowUploadMinutes"><strong>低速删除</strong><span>&lt; {{ detail.lowUploadKbps }} KB/秒 持续 {{ detail.lowUploadMinutes }} 分钟{{ detail.lowUploadSince ? `（${formatDate(detail.lowUploadSince)} 起）` : '' }}</span></article>
+          <article><strong>链接状态</strong><span>{{ linkText(detail.linkStatus) }}</span></article>
           <article v-if="detail.errorMessage"><strong>失败原因</strong><span>{{ detail.errorMessage }}</span></article>
+        </div>
+        <div class="form-foot detail-foot">
+          <div class="form-foot-actions detail-foot-actions">
+            <button type="button" class="secondary-button" @click="handleDetailEdit">修改</button>
+            <button type="button" class="primary-button compact" :disabled="!canPushTorrent(detail)" @click="handleDetailPush">{{ isPushing(detail.id) ? '推送中...' : '推送' }}</button>
+            <button v-if="canDeleteFromDownloader(detail)" class="secondary-button danger-text" type="button" :disabled="isTorrentBusy(detail.id)" @click="handleDetailDeleteFromDownloader">{{ isDeleting(detail.id) ? '删除中...' : '删除任务' }}</button>
+            <button type="button" class="secondary-button" @click="detail = undefined">关闭</button>
+          </div>
         </div>
       </section>
     </div>
@@ -608,6 +627,27 @@ async function deleteFromDownloader(torrent: TorrentItem) {
 
 function showDetail(torrent: TorrentItem) {
   detail.value = torrent
+}
+
+function handleDetailEdit() {
+  if (!detail.value) return
+  const torrent = detail.value
+  detail.value = undefined
+  openPushForm(torrent)
+}
+
+function handleDetailPush() {
+  if (!detail.value) return
+  const torrent = detail.value
+  detail.value = undefined
+  pushOne(torrent)
+}
+
+function handleDetailDeleteFromDownloader() {
+  if (!detail.value) return
+  const torrent = detail.value
+  detail.value = undefined
+  deleteFromDownloader(torrent)
 }
 
 function toggleSelectCurrentPage() {
