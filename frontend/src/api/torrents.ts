@@ -143,3 +143,10 @@ export function batchDeleteTorrentsFromDownloader(ids: string[]) {
 export function deleteTorrentFromDownloader(id: string) {
   return apiRequest<TorrentItem>(`/api/torrents/${id}/delete-from-downloader`, { method: 'POST' })
 }
+
+export function batchResetTorrents(ids: string[]) {
+  return apiRequest<{ successCount: number; failedCount: number; failed: Array<{ id: string; message: string }> }>('/api/torrents/batch-reset-task', {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}

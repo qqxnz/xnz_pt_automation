@@ -180,6 +180,9 @@
             <button class="secondary-button danger-button" type="button" :disabled="!selectedDeletableTaskIds.length || batchDeletingTasks" @click="batchDeleteTasks">
               {{ batchDeletingTasks ? '删除任务中...' : `删除任务${selectedDeletableTaskIds.length ? ` (${selectedDeletableTaskIds.length})` : ''}` }}
             </button>
+            <button class="secondary-button" type="button" :disabled="!selectedResetableTaskIds.length || batchResettingTasks" @click="batchResetTasks">
+              {{ batchResettingTasks ? '重置中...' : `重置任务${selectedResetableTaskIds.length ? ` (${selectedResetableTaskIds.length})` : ''}` }}
+            </button>
           </div>
         </div>
         <div class="pager">
@@ -292,6 +295,7 @@ import { getTasks, type TaskItem } from '../api/tasks'
 import {
   batchDeleteTorrentsFromDownloader,
   batchPushTorrents,
+  batchResetTorrents,
   deleteTorrentRecords,
   deleteTorrentFromDownloader,
   getTorrents,
@@ -328,6 +332,7 @@ const initialLoaded = ref(false)
 const batchPushing = ref(false)
 const batchDeletingRecords = ref(false)
 const batchDeletingTasks = ref(false)
+const batchResettingTasks = ref(false)
 const pushingIds = ref<string[]>([])
 const deletingIds = ref<string[]>([])
 const error = ref('')
@@ -368,6 +373,7 @@ const currentPageIds = computed(() => items.value.map((item) => item.id))
 const selectedTorrents = computed(() => selectedIds.value.map((id) => items.value.find((item) => item.id === id)).filter((item): item is TorrentItem => Boolean(item)))
 const selectedPushableIds = computed(() => selectedTorrents.value.filter(canPushTorrent).map((torrent) => torrent.id))
 const selectedDeletableTaskIds = computed(() => selectedTorrents.value.filter(canDeleteFromDownloader).map((torrent) => torrent.id))
+const selectedResetableTaskIds = computed(() => selectedDeletableTaskIds.value)
 const isCurrentPageAllSelected = computed(() => Boolean(items.value.length) && items.value.every((item) => selectedIds.value.includes(item.id)))
 const isCurrentPagePartiallySelected = computed(() => !isCurrentPageAllSelected.value && items.value.some((item) => selectedIds.value.includes(item.id)))
 const enabledDownloaderOptions = computed(() => downloaderOptions.value.filter((downloader) => downloader.enabled))
@@ -565,6 +571,23 @@ async function batchDeleteTasks() {
   } finally {
     batchDeletingTasks.value = false
     deletingIds.value = deletingIds.value.filter((id) => !ids.includes(id))
+  }
+}
+
+async function batchResetTasks() {
+  const ids = [...selectedResetableTaskIds.value]
+  if (!ids.length || batchResettingTasks.value) return
+  if (!window.confirm(`确认重置选中的 ${ids.length} 个种子的本地任务状态？此操作不会联系下载器，可用于下载器不可达时重新推送。`)) return
+  batchResettingTasks.value = true
+  try {
+    const result = await batchResetTorrents(ids)
+    Snackbar[result.failedCount ? 'warning' : 'success'](`成功 ${result.successCount} 个，失败 ${result.failedCount} 个`)
+    selectedIds.value = []
+    await reloadAfterMutation()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '批量重置任务失败')
+  } finally {
+    batchResettingTasks.value = false
   }
 }
 

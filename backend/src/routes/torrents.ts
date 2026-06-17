@@ -545,6 +545,64 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
   res.json({ successCount, failedCount: failed.length, failed })
 })
 
+torrentsRouter.post('/batch-reset-task', requireAuth, async (req, res) => {
+  const ids = requestIds(req.body)
+  if (!ids.length) return res.status(400).json({ message: '请选择要重置的种子' })
+  const torrents: TorrentRecord[] = []
+  for (const id of ids) {
+    const t = await getTorrentById(id)
+    if (t) torrents.push(t)
+  }
+  const updateBuffer: TorrentRecord[] = []
+  let successCount = 0
+  const failed: Array<{ id: string; message: string }> = []
+  for (const torrent of torrents) {
+    if (torrent.pushStatus !== 'PUSHED') {
+      failed.push({ id: torrent.id, message: '仅可重置已推送的种子' })
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'MANUAL_RESET_TASK',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `重置种子「${torrent.title}」失败：仅可重置已推送的种子`
+      })
+      continue
+    }
+    torrent.pushStatus = 'DELETED'
+    torrent.currentState = 'DOWNLOADER_DELETED'
+    torrent.downloaderState = 'deleted'
+    torrent.errorMessage = undefined
+    torrent.lowUploadSince = undefined
+    updateBuffer.push(torrent)
+    successCount += 1
+    await recordTorrentLog({
+      torrentId: torrent.id,
+      siteId: torrent.siteId,
+      siteName: torrent.siteName,
+      torrentTitle: torrent.title,
+      event: 'MANUAL_RESET_TASK',
+      status: 'SUCCESS',
+      source: 'MANUAL',
+      actorId: res.locals.user?.id,
+      actorName: res.locals.user?.username,
+      message: `重置种子「${torrent.title}」本地任务状态（未联系下载器）`
+    })
+  }
+  if (updateBuffer.length) await updateTorrents(updateBuffer)
+  await recordOperationLog({
+    action: '批量重置任务',
+    message: `批量重置 ${ids.length} 个种子任务，成功 ${successCount} 个，失败 ${failed.length} 个`,
+    status: failed.length ? 'FAILED' : 'SUCCESS',
+    ...operationActor(res, req)
+  })
+  res.json({ successCount, failedCount: failed.length, failed })
+})
+
 torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res) => {
   const id = String(req.params.id)
   const torrent = await getTorrentById(id)

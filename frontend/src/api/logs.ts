@@ -75,6 +75,7 @@ export type TorrentLogEvent =
   | 'PUSH_FAILED'
   | 'AUTO_DELETE_TASK'
   | 'MANUAL_DELETE_TASK'
+  | 'MANUAL_RESET_TASK'
   | 'DELETE_RECORD'
   | 'UPDATE_SETTINGS'
 

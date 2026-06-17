@@ -227,6 +227,7 @@ function torrentEventText(event: TorrentLog['event']) {
     PUSH_FAILED: '推送失败',
     AUTO_DELETE_TASK: '自动删除任务',
     MANUAL_DELETE_TASK: '手动删除任务',
+    MANUAL_RESET_TASK: '手动重置任务',
     DELETE_RECORD: '删除种子记录',
     UPDATE_SETTINGS: '修改种子设置'
   }
