@@ -76,15 +76,6 @@
               <label class="wide-field">默认 User-Agent<input v-model.trim="settingsForm.defaultUserAgent" /></label>
             </div>
           </section>
-
-          <section ref="retentionSection">
-            <h3>数据保留</h3>
-            <div class="settings-form three-columns">
-              <label>操作日志保留（天）<input v-model.number="settingsForm.operationLogRetentionDays" type="number" min="7" max="3650" /></label>
-              <label>任务日志保留（天）<input v-model.number="settingsForm.taskLogRetentionDays" type="number" min="7" max="3650" /></label>
-              <label>种子记录保留（天）<input v-model.number="settingsForm.torrentRetentionDays" type="number" min="30" max="3650" /></label>
-            </div>
-          </section>
         </div>
       </section>
     </section>
@@ -120,7 +111,7 @@ const passwordSection = ref<HTMLElement>()
 const settingsSection = ref<HTMLElement>()
 const sessionSection = ref<HTMLElement>()
 const networkSection = ref<HTMLElement>()
-const retentionSection = ref<HTMLElement>()
+
 
 const passwordForm = reactive({
   oldPassword: '',
@@ -130,9 +121,6 @@ const passwordForm = reactive({
 
 const settingsForm = reactive<SystemSettings>({
   sessionTtlHours: 168,
-  operationLogRetentionDays: 180,
-  taskLogRetentionDays: 60,
-  torrentRetentionDays: 365,
   requestTimeoutMs: 15000,
   maxConcurrentTasks: 2,
   defaultUserAgent: navigator.userAgent
@@ -227,9 +215,6 @@ function validateSettingsForm() {
   if (!Number.isInteger(settingsForm.maxConcurrentTasks) || settingsForm.maxConcurrentTasks < 1 || settingsForm.maxConcurrentTasks > 10) return '最大并发任务数需在 1-10 之间'
   if (!Number.isInteger(settingsForm.requestTimeoutMs) || settingsForm.requestTimeoutMs < 3000 || settingsForm.requestTimeoutMs > 120000) return '请求超时时间需在 3000-120000 ms 之间'
   if (settingsForm.defaultUserAgent.trim().length < 20 || settingsForm.defaultUserAgent.trim().length > 300) return '默认 User-Agent 需为 20-300 字'
-  if (!Number.isInteger(settingsForm.operationLogRetentionDays) || settingsForm.operationLogRetentionDays < 7 || settingsForm.operationLogRetentionDays > 3650) return '操作日志保留天数需在 7-3650 天之间'
-  if (!Number.isInteger(settingsForm.taskLogRetentionDays) || settingsForm.taskLogRetentionDays < 7 || settingsForm.taskLogRetentionDays > 3650) return '任务日志保留天数需在 7-3650 天之间'
-  if (!Number.isInteger(settingsForm.torrentRetentionDays) || settingsForm.torrentRetentionDays < 30 || settingsForm.torrentRetentionDays > 3650) return '种子记录保留天数需在 30-3650 天之间'
   return ''
 }
 
@@ -285,11 +270,9 @@ async function focusSection() {
     ? passwordSection.value || securitySection.value
     : section === 'network'
       ? networkSection.value
-      : section === 'retention'
-        ? retentionSection.value
-        : section === 'session'
-          ? sessionSection.value
-          : settingsSection.value
+      : section === 'session'
+        ? sessionSection.value
+        : settingsSection.value
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 

@@ -48,13 +48,6 @@ function validateSettings(payload: unknown, allowInternalKeys = false): { settin
   if (!isIntegerInRange(settings.sessionTtlHours, 1, 720)) {
     return { message: '登录态有效期需在 1-720 小时之间', code: 'INVALID_SESSION_TTL' }
   }
-  if (
-    !isIntegerInRange(settings.operationLogRetentionDays, 7, 3650) ||
-    !isIntegerInRange(settings.taskLogRetentionDays, 7, 3650) ||
-    !isIntegerInRange(settings.torrentRetentionDays, 30, 3650)
-  ) {
-    return { message: '数据保留天数范围不正确', code: 'INVALID_RETENTION_DAYS' }
-  }
   if (!isIntegerInRange(settings.requestTimeoutMs, 3000, 120000)) {
     return { message: '请求超时时间需在 3000-120000 ms 之间', code: 'INVALID_REQUEST_TIMEOUT' }
   }
@@ -75,9 +68,6 @@ function validateSettings(payload: unknown, allowInternalKeys = false): { settin
   return {
     settings: {
       sessionTtlHours: Number(settings.sessionTtlHours),
-      operationLogRetentionDays: Number(settings.operationLogRetentionDays),
-      taskLogRetentionDays: Number(settings.taskLogRetentionDays),
-      torrentRetentionDays: Number(settings.torrentRetentionDays),
       requestTimeoutMs: Number(settings.requestTimeoutMs),
       proxyTestUrl: String(settings.proxyTestUrl).trim(),
       maxConcurrentTasks: Number(settings.maxConcurrentTasks),

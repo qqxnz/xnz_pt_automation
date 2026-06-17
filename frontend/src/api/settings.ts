@@ -2,9 +2,6 @@ import { apiRequest } from './client'
 
 export type SystemSettings = {
   sessionTtlHours: number
-  operationLogRetentionDays: number
-  taskLogRetentionDays: number
-  torrentRetentionDays: number
   requestTimeoutMs: number
   maxConcurrentTasks: number
   defaultUserAgent: string

@@ -264,9 +264,6 @@ export type SiteTrafficSnapshotRecord = {
 
 export type SystemSettings = {
   sessionTtlHours: number
-  operationLogRetentionDays: number
-  taskLogRetentionDays: number
-  torrentRetentionDays: number
   requestTimeoutMs: number
   proxyTestUrl: string
   maxConcurrentTasks: number
@@ -378,9 +375,6 @@ export const storagePaths = {
 
 export const defaultSystemSettings: SystemSettings = {
   sessionTtlHours: 168,
-  operationLogRetentionDays: 180,
-  taskLogRetentionDays: 60,
-  torrentRetentionDays: 365,
   requestTimeoutMs: 15000,
   proxyTestUrl: 'https://www.gstatic.com/generate_204',
   maxConcurrentTasks: 2,
