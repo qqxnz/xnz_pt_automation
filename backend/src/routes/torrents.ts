@@ -91,6 +91,15 @@ torrentsRouter.patch('/:id', requireAuth, async (req, res) => {
     lowUploadKbps?: number | null
     lowUploadMinutes?: number | null
   }
+  const isInDownloader = torrent.pushStatus === 'PUSHED' && Boolean(torrent.torrentHash)
+  if (isInDownloader) {
+    if (Object.prototype.hasOwnProperty.call(body, 'taskSavePath')) {
+      return res.status(400).json({ message: '种子已在下载器中运行，无法修改保存位置' })
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'downloaderId')) {
+      return res.status(400).json({ message: '种子已在下载器中运行，无法切换下载器' })
+    }
+  }
   const updates: Partial<TorrentRecord> = {}
   let downloaderNameSnapshot: string | undefined
   let savePathSnapshot: string | undefined

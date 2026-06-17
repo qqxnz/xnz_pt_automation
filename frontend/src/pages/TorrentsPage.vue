@@ -107,7 +107,7 @@
               <small>↓ {{ formatBytes(torrent.downloaded) }} · {{ formatDate(torrent.downloadStatsSyncedAt) }}</small>
             </span>
             <span class="row-actions">
-              <button type="button" :disabled="!canPushTorrent(torrent)" @click="openPushForm(torrent)">修改</button>
+              <button type="button" @click="openPushForm(torrent)">修改</button>
               <button type="button" :disabled="!canPushTorrent(torrent)" @click="pushOne(torrent)">{{ isPushing(torrent.id) ? '推送中...' : '推送' }}</button>
               <button type="button" @click="showDetail(torrent)">详情</button>
               <button v-if="canDeleteFromDownloader(torrent)" class="danger-text" type="button" :disabled="isTorrentBusy(torrent.id)" @click="deleteFromDownloader(torrent)">{{ isDeleting(torrent.id) ? '删除中...' : '删除任务' }}</button>
@@ -173,7 +173,7 @@
             <p v-if="torrent.torrentHash">Hash：{{ torrent.torrentHash.slice(0, 8) }}</p>
             <p v-else-if="torrent.downloaderState">下载器状态：{{ torrent.downloaderState }}</p>
             <div class="row-actions">
-              <button type="button" :disabled="!canPushTorrent(torrent)" @click="openPushForm(torrent)">修改</button>
+              <button type="button" @click="openPushForm(torrent)">修改</button>
               <button type="button" :disabled="!canPushTorrent(torrent)" @click="pushOne(torrent)">{{ isPushing(torrent.id) ? '推送中...' : '推送' }}</button>
               <button type="button" @click="showDetail(torrent)">详情</button>
               <button v-if="canDeleteFromDownloader(torrent)" class="danger-text" type="button" :disabled="isTorrentBusy(torrent.id)" @click="deleteFromDownloader(torrent)">{{ isDeleting(torrent.id) ? '删除中...' : '删除任务' }}</button>
@@ -238,49 +238,56 @@
           </div>
           <button type="button" :disabled="pushForm.submitting" @click="closePushForm">×</button>
         </div>
-        <div class="form-grid compact-form-grid">
-          <section>
-            <h3>下载器</h3>
-            <label>
-              选择下载器
-              <select v-model="pushForm.downloaderId" required :disabled="pushForm.submitting || !enabledDownloaderOptions.length">
-                <option v-if="!enabledDownloaderOptions.length" value="">暂无可用下载器</option>
-                <option v-for="downloader in enabledDownloaderOptions" :key="downloader.id" :value="downloader.id">
-                  {{ downloader.name }}{{ downloader.status !== 'ONLINE' ? `（${downloaderStatusText(downloader.status)}）` : '' }}
-                </option>
-              </select>
-            </label>
-            <p v-if="!enabledDownloaderOptions.length" class="inline-hint">没有启用的下载器，请先在【下载器】中启用至少一个。</p>
-          </section>
-          <section>
-            <h3>保存位置</h3>
-            <label>
-              任务保存位置
-              <input v-model.trim="pushForm.taskSavePath" :disabled="pushForm.submitting" placeholder="留空则使用下载器默认保存位置" />
-            </label>
-            <p class="inline-hint">仅写入该条种子记录的【任务保存位置】字段，不会修改来源任务或下载器配置。保存后点击【推送】才会真正推送到下载器。</p>
-          </section>
-          <section class="rule-section">
-            <h3>下载器删除条件</h3>
-            <fieldset class="rule-group">
-              <legend>任一命中即删除任务+文件</legend>
-              <label class="inline-check"><input v-model="pushForm.onlyFreeDownload" :disabled="pushForm.submitting" type="checkbox" /> 仅免费下载（已过免费期且未下载完成）</label>
-              <label class="inline-check"><input v-model="pushForm.deleteOnFreeExpire" :disabled="pushForm.submitting" type="checkbox" /> 免费到期（无视下载进度）</label>
-              <div class="inline-row">
-                <span>上传速度低于</span>
-                <input v-model.number="pushForm.lowUploadKbps" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
-                <span>KB/秒，持续</span>
-                <input v-model.number="pushForm.lowUploadMinutes" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
-                <span>分钟</span>
-              </div>
-            </fieldset>
-            <p v-if="pushForm.lowUploadError" class="inline-hint">{{ pushForm.lowUploadError }}</p>
-          </section>
+        <div class="push-form-body">
+          <p v-if="pushForm.locked" class="inline-hint locked-banner">
+            种子已在下载器中运行，【下载器】与【保存位置】不可修改。如需调整，请先在列表中点击【删除任务】后再操作。
+          </p>
+          <div class="form-grid compact-form-grid">
+            <section :class="{ 'is-locked': pushForm.locked }">
+              <h3>下载器</h3>
+              <label>
+                选择下载器
+                <select v-model="pushForm.downloaderId" :required="!pushForm.locked" :disabled="pushForm.submitting || pushForm.locked || !enabledDownloaderOptions.length">
+                  <option v-if="!enabledDownloaderOptions.length" value="">暂无可用下载器</option>
+                  <option v-for="downloader in enabledDownloaderOptions" :key="downloader.id" :value="downloader.id">
+                    {{ downloader.name }}{{ downloader.status !== 'ONLINE' ? `（${downloaderStatusText(downloader.status)}）` : '' }}
+                  </option>
+                </select>
+              </label>
+              <p v-if="!pushForm.locked && !enabledDownloaderOptions.length" class="inline-hint">没有启用的下载器，请先在【下载器】中启用至少一个。</p>
+            </section>
+            <section :class="{ 'is-locked': pushForm.locked }">
+              <h3>保存位置</h3>
+              <label>
+                任务保存位置
+                <input v-model.trim="pushForm.taskSavePath" :disabled="pushForm.submitting || pushForm.locked" placeholder="留空则使用下载器默认保存位置" />
+              </label>
+              <p v-if="!pushForm.locked" class="inline-hint">仅写入该条种子记录的【任务保存位置】字段，不会修改来源任务或下载器配置。保存后点击【推送】才会真正推送到下载器。</p>
+            </section>
+            <section class="rule-section">
+              <h3>下载器删除条件</h3>
+              <fieldset class="rule-group">
+                <legend>任一命中即删除任务+文件</legend>
+                <label class="inline-check"><input v-model="pushForm.onlyFreeDownload" :disabled="pushForm.submitting" type="checkbox" /> 仅免费下载（已过免费期且未下载完成）</label>
+                <label class="inline-check"><input v-model="pushForm.deleteOnFreeExpire" :disabled="pushForm.submitting" type="checkbox" /> 免费到期（无视下载进度）</label>
+                <div class="inline-row">
+                  <span>上传速度低于</span>
+                  <input v-model.number="pushForm.lowUploadKbps" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                  <span>KB/秒，持续</span>
+                  <input v-model.number="pushForm.lowUploadMinutes" :disabled="pushForm.submitting" type="number" min="0" step="1" placeholder="0 表示不启用" />
+                  <span>分钟</span>
+                </div>
+              </fieldset>
+              <p v-if="pushForm.lowUploadError" class="inline-hint">{{ pushForm.lowUploadError }}</p>
+            </section>
+          </div>
         </div>
         <div class="form-foot">
-          <span>本次只保存设置，不会推送。如需推送到下载器，请点击【推送】按钮。</span>
-          <button type="button" class="secondary-button" :disabled="pushForm.submitting" @click="closePushForm">取消</button>
-          <button class="primary-button compact" :disabled="pushForm.submitting || !pushForm.downloaderId" type="submit">{{ pushForm.submitting ? '保存中...' : '保存' }}</button>
+          <p class="form-foot-tip">本次只保存设置，不会推送。如需推送到下载器，请点击【推送】按钮。</p>
+          <div class="form-foot-actions">
+            <button type="button" class="secondary-button" :disabled="pushForm.submitting" @click="closePushForm">取消</button>
+            <button class="primary-button compact" :disabled="pushForm.submitting || (!pushForm.locked && !pushForm.downloaderId)" type="submit">{{ pushForm.submitting ? '保存中...' : '保存' }}</button>
+          </div>
         </div>
       </form>
     </div>
@@ -304,6 +311,7 @@ import {
   updateTorrentSettings,
   type TorrentFilter,
   type TorrentItem,
+  type TorrentSettingsUpdate,
   type TorrentStats
 } from '../api/torrents'
 
@@ -346,6 +354,7 @@ type PushFormState = {
   lowUploadMinutes: number
   lowUploadError: string
   submitting: boolean
+  locked: boolean
 }
 const pushForm = ref<PushFormState>()
 let refreshTimer: number | undefined
@@ -427,7 +436,6 @@ async function reloadAfterMutation() {
 }
 
 function openPushForm(torrent: TorrentItem) {
-  if (!canPushTorrent(torrent)) return
   const current = downloaderOptions.value.find((item) => item.id === torrent.downloaderId)
   const fallback = enabledDownloaderOptions.value[0]?.id ?? ''
   const initialDownloaderId = current?.enabled
@@ -444,7 +452,8 @@ function openPushForm(torrent: TorrentItem) {
     lowUploadKbps: torrent.lowUploadKbps ?? 0,
     lowUploadMinutes: torrent.lowUploadMinutes ?? 0,
     lowUploadError: '',
-    submitting: false
+    submitting: false,
+    locked: isTorrentInDownloader(torrent)
   }
 }
 
@@ -456,7 +465,7 @@ function closePushForm() {
 async function submitPushForm() {
   const form = pushForm.value
   if (!form || form.submitting) return
-  if (!form.downloaderId) {
+  if (!form.locked && !form.downloaderId) {
     Snackbar.warning('请选择下载器')
     return
   }
@@ -480,14 +489,17 @@ async function submitPushForm() {
   form.lowUploadError = ''
   form.submitting = true
   try {
-    await updateTorrentSettings(form.torrent.id, {
-      downloaderId: form.downloaderId,
-      taskSavePath: form.taskSavePath,
+    const payload: TorrentSettingsUpdate = {
       onlyFreeDownload: form.onlyFreeDownload,
       deleteOnFreeExpire: form.deleteOnFreeExpire,
       lowUploadKbps: kbps > 0 ? kbps : null,
       lowUploadMinutes: mins > 0 ? mins : null
-    })
+    }
+    if (!form.locked) {
+      payload.downloaderId = form.downloaderId
+      payload.taskSavePath = form.taskSavePath
+    }
+    await updateTorrentSettings(form.torrent.id, payload)
     Snackbar.success('已保存修改')
     pushForm.value = undefined
     await loadTorrents()
@@ -712,6 +724,10 @@ function isTorrentBusy(id: string) {
 
 function canPushTorrent(torrent: TorrentItem) {
   return torrent.pushStatus !== 'PUSHED' && !isTorrentBusy(torrent.id)
+}
+
+function isTorrentInDownloader(torrent: TorrentItem) {
+  return torrent.pushStatus === 'PUSHED' && Boolean(torrent.torrentHash)
 }
 
 function freeText(torrent: TorrentItem) {

@@ -2979,15 +2979,43 @@ a {
 
 .push-form {
   width: min(720px, 100%);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.push-form .form-head {
+  flex-shrink: 0;
+}
+
+.push-form .push-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.push-form .locked-banner {
+  margin: 16px 32px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .push-form .form-grid {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
 }
 
 .push-form .form-grid section {
   border-bottom: 0;
-  padding: 16px 32px;
+  padding: 18px 24px;
 }
 
 .push-form .form-grid section + section {
@@ -2995,9 +3023,116 @@ a {
   padding-top: 22px;
 }
 
+.push-form .form-grid .rule-section {
+  grid-column: 1 / -1;
+}
+
+.push-form .form-grid section.is-locked label {
+  color: #9ca3af;
+}
+
+.push-form .form-grid section.is-locked input,
+.push-form .form-grid section.is-locked select {
+  background: #f3f4f6;
+  cursor: not-allowed;
+  color: #6b7280;
+}
+
+.push-form .inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.push-form .inline-row input[type="number"] {
+  width: 96px;
+}
+
+.push-form .form-foot {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.push-form .form-foot-tip {
+  flex: 1 1 240px;
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.push-form .form-foot-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 720px) {
+  .push-form {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .push-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+
   .push-form .form-grid section {
+    padding: 14px 20px;
+  }
+
+  .push-form .form-grid section + section {
+    padding-top: 18px;
+  }
+
+  .push-form .locked-banner {
+    margin: 14px 20px 0;
+  }
+
+  .push-form .inline-row {
+    gap: 8px;
+  }
+
+  .push-form .inline-row input[type="number"] {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 120px;
+  }
+
+  .push-form select,
+  .push-form input[type="text"],
+  .push-form input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .push-form .form-foot {
+    flex-direction: column;
+    align-items: stretch;
     padding: 16px 20px;
+    gap: 12px;
+  }
+
+  .push-form .form-foot-tip {
+    flex: 0 0 auto;
+  }
+
+  .push-form .form-foot-actions {
+    flex-direction: column-reverse;
+    width: 100%;
+  }
+
+  .push-form .form-foot-actions button {
+    width: 100%;
+    min-height: 44px;
   }
 
   .task-form-sections {
