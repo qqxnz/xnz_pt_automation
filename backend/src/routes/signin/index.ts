@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SigninLogRecord, SiteRecord } from '../../storage.js'
 import { appendSigninLog, getSiteFromDb, updateSiteInDb } from '../../storage.js'
-import { siteDisplayName } from '../sites.js'
+import { siteDisplayName } from '../sites/index.js'
 import { baseNexusPhpSignin } from './baseNexusPhp.js'
 import { chdbitsSignin } from './chdbits.js'
 import { hdhomeSignin } from './hdhome.js'

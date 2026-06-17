@@ -1,5 +1,5 @@
 import type { SiteRecord } from '../../storage.js'
-import { siteBaseUrl, siteDisplayName } from '../sites.js'
+import { siteBaseUrl, siteDisplayName } from '../sites/index.js'
 import type { SigninContext, SigninHandler, SigninResult } from './types.js'
 
 const SUCCESS_PATTERNS = [/已连续签到/, /签到成功/, /本次签到/, /签到已得/, /签到获得/, /明日再来/, /已签到/]

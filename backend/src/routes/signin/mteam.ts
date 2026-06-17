@@ -1,5 +1,5 @@
 import type { SiteRecord } from '../../storage.js'
-import { normalizeSiteDomain, siteDisplayName } from '../sites.js'
+import { normalizeSiteDomain, siteDisplayName } from '../sites/index.js'
 import type { SigninContext, SigninHandler, SigninResult } from './types.js'
 
 export const mteamSignin: SigninHandler = {

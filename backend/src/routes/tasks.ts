@@ -19,7 +19,7 @@ import {
 } from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog, recordTorrentLog } from '../utils/logger.js'
 import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
-import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites.js'
+import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites/index.js'
 
 export const tasksRouter = Router()
 

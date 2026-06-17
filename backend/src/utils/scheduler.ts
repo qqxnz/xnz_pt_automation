@@ -1,6 +1,6 @@
 import { listSitesFromDb } from '../storage.js'
 import { performSiteSignin } from '../routes/signin/index.js'
-import { siteDisplayName, syncSiteTrafficStats } from '../routes/sites.js'
+import { siteDisplayName, syncSiteTrafficStats } from '../routes/sites/index.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'

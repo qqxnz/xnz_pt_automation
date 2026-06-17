@@ -1,5 +1,5 @@
 import type { SiteRecord } from '../../storage.js'
-import { normalizeSiteDomain, siteBaseUrl, siteDisplayName } from '../sites.js'
+import { normalizeSiteDomain, siteBaseUrl, siteDisplayName } from '../sites/index.js'
 import type { SigninContext, SigninHandler, SigninResult } from './types.js'
 
 export type StandardNexusPhpOptions = {
