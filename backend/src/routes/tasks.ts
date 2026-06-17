@@ -38,8 +38,8 @@ type TaskPayload = {
   lowUploadMinutes?: number | null
   autoPush?: boolean
   discountTypes?: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
-  seederCondition?: 'GT' | 'EQ' | 'LT' | ''
-  seederCount?: number
+  seederMin?: number
+  seederMax?: number
   sizeMinGb?: number
   sizeMaxGb?: number
   torrentCountCondition?: 'GT' | 'EQ' | 'LT' | ''
@@ -107,9 +107,11 @@ function validatePayload(
   const interval = payload.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 10 分钟'
   if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE', 'NORMAL'].includes(type))) return '优惠类型范围不合法'
-  if (payload.seederCondition && !['GT', 'EQ', 'LT'].includes(payload.seederCondition)) return '做种人数条件不合法'
-  const seederCount = payload.seederCount
-  if (payload.seederCondition && (!Number.isInteger(seederCount) || Number(seederCount) < 0)) return '做种人数必须是大于等于 0 的整数'
+  if (payload.seederMin !== undefined && (!Number.isInteger(Number(payload.seederMin)) || Number(payload.seederMin) < 0)) return '最小做种人数必须是大于等于 0 的整数'
+  if (payload.seederMax !== undefined && (!Number.isInteger(Number(payload.seederMax)) || Number(payload.seederMax) < 0)) return '最大做种人数必须是大于等于 0 的整数'
+  const seederMin = Number(payload.seederMin ?? 0)
+  const seederMax = Number(payload.seederMax ?? 0)
+  if (seederMin > 0 && seederMax > 0 && seederMin > seederMax) return '最小做种人数不能大于最大做种人数'
   const sizeMinGb = Number(payload.sizeMinGb)
   const sizeMaxGb = Number(payload.sizeMaxGb)
   if (!Number.isFinite(sizeMinGb) || !Number.isInteger(sizeMinGb) || sizeMinGb < 0) return '种子最小体积必须是大于等于 0 的整数'
@@ -153,8 +155,10 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
   const intervalMinutes = payload.intervalMinutes ?? existing?.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   const autoRunEnabled = payload.autoRunEnabled ?? existing?.autoRunEnabled ?? false
   const autoRunStartedAt = autoRunEnabled ? now : undefined
-  const hasSeederCondition = Object.hasOwn(payload, 'seederCondition')
-  const seederCondition = hasSeederCondition ? payload.seederCondition || undefined : existing?.seederCondition
+  const hasSeederMin = Object.hasOwn(payload, 'seederMin')
+  const hasSeederMax = Object.hasOwn(payload, 'seederMax')
+  const seederMin = hasSeederMin ? Number(payload.seederMin ?? 0) : existing?.seederMin ?? 0
+  const seederMax = hasSeederMax ? Number(payload.seederMax ?? 0) : existing?.seederMax ?? 0
   const hasSizeMinGb = Object.hasOwn(payload, 'sizeMinGb')
   const hasSizeMaxGb = Object.hasOwn(payload, 'sizeMaxGb')
   const sizeMinGb = hasSizeMinGb ? Number(payload.sizeMinGb ?? 0) : existing?.sizeMinGb ?? 0
@@ -183,8 +187,8 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     lowUploadMinutes: bothLow ? lowUploadMinutes : undefined,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
     discountTypes: payload.discountTypes?.length ? payload.discountTypes : existing?.discountTypes ?? ['FREE', 'TWO_X_FREE'],
-    seederCondition,
-    seederCount: seederCondition ? payload.seederCount ?? existing?.seederCount ?? 0 : undefined,
+    seederMin,
+    seederMax,
     sizeMinGb,
     sizeMaxGb,
     torrentCountCondition,
@@ -255,12 +259,8 @@ function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
     const maxBytes = (task.sizeMaxGb ?? 0) * GB_BYTES
     if (minBytes > 0 && item.size < minBytes) return false
     if (maxBytes > 0 && item.size > maxBytes) return false
-    if (task.seederCondition) {
-      const target = task.seederCount ?? 0
-      if (task.seederCondition === 'GT' && item.seeders <= target) return false
-      if (task.seederCondition === 'EQ' && item.seeders !== target) return false
-      if (task.seederCondition === 'LT' && item.seeders >= target) return false
-    }
+    if ((task.seederMin ?? 0) > 0 && item.seeders < (task.seederMin ?? 0)) return false
+    if ((task.seederMax ?? 0) > 0 && item.seeders > (task.seederMax ?? 0)) return false
     return true
   })
 }

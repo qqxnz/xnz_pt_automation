@@ -217,8 +217,8 @@ type TaskItem = {
   sortRule?: 'SEEDERS_ASC' | 'SEEDERS_DESC' | 'CREATED_DESC' | 'CREATED_ASC' | 'SIZE_DESC' | 'SIZE_ASC'
   torrentCountCondition?: 'GT' | 'EQ' | 'LT'
   torrentCount?: number
-  seederCondition?: 'GT' | 'EQ' | 'LT'
-  seederCount?: number
+  seederMin?: number
+  seederMax?: number
   sizeMinGb?: number
   sizeMaxGb?: number
   expiringSoonMinutes?: number

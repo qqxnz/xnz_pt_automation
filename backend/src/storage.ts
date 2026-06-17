@@ -133,8 +133,8 @@ export type TaskRecord = {
   lowUploadMinutes?: number
   autoPush: boolean
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
-  seederCondition?: 'GT' | 'EQ' | 'LT'
-  seederCount?: number
+  seederMin?: number
+  seederMax?: number
   sizeMinGb?: number
   sizeMaxGb?: number
   torrentCountCondition?: 'GT' | 'EQ' | 'LT'
@@ -365,7 +365,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 15
+const schemaVersion = 20
 
 export const storagePaths = {
   root,
@@ -604,6 +604,8 @@ function createStructuredTables(db: DatabaseSync) {
       discount_types_json TEXT NOT NULL,
       seeder_condition TEXT,
       seeder_count INTEGER,
+      seeder_min INTEGER NOT NULL DEFAULT 0,
+      seeder_max INTEGER NOT NULL DEFAULT 0,
       size_min_gb REAL,
       size_max_gb REAL,
       torrent_count_condition TEXT,
@@ -834,7 +836,21 @@ async function ensureStorage() {
     createStructuredTables(db)
 
     const currentVersion = userVersion(db)
-    if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) return
+    if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) {
+      const report = inspectTaskSchemaCompatibility(db)
+      if (hasTaskSchemaCompatibilityIssues(report)) {
+        db.exec('BEGIN IMMEDIATE')
+        try {
+          ensureTaskSchemaCompatibility(db)
+          recordStorageOperationLog(db, 'STORAGE_SCHEMA_REPAIR', `数据库结构健康检查发现异常并已修复；${taskSchemaReportText(report)}`)
+          db.exec('COMMIT')
+        } catch (error) {
+          db.exec('ROLLBACK')
+          throw error
+        }
+      }
+      return
+    }
 
     if (currentVersion >= 2) {
       migrateStructuredDatabase(db, currentVersion)
@@ -869,6 +885,7 @@ async function ensureStorage() {
       setMeta(db, 'last_migration_status', 'SUCCESS')
       setMeta(db, 'migrated_at', new Date().toISOString())
       setMeta(db, 'migrated_from', source)
+      recordStorageOperationLog(db, 'STORAGE_MIGRATION', `数据库初始化迁移完成：${source} -> v${schemaVersion}；结构健康检查通过`)
       db.exec(`PRAGMA user_version = ${schemaVersion}`)
       db.exec('COMMIT')
     } catch (error) {
@@ -883,6 +900,84 @@ async function ensureStorage() {
 function tableHasColumn(db: DatabaseSync, table: string, column: string) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   return rows.some((row) => row.name === column)
+}
+
+const taskRuntimeColumnDefinitions: Array<[string, string]> = [
+  ['delete_on_free_expire', 'INTEGER NOT NULL DEFAULT 0'],
+  ['low_upload_kbps', 'INTEGER'],
+  ['low_upload_minutes', 'INTEGER'],
+  ['seeder_min', 'INTEGER NOT NULL DEFAULT 0'],
+  ['seeder_max', 'INTEGER NOT NULL DEFAULT 0'],
+  ['size_min_gb', 'REAL'],
+  ['size_max_gb', 'REAL'],
+  ['torrent_count_condition', 'TEXT'],
+  ['torrent_count', 'INTEGER'],
+  ['sort_rule', 'TEXT'],
+  ['fetch_limit', 'INTEGER NOT NULL DEFAULT 100']
+]
+
+const obsoleteTaskBlockingColumns = ['free_only']
+
+type TaskSchemaCompatibilityReport = {
+  missingRuntimeColumns: string[]
+  obsoleteBlockingColumns: string[]
+}
+
+function inspectTaskSchemaCompatibility(db: DatabaseSync): TaskSchemaCompatibilityReport {
+  return {
+    missingRuntimeColumns: taskRuntimeColumnDefinitions
+      .map(([column]) => column)
+      .filter((column) => !tableHasColumn(db, 'tasks', column)),
+    obsoleteBlockingColumns: obsoleteTaskBlockingColumns.filter((column) => tableHasColumn(db, 'tasks', column))
+  }
+}
+
+function hasTaskSchemaCompatibilityIssues(report: TaskSchemaCompatibilityReport) {
+  return Boolean(report.missingRuntimeColumns.length || report.obsoleteBlockingColumns.length)
+}
+
+function mergeTaskSchemaCompatibilityReports(...reports: TaskSchemaCompatibilityReport[]): TaskSchemaCompatibilityReport {
+  return {
+    missingRuntimeColumns: [...new Set(reports.flatMap((report) => report.missingRuntimeColumns))],
+    obsoleteBlockingColumns: [...new Set(reports.flatMap((report) => report.obsoleteBlockingColumns))]
+  }
+}
+
+function ensureTaskRuntimeColumns(db: DatabaseSync) {
+  for (const [column, definition] of taskRuntimeColumnDefinitions) {
+    if (!tableHasColumn(db, 'tasks', column)) db.exec(`ALTER TABLE tasks ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+function removeObsoleteTaskBlockingColumns(db: DatabaseSync) {
+  for (const column of obsoleteTaskBlockingColumns) {
+    if (tableHasColumn(db, 'tasks', column)) db.exec(`ALTER TABLE tasks DROP COLUMN ${column}`)
+  }
+}
+
+function ensureTaskSchemaCompatibility(db: DatabaseSync): TaskSchemaCompatibilityReport {
+  const report = inspectTaskSchemaCompatibility(db)
+  ensureTaskRuntimeColumns(db)
+  removeObsoleteTaskBlockingColumns(db)
+  return report
+}
+
+function taskSchemaReportText(report: TaskSchemaCompatibilityReport) {
+  const details: string[] = []
+  if (report.missingRuntimeColumns.length) details.push(`补齐任务列：${report.missingRuntimeColumns.join(', ')}`)
+  if (report.obsoleteBlockingColumns.length) details.push(`移除阻塞旧列：${report.obsoleteBlockingColumns.join(', ')}`)
+  return details.join('；')
+}
+
+function recordStorageOperationLog(db: DatabaseSync, action: string, message: string, status: OperationLogRecord['status'] = 'SUCCESS') {
+  upsertOperationLog(db, {
+    id: randomUUID(),
+    type: 'OPERATION',
+    action,
+    message,
+    status,
+    createdAt: new Date().toISOString()
+  })
 }
 
 function localDateKey(value: Date) {
@@ -920,6 +1015,7 @@ function seedTorrentTrafficStatistics(db: DatabaseSync, migratedAt: string) {
 
 function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
   const migratedAt = new Date().toISOString()
+  let taskSchemaReport: TaskSchemaCompatibilityReport = { missingRuntimeColumns: [], obsoleteBlockingColumns: [] }
   db.exec('BEGIN IMMEDIATE')
   try {
     if (currentVersion < 3) {
@@ -1061,10 +1157,35 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
       // v15 兜底：重新执行 v14 的 fetch_limit 变更（早期 v14 仅 bump 版本未实际加列，兼容老库）
       if (!tableHasColumn(db, 'tasks', 'fetch_limit')) db.exec('ALTER TABLE tasks ADD COLUMN fetch_limit INTEGER NOT NULL DEFAULT 100')
     }
+    if (currentVersion < 16) {
+      // v16 做种人数改为范围：新增 seeder_min / seeder_max，不再支持 GT/EQ/LT 条件 + 单阈值；老数据不兼容，直接清空 seeder_condition / seeder_count
+      if (!tableHasColumn(db, 'tasks', 'seeder_min')) db.exec('ALTER TABLE tasks ADD COLUMN seeder_min INTEGER NOT NULL DEFAULT 0')
+      if (!tableHasColumn(db, 'tasks', 'seeder_max')) db.exec('ALTER TABLE tasks ADD COLUMN seeder_max INTEGER NOT NULL DEFAULT 0')
+      db.exec("UPDATE tasks SET seeder_condition = NULL, seeder_count = NULL")
+    }
+    if (currentVersion < 17) {
+      // v17 自我修复：确保 upsertTask 当前写入的任务列都存在，兼容早期版本号已提升但列缺失的本地库
+      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
+    }
+    if (currentVersion < 18) {
+      // v18 自我修复：移除旧版 free_only 列；该列 NOT NULL 且无默认值，会阻塞当前 upsertTask 的 INSERT
+      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
+    }
+    if (currentVersion < 19) {
+      // v19 记录 schema 健康检查结果到操作日志，导出日志时可发现迁移跨度导致的结构问题
+      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
+    }
     setMeta(db, 'schema_version', String(schemaVersion))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', migratedAt)
     setMeta(db, 'migrated_from', `v${currentVersion}-additive`)
+    recordStorageOperationLog(
+      db,
+      'STORAGE_MIGRATION',
+      hasTaskSchemaCompatibilityIssues(taskSchemaReport)
+        ? `数据库迁移完成：v${currentVersion} -> v${schemaVersion}；${taskSchemaReportText(taskSchemaReport)}`
+        : `数据库迁移完成：v${currentVersion} -> v${schemaVersion}；结构健康检查通过`
+    )
     db.exec(`PRAGMA user_version = ${schemaVersion}`)
     db.exec('COMMIT')
   } catch (error) {
@@ -1110,10 +1231,10 @@ function upsertDownloader(db: DatabaseSync, item: DownloaderRecord) {
 }
 
 function upsertTask(db: DatabaseSync, item: TaskRecord) {
-  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, only_free_download, delete_on_free_expire, low_upload_kbps, low_upload_minutes, auto_push, discount_types_json, seeder_condition, seeder_count, size_min_gb, size_max_gb, torrent_count_condition, torrent_count, sort_rule, fetch_limit, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
+  db.prepare(`INSERT INTO tasks (id, name, site_id, downloader_id, auto_run_enabled, auto_run_started_at, next_run_at, interval_minutes, only_free_download, delete_on_free_expire, low_upload_kbps, low_upload_minutes, auto_push, discount_types_json, seeder_min, seeder_max, size_min_gb, size_max_gb, torrent_count_condition, torrent_count, sort_rule, fetch_limit, save_path_override, category_override, tags_override_json, running, last_run_mode, last_started_at, last_finished_at, last_status, last_summary, last_error, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, only_free_download = excluded.only_free_download, delete_on_free_expire = excluded.delete_on_free_expire, low_upload_kbps = excluded.low_upload_kbps, low_upload_minutes = excluded.low_upload_minutes, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_condition = excluded.seeder_condition, seeder_count = excluded.seeder_count, size_min_gb = excluded.size_min_gb, size_max_gb = excluded.size_max_gb, torrent_count_condition = excluded.torrent_count_condition, torrent_count = excluded.torrent_count, sort_rule = excluded.sort_rule, fetch_limit = excluded.fetch_limit, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
-    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.onlyFreeDownload), bool(item.deleteOnFreeExpire), optional(item.lowUploadKbps), optional(item.lowUploadMinutes), bool(item.autoPush), json(item.discountTypes), optional(item.seederCondition), optional(item.seederCount), item.sizeMinGb ?? 0, item.sizeMaxGb ?? 0, optional(item.torrentCountCondition), optional(item.torrentCount), optional(item.sortRule), item.fetchLimit ?? 100, optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, site_id = excluded.site_id, downloader_id = excluded.downloader_id, auto_run_enabled = excluded.auto_run_enabled, auto_run_started_at = excluded.auto_run_started_at, next_run_at = excluded.next_run_at, interval_minutes = excluded.interval_minutes, only_free_download = excluded.only_free_download, delete_on_free_expire = excluded.delete_on_free_expire, low_upload_kbps = excluded.low_upload_kbps, low_upload_minutes = excluded.low_upload_minutes, auto_push = excluded.auto_push, discount_types_json = excluded.discount_types_json, seeder_min = excluded.seeder_min, seeder_max = excluded.seeder_max, size_min_gb = excluded.size_min_gb, size_max_gb = excluded.size_max_gb, torrent_count_condition = excluded.torrent_count_condition, torrent_count = excluded.torrent_count, sort_rule = excluded.sort_rule, fetch_limit = excluded.fetch_limit, save_path_override = excluded.save_path_override, category_override = excluded.category_override, tags_override_json = excluded.tags_override_json, running = excluded.running, last_run_mode = excluded.last_run_mode, last_started_at = excluded.last_started_at, last_finished_at = excluded.last_finished_at, last_status = excluded.last_status, last_summary = excluded.last_summary, last_error = excluded.last_error, created_at = excluded.created_at, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.siteId, item.downloaderId, bool(item.autoRunEnabled), optional(item.autoRunStartedAt), optional(item.nextRunAt), item.intervalMinutes, bool(item.onlyFreeDownload), bool(item.deleteOnFreeExpire), optional(item.lowUploadKbps), optional(item.lowUploadMinutes), bool(item.autoPush), json(item.discountTypes), item.seederMin ?? 0, item.seederMax ?? 0, item.sizeMinGb ?? 0, item.sizeMaxGb ?? 0, optional(item.torrentCountCondition), optional(item.torrentCount), optional(item.sortRule), item.fetchLimit ?? 100, optional(item.savePathOverride), optional(item.categoryOverride), item.tagsOverride ? json(item.tagsOverride) : null, bool(item.running), optional(item.lastRunMode), optional(item.lastStartedAt), optional(item.lastFinishedAt), optional(item.lastStatus), optional(item.lastSummary), optional(item.lastError), item.createdAt, item.updatedAt)
 }
 
 function upsertTorrent(db: DatabaseSync, item: TorrentRecord) {
@@ -1258,8 +1379,8 @@ function tasksFromDb(db: DatabaseSync): TaskRecord[] {
     lowUploadMinutes: row.low_upload_minutes ?? undefined,
     autoPush: fromBool(row.auto_push),
     discountTypes: parseJson(row.discount_types_json, defaultTaskDiscountTypes),
-    seederCondition: row.seeder_condition ?? undefined,
-    seederCount: row.seeder_count ?? undefined,
+    seederMin: row.seeder_min ?? 0,
+    seederMax: row.seeder_max ?? 0,
     sizeMinGb: row.size_min_gb ?? 0,
     sizeMaxGb: row.size_max_gb ?? 0,
     torrentCountCondition: row.torrent_count_condition ?? undefined,
@@ -1949,8 +2070,8 @@ export async function updateTaskFieldsInDb(
       | 'lowUploadMinutes'
       | 'autoPush'
       | 'discountTypes'
-      | 'seederCondition'
-      | 'seederCount'
+      | 'seederMin'
+      | 'seederMax'
       | 'sizeMinGb'
       | 'sizeMaxGb'
       | 'torrentCountCondition'
@@ -2006,8 +2127,8 @@ const taskFieldToColumn: Record<string, string> = {
   lowUploadMinutes: 'low_upload_minutes',
   autoPush: 'auto_push',
   discountTypes: 'discount_types_json',
-  seederCondition: 'seeder_condition',
-  seederCount: 'seeder_count',
+  seederMin: 'seeder_min',
+  seederMax: 'seeder_max',
   sizeMinGb: 'size_min_gb',
   sizeMaxGb: 'size_max_gb',
   torrentCountCondition: 'torrent_count_condition',
@@ -2051,8 +2172,8 @@ function taskFromRow(row: any): TaskRecord {
     lowUploadMinutes: row.low_upload_minutes ?? undefined,
     autoPush: fromBool(row.auto_push),
     discountTypes: parseJson(row.discount_types_json, defaultTaskDiscountTypes),
-    seederCondition: row.seeder_condition ?? undefined,
-    seederCount: row.seeder_count ?? undefined,
+    seederMin: row.seeder_min ?? 0,
+    seederMax: row.seeder_max ?? 0,
     sizeMinGb: row.size_min_gb ?? 0,
     sizeMaxGb: row.size_max_gb ?? 0,
     torrentCountCondition: row.torrent_count_condition ?? undefined,

@@ -195,17 +195,10 @@
               </div>
             </fieldset>
             <fieldset class="rule-group">
-              <legend>做种人数（不设置则不限）</legend>
+              <legend>做种人数（0 表示不限制）</legend>
               <div class="form-grid two-col">
-                <label>条件
-                  <AppSelect
-                    v-model="form.seederCondition"
-                    placeholder="不限制"
-                    :options="seederConditionOptions"
-                    clearable
-                  />
-                </label>
-                <label>阈值<input v-model.number="form.seederCount" min="0" type="number" :disabled="!form.seederCondition" /></label>
+                <label>最小做种人数<input v-model.number="form.seederMin" min="0" step="1" type="number" /></label>
+                <label>最大做种人数<input v-model.number="form.seederMax" min="0" step="1" type="number" /></label>
               </div>
             </fieldset>
           </section>
@@ -291,7 +284,6 @@ import {
   updateTask,
   updateTaskAutoRun,
   type DiscountType,
-  type SeederCondition,
   type TaskItem,
   type TaskPayload,
   type TaskSortRule,
@@ -326,8 +318,8 @@ const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: numbe
   lowUploadMinutes: 0,
   autoPush: true,
   discountTypes: ['FREE', 'TWO_X_FREE'],
-  seederCondition: '',
-  seederCount: 0,
+  seederMin: 0,
+  seederMax: 0,
   sizeMinGb: 0,
   sizeMaxGb: 0,
   torrentCountCondition: '',
@@ -343,12 +335,6 @@ const discountOptions: Array<{ value: DiscountType; label: string }> = [
   { value: 'HALF_FREE', label: '50% FREE' },
   { value: 'NORMAL', label: '不免费' }
 ]
-
-const seederConditionText: Record<SeederCondition, string> = {
-  GT: '大于',
-  EQ: '等于',
-  LT: '小于'
-}
 
 const sortRuleOptions: Array<{ value: TaskSortRule; label: string }> = [
   { value: 'SEEDERS_ASC', label: '做种人数最少在前' },
@@ -370,12 +356,6 @@ const autoRunFilterOptions = [
 const siteOptions = computed(() => sites.value.map((s) => ({ label: s.displayName, value: s.id })))
 const downloaderOptions = computed(() => downloaders.value.map((d) => ({ label: d.name, value: d.id })))
 const sortRuleSelectOptions = sortRuleOptions.map((o) => ({ label: o.label, value: o.value }))
-const seederConditionOptions = [
-  { label: '不限制', value: '' },
-  { label: '大于', value: 'GT' },
-  { label: '等于', value: 'EQ' },
-  { label: '小于', value: 'LT' }
-]
 
 
 const statCards = computed(() => [
@@ -402,8 +382,8 @@ function resetForm() {
     lowUploadMinutes: 0,
     autoPush: true,
     discountTypes: ['FREE', 'TWO_X_FREE'],
-    seederCondition: '',
-    seederCount: 0,
+    seederMin: 0,
+    seederMax: 0,
     sizeMinGb: 0,
     sizeMaxGb: 0,
     torrentCountCondition: '',
@@ -437,8 +417,8 @@ function openEdit(task: TaskItem) {
     lowUploadMinutes: task.lowUploadMinutes ?? 0,
     autoPush: task.autoPush,
     discountTypes: [...task.discountTypes],
-    seederCondition: task.seederCondition ?? '',
-    seederCount: task.seederCount ?? 0,
+    seederMin: task.seederMin ?? 0,
+    seederMax: task.seederMax ?? 0,
     sizeMinGb: task.sizeMinGb ?? 0,
     sizeMaxGb: task.sizeMaxGb ?? 0,
     torrentCountCondition: task.torrentCountCondition ?? '',
@@ -458,7 +438,9 @@ function validateForm() {
   if (!form.downloaderId) return '请选择下载器'
   if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 10) return '执行间隔不能小于 10 分钟'
   if (!form.discountTypes.length) return '请至少选择一种优惠类型'
-  if (form.seederCondition && (!Number.isInteger(form.seederCount) || (form.seederCount ?? 0) < 0)) return '做种人数必须是大于等于 0 的整数'
+  if (!Number.isInteger(form.seederMin) || (form.seederMin ?? 0) < 0) return '最小做种人数必须是大于等于 0 的整数'
+  if (!Number.isInteger(form.seederMax) || (form.seederMax ?? 0) < 0) return '最大做种人数必须是大于等于 0 的整数'
+  if ((form.seederMin ?? 0) > 0 && (form.seederMax ?? 0) > 0 && (form.seederMin ?? 0) > (form.seederMax ?? 0)) return '最小做种人数不能大于最大做种人数'
   if (!Number.isInteger(form.sizeMinGb) || (form.sizeMinGb ?? 0) < 0) return '种子最小体积必须是大于等于 0 的整数'
   if (!Number.isInteger(form.sizeMaxGb) || (form.sizeMaxGb ?? 0) < 0) return '种子最大体积必须是大于等于 0 的整数'
   if ((form.sizeMinGb ?? 0) > 0 && (form.sizeMaxGb ?? 0) > 0 && (form.sizeMinGb ?? 0) > (form.sizeMaxGb ?? 0)) return '种子最小体积不能大于种子最大体积'
@@ -517,8 +499,8 @@ async function saveTask() {
       lowUploadMinutes: (form.lowUploadMinutes ?? 0) > 0 ? Number(form.lowUploadMinutes) : null,
       autoPush: form.autoPush,
       discountTypes: form.discountTypes,
-      seederCondition: form.seederCondition,
-      seederCount: form.seederCount,
+      seederMin: form.seederMin,
+      seederMax: form.seederMax,
       sizeMinGb: form.sizeMinGb,
       sizeMaxGb: form.sizeMaxGb,
       torrentCountCondition: (form.torrentCount ?? 0) > 0 ? 'LT' : '',
@@ -614,7 +596,13 @@ function rangeText(task: TaskItem) {
   if (task.onlyFreeDownload) parts.push('仅免费下载')
   if (task.deleteOnFreeExpire) parts.push('免费到期')
   if (task.lowUploadKbps && task.lowUploadMinutes) parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`)
-  if (task.seederCondition) parts.push(`做种${seederConditionText[task.seederCondition]} ${task.seederCount ?? 0}`)
+  const seederMin = task.seederMin ?? 0
+  const seederMax = task.seederMax ?? 0
+  if (seederMin > 0 || seederMax > 0) {
+    if (seederMin > 0 && seederMax > 0) parts.push(`做种 ${seederMin}~${seederMax}`)
+    else if (seederMin > 0) parts.push(`做种 ≥ ${seederMin}`)
+    else parts.push(`做种 ≤ ${seederMax}`)
+  }
   const sizeMin = task.sizeMinGb ?? 0
   const sizeMax = task.sizeMaxGb ?? 0
   if (sizeMin > 0 || sizeMax > 0) {
