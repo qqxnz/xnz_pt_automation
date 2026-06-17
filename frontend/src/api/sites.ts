@@ -89,6 +89,7 @@ export type BrowseTorrentItem = {
   title: string
   subtitle?: string
   createdAt?: string
+  freeEndAt?: string
   size?: number
   seeders?: number
   leechers?: number

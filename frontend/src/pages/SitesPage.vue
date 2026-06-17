@@ -264,7 +264,7 @@
         <div class="browse-table">
           <div class="browse-row browse-row-head">
             <span>标题</span>
-            <span>时间</span>
+            <span>免费剩余时间</span>
             <span>大小</span>
             <span>做种</span>
             <span>下载</span>
@@ -278,7 +278,7 @@
                 <span v-for="tag in torrent.tags" :key="tag">{{ tag }}</span>
               </div>
             </div>
-            <span>{{ formatBrowseDate(torrent.createdAt) }}</span>
+            <span>{{ formatFreeRemaining(torrent.freeEndAt) }}</span>
             <span>{{ formatBytes(torrent.size) }}</span>
             <span>{{ torrent.seeders ?? '-' }}</span>
             <span>{{ torrent.leechers ?? '-' }}</span>
@@ -459,9 +459,20 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function formatBrowseDate(value?: string) {
-  if (!value) return '-'
-  return new Date(value.replace(' ', 'T')).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+function formatFreeRemaining(value?: string) {
+  if (!value) return '非免费'
+  const endTime = new Date(value.replace(' ', 'T')).getTime()
+  if (Number.isNaN(endTime)) return '非免费'
+  const diffMs = endTime - Date.now()
+  if (diffMs <= 0) return '已过期'
+  const totalMinutes = Math.floor(diffMs / 60_000)
+  const days = Math.floor(totalMinutes / (60 * 24))
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days}天${hours}小时`
+  if (hours > 0) return `${hours}小时${minutes}分`
+  if (minutes > 0) return `${minutes}分钟`
+  return '即将到期'
 }
 
 function formatRatio(site: SiteListItem) {
