@@ -44,6 +44,7 @@ type TaskPayload = {
   sizeMaxGb?: number
   torrentCountCondition?: 'GT' | 'EQ' | 'LT' | ''
   torrentCount?: number
+  fetchLimit?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -69,6 +70,9 @@ const DEFAULT_INTERVAL_MINUTES = 30
 const MIN_INTERVAL_MINUTES = 10
 const GB_BYTES = 1024 * 1024 * 1024
 const STUCK_TASK_THRESHOLD_MS = 10 * 60 * 1000
+const DEFAULT_FETCH_LIMIT = 100
+const MIN_FETCH_LIMIT = 1
+const MAX_FETCH_LIMIT = 1000
 
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN'
 
@@ -114,6 +118,12 @@ function validatePayload(
   if (payload.torrentCountCondition && !['GT', 'EQ', 'LT'].includes(payload.torrentCountCondition)) return '种子个数条件不合法'
   const torrentCount = Number(payload.torrentCount)
   if (payload.torrentCountCondition && (!Number.isInteger(torrentCount) || torrentCount < 1)) return '种子个数必须是大于等于 1 的整数'
+  if (payload.fetchLimit !== undefined) {
+    const fetchLimit = Number(payload.fetchLimit)
+    if (!Number.isInteger(fetchLimit) || fetchLimit < MIN_FETCH_LIMIT || fetchLimit > MAX_FETCH_LIMIT) {
+      return `抓取数量必须是 ${MIN_FETCH_LIMIT} 到 ${MAX_FETCH_LIMIT} 之间的整数`
+    }
+  }
   const lowUploadKbpsRaw = payload.lowUploadKbps
   const lowUploadMinutesRaw = payload.lowUploadMinutes
   const lowUploadKbpsEnabled = lowUploadKbpsRaw !== undefined && lowUploadKbpsRaw !== null && Number(lowUploadKbpsRaw) > 0
@@ -180,6 +190,9 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     torrentCountCondition,
     torrentCount: torrentCountCondition ? Number(payload.torrentCount ?? existing?.torrentCount ?? 1) : undefined,
     sortRule: Object.hasOwn(payload, 'sortRule') ? payload.sortRule || undefined : existing?.sortRule,
+    fetchLimit: Object.hasOwn(payload, 'fetchLimit') && payload.fetchLimit !== undefined
+      ? Number(payload.fetchLimit)
+      : existing?.fetchLimit ?? DEFAULT_FETCH_LIMIT,
     savePathOverride: payload.savePathOverride?.trim() || undefined,
     categoryOverride: payload.categoryOverride?.trim() || undefined,
     tagsOverride: payload.tagsOverride?.map((tag) => tag.trim()).filter(Boolean) ?? existing?.tagsOverride,
@@ -213,8 +226,8 @@ function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
   return resolveSiteUrl(site, `/download.php?id=${encodeURIComponent(item.id)}`)
 }
 
-async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], options: { includeDownloadUrl: boolean }): Promise<CandidateTorrent[]> {
-  const result = await browseTorrents(site, '', 1, 50)
+async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], options: { includeDownloadUrl: boolean; fetchLimit: number }): Promise<CandidateTorrent[]> {
+  const result = await browseTorrents(site, '', 1, options.fetchLimit)
   return result.items.map((item) => {
     const discountType = discountTypeFromBrowseItem(item)
     const downloadUrl = options.includeDownloadUrl ? downloadUrlFromBrowseItem(site, item) : undefined
@@ -427,7 +440,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
     let fetched: CandidateTorrent[]
     try {
-      fetched = await candidatesForTask(site, { includeDownloadUrl: true })
+      fetched = await candidatesForTask(site, { includeDownloadUrl: true, fetchLimit: task.fetchLimit ?? DEFAULT_FETCH_LIMIT })
     } catch (error) {
       throw new Error(`抓取失败：${errorMessage(error, '种子列表获取失败')}`)
     }
@@ -865,7 +878,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
   const site = sites.find((item) => item.id === task.siteId)
   if (!site) return res.status(400).json({ message: '任务绑定站点不存在' })
   try {
-    const fetched = sortCandidatesByRule(task.sortRule, await candidatesForTask(site, { includeDownloadUrl: false }))
+    const fetched = sortCandidatesByRule(task.sortRule, await candidatesForTask(site, { includeDownloadUrl: false, fetchLimit: task.fetchLimit ?? DEFAULT_FETCH_LIMIT }))
     const existingTorrents = await listAllTorrents({ siteId: site.id })
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))

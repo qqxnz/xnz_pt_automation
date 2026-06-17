@@ -49,6 +49,11 @@
 是否只抓免费
 是否自动推送到下载器
 免费类型范围：FREE、TWO_X_FREE、HALF_FREE
+抓取数量
+排序规则
+入库数量
+种子体积范围（GB）
+做种人数条件
 即将过期阈值
 保存路径覆盖
 分类覆盖
@@ -77,6 +82,9 @@
 是否只抓免费：默认开启
 是否自动推送到下载器：默认开启
 免费类型范围：默认 FREE、TWO_X_FREE、HALF_FREE 全选
+抓取数量：默认 100，整数，1 到 1000 之间，控制每次从站点列表抓取的种子候选上限；后端调用站点抓取时按此值请求 pageSize
+排序规则：默认不排序（按抓取顺序），可选做种人数升降序、发布时间升降序、种子体积升降序
+入库数量：默认 0（不限制），按任务过滤规则命中后取前 N 个入库
 即将过期阈值：默认 120 分钟
 ```
 
@@ -205,6 +213,14 @@ type TaskItem = {
   freeOnly: boolean
   autoPush: boolean
   discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
+  fetchLimit?: number
+  sortRule?: 'SEEDERS_ASC' | 'SEEDERS_DESC' | 'CREATED_DESC' | 'CREATED_ASC' | 'SIZE_DESC' | 'SIZE_ASC'
+  torrentCountCondition?: 'GT' | 'EQ' | 'LT'
+  torrentCount?: number
+  seederCondition?: 'GT' | 'EQ' | 'LT'
+  seederCount?: number
+  sizeMinGb?: number
+  sizeMaxGb?: number
   expiringSoonMinutes?: number
   savePathOverride?: string
   categoryOverride?: string
@@ -261,6 +277,7 @@ TEST：点击【测试】，只返回弹窗结果，不写种子记录，不推�
 - 站点绑定的代理不存在或已禁用时任务不可运行，并记录明确错误。
 - 日志不输出 Cookie、密钥、密码、下载链接。
 - 修改执行间隔需要最小值限制，最小 `30` 分钟。
+- 抓取数量需要在 1 到 1000 之间，超出范围返回校验错误。
 - 删除任务不删除已抓取种子记录，只停止后续调度。
 - 新建、编辑、打开开关、关闭开关、测试、运行和删除任务都需要写操作日志。
 
@@ -300,6 +317,7 @@ TEST：点击【测试】，只返回弹窗结果，不写种子记录，不推�
 - [x] 确认自动执行开关替代启用/暂停。
 - [x] 确认测试按钮不写种子记录、不推送、不写任务日志。
 - [x] 确认任务操作写入操作日志。
+- [x] 确认抓取数量默认 100，可配置范围 1~1000。
 - [ ] 确认手动运行和测试的限频时间。
 - [ ] 确认 autoPush=false 时是否允许在种子模块批量补推。
 
@@ -307,6 +325,7 @@ TEST：点击【测试】，只返回弹窗结果，不写种子记录，不推�
 
 - 可选择站点和下载器创建任务。
 - 可设置任务执行间隔、自动执行开关、是否只抓免费和是否自动推送。
+- 可在新增/编辑任务时设置抓取数量（默认 100，1~1000），控制每次从站点列表抓取的种子候选上限。
 - 打开自动执行开关后，从打开时间开始按间隔分钟执行。
 - 关闭自动执行开关后，不再自动计时执行。
 - 点击【测试】能弹出抓取结果，且不产生种子记录、不推送、不写任务日志。

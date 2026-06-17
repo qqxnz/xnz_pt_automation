@@ -36,6 +36,7 @@ export type TaskItem = {
   torrentCountCondition?: TorrentCountCondition
   torrentCount?: number
   sortRule?: TaskSortRule
+  fetchLimit?: number
   savePathOverride?: string
   categoryOverride?: string
   tagsOverride?: string[]
@@ -69,6 +70,7 @@ export type TaskPayload = {
   torrentCountCondition?: TorrentCountCondition | ''
   torrentCount?: number
   sortRule?: TaskSortRule | ''
+  fetchLimit?: number
   savePathOverride?: string
   categoryOverride?: string
   tagsOverride?: string[]

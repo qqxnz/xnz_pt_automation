@@ -912,7 +912,7 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
     const title = textFromHtml(detailsMatch[3])
     if (!title || title.length < 3) continue
     const text = textFromHtml(row)
-    const sizes = [...text.matchAll(/([\d,.]+)\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB|B)\b/gi)]
+    const sizes = [...text.matchAll(/([\d,.]+)\s*(?:TiB|TB|GiB|GB|MiB|MB|KiB|KB)\b/gi)]
     const seeders = readLinkedNumber(row, '#seeders')
     const leechers = readLinkedNumber(row, '#leechers')
     items.push({
@@ -925,7 +925,6 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
       leechers,
       tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
     })
-    if (items.length >= 50) break
   }
   return items.length && items.some((item) => item.size !== undefined || item.seeders !== undefined || item.leechers !== undefined) ? items : parseNexusTorrentLinks(html)
 }
@@ -1020,15 +1019,58 @@ async function browseMTeamTorrents(site: SiteRecord, keyword: string, page: numb
   }
 }
 
-async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPath = '/torrents.php') {
-  const path = `${torrentPath}${keyword ? `?search=${encodeURIComponent(keyword)}` : ''}`
-  const { text: html, finalUrl, httpStatus } = await fetchWithCookie(site, path)
-  const items = parseNexusTorrentRows(html)
-  if (!items.length && looksLikeAuthPage(html)) {
+// NexusPHP 列表页单页默认行数（多数站点默认 50，部分站点可被管理员调整；用于估算需要的页数）
+const NEXUSPHP_DEFAULT_PAGE_SIZE = 50
+// 单次 browseTorrents 最多翻多少页，避免单次任务拉取过多触发站点反爬
+const NEXUSPHP_MAX_PAGES_PER_CALL = 20
+
+function buildNexusListUrl(torrentPath: string, keyword: string, page: number): string {
+  const params: string[] = []
+  if (page > 1) params.push(`page=${page}`)
+  if (keyword) params.push(`search=${encodeURIComponent(keyword)}`)
+  const query = params.length ? `?${params.join('&')}` : ''
+  return `${torrentPath}${query}`
+}
+
+async function browseNexusTorrents(site: SiteRecord, keyword: string, torrentPath = '/torrents.php', page = 1, pageSize = NEXUSPHP_DEFAULT_PAGE_SIZE) {
+  const target = Math.max(1, pageSize)
+  const startPage = Math.max(1, page)
+  const maxPages = Math.min(NEXUSPHP_MAX_PAGES_PER_CALL, Math.max(1, Math.ceil(target / NEXUSPHP_DEFAULT_PAGE_SIZE) + 1))
+  const items: TorrentListItem[] = []
+  const seen = new Set<string>()
+  let firstPageAuthError: { finalUrl?: string; httpStatus?: number; bodyExcerpt: string } | undefined
+
+  for (let p = startPage, fetched = 0; fetched < maxPages && items.length < target; p += 1, fetched += 1) {
+    const path = buildNexusListUrl(torrentPath, keyword, p)
+    const { text: html, finalUrl, httpStatus } = await fetchWithCookie(site, path)
+    const isAuthPage = looksLikeAuthPage(html)
+
+    if (p === startPage && isAuthPage) {
+      firstPageAuthError = { finalUrl, httpStatus, bodyExcerpt: html.replace(/\s+/g, ' ').trim().slice(0, 300) }
+      break
+    }
+    if (isAuthPage) break
+
+    const pageItems = parseNexusTorrentRows(html)
+    if (!pageItems.length) break
+
+    let addedFromPage = 0
+    for (const item of pageItems) {
+      if (!item.id || seen.has(item.id)) continue
+      seen.add(item.id)
+      items.push(item)
+      addedFromPage += 1
+      if (items.length >= target) break
+    }
+    if (addedFromPage === 0) break
+  }
+
+  if (!items.length && firstPageAuthError) {
     const e: Error & { diagnostic?: unknown } = new Error('Cookie 访问失败：需要重新登录')
-    e.diagnostic = { finalUrl, httpStatus, bodyExcerpt: html.replace(/\s+/g, ' ').trim().slice(0, 300) }
+    e.diagnostic = firstPageAuthError
     throw e
   }
+
   return { total: items.length, items }
 }
 
@@ -1052,7 +1094,7 @@ export async function browseTorrents(site: SiteRecord, keyword: string, page: nu
   if (site.cookie) {
     try {
       const torrentPath = definition?.strategy === 'NEXUSPHP' ? definition.torrentPath : '/torrents.php'
-      return { credential: 'COOKIE' as Credential, ...(await browseNexusTorrents(site, keyword, torrentPath)) }
+      return { credential: 'COOKIE' as Credential, ...(await browseNexusTorrents(site, keyword, torrentPath, page, pageSize)) }
     } catch (error) {
       errors.push(`COOKIE: ${error instanceof Error ? error.message : '访问失败'}`)
     }

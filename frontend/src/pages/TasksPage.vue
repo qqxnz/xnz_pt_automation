@@ -164,6 +164,9 @@
           <section class="form-section">
             <h3>抓取规则</h3>
             <div class="form-grid two-col">
+              <label>抓取数量
+                <input v-model.number="form.fetchLimit" min="1" max="1000" step="1" type="number" placeholder="默认 100" />
+              </label>
               <label class="full">排序规则
                 <AppSelect
                   v-model="form.sortRule"
@@ -330,6 +333,7 @@ const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: numbe
   torrentCountCondition: '',
   torrentCount: 0,
   sortRule: '',
+  fetchLimit: 100,
   savePathOverride: ''
 })
 
@@ -405,6 +409,7 @@ function resetForm() {
     torrentCountCondition: '',
     torrentCount: 0,
     sortRule: '',
+    fetchLimit: 100,
     savePathOverride: '',
     categoryOverride: undefined,
     tagsOverride: undefined
@@ -439,6 +444,7 @@ function openEdit(task: TaskItem) {
     torrentCountCondition: task.torrentCountCondition ?? '',
     torrentCount: task.torrentCount ?? 0,
     sortRule: task.sortRule ?? '',
+    fetchLimit: task.fetchLimit ?? 100,
     savePathOverride: task.savePathOverride,
     categoryOverride: task.categoryOverride,
     tagsOverride: task.tagsOverride
@@ -457,6 +463,8 @@ function validateForm() {
   if (!Number.isInteger(form.sizeMaxGb) || (form.sizeMaxGb ?? 0) < 0) return '种子最大体积必须是大于等于 0 的整数'
   if ((form.sizeMinGb ?? 0) > 0 && (form.sizeMaxGb ?? 0) > 0 && (form.sizeMinGb ?? 0) > (form.sizeMaxGb ?? 0)) return '种子最小体积不能大于种子最大体积'
   if ((form.torrentCount ?? 0) > 0 && !Number.isInteger(form.torrentCount)) return '入库数量必须是非负整数'
+  const fetchLimit = Number(form.fetchLimit) || 0
+  if (!Number.isInteger(fetchLimit) || fetchLimit < 1 || fetchLimit > 1000) return '抓取数量必须是 1 到 1000 之间的整数'
   const kbps = Number(form.lowUploadKbps) || 0
   const mins = Number(form.lowUploadMinutes) || 0
   if ((kbps > 0) !== (mins > 0)) return '低速删除的速度阈值和持续时间需同时填写'
@@ -516,6 +524,7 @@ async function saveTask() {
       torrentCountCondition: (form.torrentCount ?? 0) > 0 ? 'LT' : '',
       torrentCount: form.torrentCount,
       sortRule: form.sortRule || undefined,
+      fetchLimit: Number(form.fetchLimit) || 100,
       savePathOverride: form.savePathOverride,
       categoryOverride: form.categoryOverride,
       tagsOverride: form.tagsOverride
@@ -614,6 +623,7 @@ function rangeText(task: TaskItem) {
     else parts.push(`体积 ≤ ${sizeMax} GB`)
   }
   if (task.torrentCountCondition && (task.torrentCount ?? 0) > 0) parts.push(`入库数量 ${task.torrentCount}`)
+  parts.push(`抓取数量 ${task.fetchLimit ?? 100}`)
   if (task.sortRule) {
     const opt = sortRuleOptions.find((item) => item.value === task.sortRule)
     if (opt) parts.push(`排序：${opt.label}`)
