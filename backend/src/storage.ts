@@ -325,8 +325,6 @@ export type TorrentQuery = {
   downloaderId?: string
   taskId?: string
   pushStatus?: string
-  status?: string
-  freeStatus?: string
   sourceRunMode?: string
   page: number
   pageSize: number
@@ -1538,30 +1536,6 @@ function torrentWhere(query: Omit<TorrentQuery, 'page' | 'pageSize'>) {
   if (query.pushStatus && query.pushStatus !== 'ALL') {
     clauses.push('push_status = ?')
     params.push(query.pushStatus)
-  }
-  const status = query.status ?? 'ALL'
-  if (status === 'RUNNING') {
-    clauses.push("push_status = 'PUSHED'")
-  } else if (status === 'NOT_RUNNING') {
-    clauses.push("push_status IN ('PUSH_FAILED', 'DELETED')")
-  } else if (status !== 'ALL') {
-    clauses.push('current_state = ?')
-    params.push(status)
-  }
-  const freeStatus = query.freeStatus ?? 'ALL'
-  if (freeStatus === 'FREE_NOW') {
-    clauses.push('(is_free_now = 1 OR (free_end_at IS NOT NULL AND free_end_at > ?))')
-    params.push(new Date().toISOString())
-  } else if (freeStatus === 'EXPIRING_SOON') {
-    clauses.push("current_state = 'EXPIRING_SOON'")
-  } else if (freeStatus === 'EXPIRED') {
-    clauses.push("(current_state = 'EXPIRED' OR (free_end_at IS NOT NULL AND free_end_at <= ?))")
-    params.push(new Date().toISOString())
-  } else if (freeStatus === 'NORMAL') {
-    clauses.push("discount_type = 'NORMAL' AND NOT (is_free_now = 1 OR (free_end_at IS NOT NULL AND free_end_at > ?))")
-    params.push(new Date().toISOString())
-  } else if (freeStatus === 'FREE_NO_END') {
-    clauses.push('is_free_now = 1 AND free_end_at IS NULL')
   }
   if (query.sourceRunMode && query.sourceRunMode !== 'ALL') {
     clauses.push('source_run_mode = ?')

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserByUsername, listDownloadersFromDb, listSitesFromDb, listTorrents, queryLogs, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
+import { findUserByUsername, listDownloadersFromDb, listSitesFromDb, listTorrents, queryLogs, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -114,16 +114,18 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       pushFailedCount: log.pushFailedCount
     }))
 
-  const todayNew = await listTorrents({ page: 1, pageSize: 1 })
-  const pushedCount = await listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' })
-  const expiringSoon = await listTorrents({ page: 1, pageSize: 1, freeStatus: 'EXPIRING_SOON' })
+  const [todayNew, pushedCount, torrentStats] = await Promise.all([
+    listTorrents({ page: 1, pageSize: 1 }),
+    listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' }),
+    readTorrentStats()
+  ])
 
   res.json({
     sites: siteStats,
     torrents: {
       todayNew: todayNew.total,
       pushed: pushedCount.total,
-      expiringSoon: expiringSoon.total
+      expiringSoon: torrentStats.expiringSoon
     },
     transfer,
     risks,

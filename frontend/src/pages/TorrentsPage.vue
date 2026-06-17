@@ -29,18 +29,12 @@
           <option value="">下载器：全部</option>
           <option v-for="downloader in downloaderOptions" :key="downloader.id" :value="downloader.id">{{ downloader.name }}</option>
         </select>
-        <select v-model="filters.status" @change="resetPageAndLoad">
+        <select v-model="filters.pushStatus" @change="resetPageAndLoad">
           <option value="ALL">状态：全部</option>
-          <option value="RUNNING">运行中</option>
-          <option value="NOT_RUNNING">未运行</option>
-        </select>
-        <select v-model="filters.freeStatus" @change="resetPageAndLoad">
-          <option value="ALL">种子状态：全部</option>
-          <option value="FREE_NOW">免费中</option>
-          <option value="EXPIRING_SOON">即将过期</option>
-          <option value="EXPIRED">已过期</option>
-          <option value="NORMAL">非免费</option>
-          <option value="FREE_NO_END">免费但无到期时间</option>
+          <option value="NEW">等待推送</option>
+          <option value="PUSHED">推送成功</option>
+          <option value="PUSH_FAILED">推送失败</option>
+          <option value="DELETED">已删除</option>
         </select>
         <button class="secondary-button" type="button" :disabled="loading" @click="refreshNow">
           {{ loading ? '刷新中...' : '刷新列表' }}
@@ -50,12 +44,6 @@
       <section class="panel">
         <div class="panel-title-row">
           <h2>种子列表</h2>
-          <div class="torrent-select-summary">
-            <button class="text-button select-all-button" type="button" :disabled="!items.length || loading" @click="toggleSelectCurrentPage">
-              {{ isCurrentPageAllSelected ? '取消全选' : '全选当前页' }}
-            </button>
-            <span>已选 {{ selectedIds.length }} 个 · 共 {{ total }} 个</span>
-          </div>
         </div>
         <div v-if="error" class="error-banner">{{ error }}<button type="button" @click="loadTorrents">重试</button></div>
         <div v-if="!items.length && !loading && initialLoaded" class="sites-empty">
@@ -180,9 +168,9 @@
             </div>
           </article>
         </div>
-        <div v-if="items.length" class="torrent-batch-bar">
-          <span>已选 {{ selectedIds.length }} 个</span>
-          <div>
+        <div v-if="selectedIds.length" class="torrent-batch-bar" role="region" aria-label="批量操作">
+          <span class="torrent-batch-count">已选 {{ selectedIds.length }} 个</span>
+          <div class="torrent-batch-actions">
             <button class="secondary-button blue" type="button" :disabled="!selectedPushableIds.length || batchPushing" @click="batchPush">
               {{ batchPushing ? '批量推送中...' : `批量推送${selectedPushableIds.length ? ` (${selectedPushableIds.length})` : ''}` }}
             </button>
@@ -358,13 +346,12 @@ type PushFormState = {
 }
 const pushForm = ref<PushFormState>()
 let refreshTimer: number | undefined
-const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'status' | 'freeStatus' | 'page' | 'pageSize'>>>({
+const filters = reactive<Required<Pick<TorrentFilter, 'keyword' | 'siteId' | 'downloaderId' | 'taskId' | 'pushStatus' | 'page' | 'pageSize'>>>({
   keyword: '',
   siteId: '',
   downloaderId: '',
   taskId: '',
-  status: 'ALL',
-  freeStatus: 'ALL',
+  pushStatus: 'ALL',
   page: 1,
   pageSize: 20
 })

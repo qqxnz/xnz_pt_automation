@@ -68,8 +68,6 @@ export type TorrentFilter = {
   downloaderId?: string
   taskId?: string
   pushStatus?: 'ALL' | 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
-  status?: 'ALL' | 'RUNNING' | 'NOT_RUNNING'
-  freeStatus?: 'ALL' | 'FREE_NOW' | 'EXPIRING_SOON' | 'EXPIRED' | 'NORMAL' | 'FREE_NO_END'
   sourceRunMode?: 'ALL' | 'AUTO' | 'MANUAL_RUN'
   page?: number
   pageSize?: number

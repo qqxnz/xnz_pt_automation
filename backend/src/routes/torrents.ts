@@ -63,12 +63,10 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
   const downloaderId = String(req.query.downloaderId ?? '')
   const taskId = String(req.query.taskId ?? '')
   const pushStatus = String(req.query.pushStatus ?? 'ALL')
-  const status = String(req.query.status ?? 'ALL')
-  const freeStatus = String(req.query.freeStatus ?? 'ALL')
   const sourceRunMode = String(req.query.sourceRunMode ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
-  const result = await listTorrents({ keyword, siteId, downloaderId, taskId, pushStatus, status, freeStatus, sourceRunMode, page, pageSize })
+  const result = await listTorrents({ keyword, siteId, downloaderId, taskId, pushStatus, sourceRunMode, page, pageSize })
   res.json({ items: result.items.map(safeTorrent), total: result.total, page: result.page, pageSize: result.pageSize, stats: await readTorrentStats() })
 })
 
