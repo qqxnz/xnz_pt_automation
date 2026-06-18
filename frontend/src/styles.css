@@ -460,6 +460,100 @@ a {
   margin-top: 32px;
 }
 
+.dashboard-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.dashboard-section-card {
+  display: grid;
+  gap: 24px;
+  align-content: start;
+}
+
+.dashboard-section-card.wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 18px;
+}
+
+.dashboard-stat-grid.compact {
+  margin-top: 4px;
+}
+
+.dashboard-stat-grid div {
+  border-radius: 16px;
+  padding: 18px;
+  background: #f8fafc;
+}
+
+.dashboard-stat-grid span,
+.dashboard-table-row span,
+.dashboard-job-row small {
+  color: #6b7280;
+  font-weight: 800;
+}
+
+.dashboard-stat-grid strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.dashboard-table {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-table-row {
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  border-radius: 16px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.downloader-overview-table .dashboard-table-row {
+  grid-template-columns: minmax(120px, 1.2fr) 120px 100px 130px 130px;
+}
+
+.dashboard-table-row.table-head {
+  background: transparent;
+  padding-block: 0;
+  font-weight: 900;
+}
+
+.dashboard-job-list {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 16px;
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.dashboard-job-row strong,
+.dashboard-job-row small {
+  display: block;
+}
+
+.dashboard-job-row small {
+  margin-top: 8px;
+}
+
 .dashboard-grid.lower {
   align-items: start;
 }
@@ -3026,6 +3120,8 @@ a {
 
   .metric-grid,
   .dashboard-grid,
+  .dashboard-sections,
+  .dashboard-stat-grid,
   .transfer-grid,
   .transfer-total,
   .quick-actions,
@@ -3040,6 +3136,23 @@ a {
   .ua-row {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+
+  .dashboard-section-card.wide {
+    grid-column: auto;
+  }
+
+  .downloader-overview-table .dashboard-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-table-row.table-head {
+    display: none;
+  }
+
+  .dashboard-job-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .torrents-toolbar {

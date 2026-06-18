@@ -3,7 +3,7 @@
     <div class="dashboard-head">
       <div>
         <h1>首页概览</h1>
-        <p>查看 PT 站点、种子、下载器和任务的整体运行状态</p>
+        <p>按站点、下载器、任务、种子和流量查看运行状态</p>
       </div>
       <div class="head-actions">
         <span v-if="lastUpdatedAt">最近更新：{{ lastUpdatedAt }}</span>
@@ -18,110 +18,99 @@
       <button type="button" @click="loadOverview">重试</button>
     </div>
 
-    <section class="metric-grid">
-      <article class="metric-card">
-        <span>已配置站点</span>
-        <strong>{{ overview?.sites.total ?? 0 }}</strong>
-        <small>个站点</small>
-      </article>
-      <article class="metric-card">
-        <span>今日种子</span>
-        <strong>{{ overview?.torrents.todayNew ?? 0 }}</strong>
-        <small>新增</small>
-      </article>
-      <article class="metric-card">
-        <span>已推送下载器</span>
-        <strong class="success">{{ overview?.torrents.pushed ?? 0 }}</strong>
-        <small>任务</small>
-      </article>
-      <article class="metric-card">
-        <span>即将过期</span>
-        <strong class="warning">{{ overview?.torrents.expiringSoon ?? 0 }}</strong>
-        <small>个种子</small>
-      </article>
-    </section>
-
-    <section class="dashboard-grid">
-      <article class="panel">
-        <h2>传输状态</h2>
-        <div class="transfer-grid">
-          <div>
-            <span>当前上传速度</span>
-            <strong class="success">{{ formatBytes(overview?.transfer?.uploadSpeed, '/s') }}</strong>
-          </div>
-          <div>
-            <span>当前下载速度</span>
-            <strong>{{ formatBytes(overview?.transfer?.downloadSpeed, '/s') }}</strong>
-          </div>
+    <section class="dashboard-sections">
+      <article class="panel dashboard-section-card">
+        <div class="panel-title-row">
+          <h2>站点</h2>
+          <router-link to="/sites">查看站点</router-link>
         </div>
-        <div class="transfer-total">
-          <div><span>总上传量</span><strong>{{ formatBytes(overview?.transfer?.uploadedTotal) }}</strong></div>
-          <div><span>总下载量</span><strong>{{ formatBytes(overview?.transfer?.downloadedTotal) }}</strong></div>
+        <div class="dashboard-stat-grid">
+          <div><span>已配置站点</span><strong>{{ overview?.sites.total ?? 0 }}</strong></div>
+          <div><span>在线</span><strong class="success">{{ overview?.sites.online ?? 0 }}</strong></div>
+          <div><span>认证失败</span><strong class="warning">{{ overview?.sites.authFailed ?? 0 }}</strong></div>
+          <div><span>离线</span><strong class="danger">{{ overview?.sites.offline ?? 0 }}</strong></div>
+        </div>
+        <div class="dashboard-stat-grid compact">
+          <div><span>开启签到</span><strong>{{ overview?.sites.signinEnabled ?? 0 }}</strong></div>
+          <div><span>今日已签到</span><strong class="success">{{ overview?.sites.todaySigninSuccess ?? 0 }}</strong></div>
+          <div><span>今日签到失败</span><strong class="danger">{{ overview?.sites.todaySigninFailed ?? 0 }}</strong></div>
+          <div><span>今日待签到</span><strong class="warning">{{ overview?.sites.todaySigninPending ?? 0 }}</strong></div>
         </div>
       </article>
 
-      <article class="panel">
-        <h2>站点健康状态</h2>
-        <div class="health-bar">
-          <span class="online" :style="{ width: healthWidth('online') }" />
-          <span class="auth-failed" :style="{ width: healthWidth('authFailed') }" />
-          <span class="offline" :style="{ width: healthWidth('offline') }" />
-          <span class="unknown" :style="{ width: healthWidth('unknown') }" />
+      <article class="panel dashboard-section-card">
+        <div class="panel-title-row">
+          <h2>下载器</h2>
+          <router-link to="/downloaders">查看下载器</router-link>
         </div>
-        <div class="health-list">
-          <span>在线 {{ overview?.sites.online ?? 0 }}</span>
-          <span>认证失败 {{ overview?.sites.authFailed ?? 0 }}</span>
-          <span>离线 {{ overview?.sites.offline ?? 0 }}</span>
-          <span>未检测 {{ overview?.sites.unknown ?? 0 }}</span>
-        </div>
-        <div v-if="!overview?.sites.total" class="empty-tip">暂无站点，添加第一个站点后开始统计健康状态。</div>
-      </article>
-    </section>
-
-    <section class="dashboard-grid lower">
-      <article class="panel">
-        <h2>风险提示</h2>
-        <div v-if="overview?.risks.length" class="risk-list">
-          <div v-for="risk in overview.risks" :key="risk.type" class="risk-item">
-            <span>{{ risk.message }}</span>
-            <router-link v-if="risk.actionPath" :to="risk.actionPath">{{ risk.actionText ?? '处理' }}</router-link>
+        <div v-if="overview?.downloaders.items.length" class="dashboard-table downloader-overview-table">
+          <div class="dashboard-table-row table-head"><span>名称</span><span>类型</span><span>状态</span><span>上传速度</span><span>下载速度</span></div>
+          <div v-for="downloader in overview.downloaders.items" :key="downloader.id" class="dashboard-table-row">
+            <strong>{{ downloader.name }}</strong>
+            <span>{{ downloaderTypeText(downloader.type) }}</span>
+            <span class="chip" :class="downloaderStatusMeta(downloader.status).className">{{ downloaderStatusMeta(downloader.status).label }}</span>
+            <span class="success">{{ formatBytes(downloader.uploadSpeed, '/s') }}</span>
+            <span>{{ formatBytes(downloader.downloadSpeed, '/s') }}</span>
           </div>
         </div>
-        <div v-else class="empty-tip">暂无关键风险。</div>
+        <div v-else class="empty-tip">暂无下载器。</div>
       </article>
 
-      <article class="panel">
-        <h2>快捷操作</h2>
-        <div class="quick-actions">
-          <router-link v-for="action in overview?.quickActions ?? []" :key="action.text" :to="action.path">
-            {{ action.text }}
-          </router-link>
+      <article class="panel dashboard-section-card">
+        <div class="panel-title-row">
+          <h2>种子</h2>
+          <router-link to="/torrents">查看种子</router-link>
+        </div>
+        <div class="dashboard-stat-grid">
+          <div><span>种子数量</span><strong>{{ overview?.torrents.total ?? 0 }}</strong></div>
+          <div><span>运行中</span><strong class="success">{{ overview?.torrents.running ?? 0 }}</strong></div>
+          <div><span>未运行</span><strong class="warning">{{ overview?.torrents.notRunning ?? 0 }}</strong></div>
+          <div><span>总上传</span><strong>{{ formatBytes(overview?.torrents.totalUploaded) }}</strong></div>
+          <div><span>总下载</span><strong>{{ formatBytes(overview?.torrents.totalDownloaded) }}</strong></div>
         </div>
       </article>
-    </section>
 
-    <section class="panel jobs-panel">
-      <h2>最近任务</h2>
-      <div v-if="overview?.recentJobs.length" class="job-list">
-        <article v-for="job in overview.recentJobs" :key="job.id ?? `${job.name}-${job.finishedAt ?? ''}`" class="job-row">
-          <div class="log-meta">
-            <time>{{ formatTime(job.createdAt ?? job.finishedAt) }}</time>
-            <span class="status-badge" :class="job.status.toLowerCase()">{{ statusText(job.status) }}</span>
-          </div>
-          <div>
-            <strong>{{ job.name }}</strong>
-            <p>{{ job.summary }}</p>
-            <small>{{ jobMetaText(job) }}</small>
-          </div>
-        </article>
-      </div>
-      <div v-else class="empty-tip">暂无最近任务记录。</div>
+      <article class="panel dashboard-section-card">
+        <div class="panel-title-row">
+          <h2>流量</h2>
+          <router-link to="/site-statistics">查看统计</router-link>
+        </div>
+        <div class="dashboard-stat-grid">
+          <div><span>总上传</span><strong class="success">{{ formatBytes(overview?.traffic.uploadedTotal) }}</strong></div>
+          <div><span>总下载</span><strong>{{ formatBytes(overview?.traffic.downloadedTotal) }}</strong></div>
+          <div><span>今日上传</span><strong class="success">{{ formatBytes(overview?.traffic.todayUploaded) }}</strong></div>
+          <div><span>今日下载</span><strong>{{ formatBytes(overview?.traffic.todayDownloaded) }}</strong></div>
+        </div>
+      </article>
+
+      <article class="panel dashboard-section-card wide">
+        <div class="panel-title-row">
+          <h2>任务</h2>
+          <router-link to="/tasks">查看任务</router-link>
+        </div>
+        <div class="dashboard-stat-grid">
+          <div><span>任务数量</span><strong>{{ overview?.tasks.total ?? 0 }}</strong></div>
+          <div><span>自动执行</span><strong class="success">{{ overview?.tasks.autoRunEnabled ?? 0 }}</strong></div>
+          <div><span>运行中</span><strong>{{ overview?.tasks.running ?? 0 }}</strong></div>
+          <div><span>失败</span><strong class="danger">{{ overview?.tasks.failed ?? 0 }}</strong></div>
+        </div>
+        <div v-if="overview?.tasks.recent.length" class="dashboard-job-list">
+          <article v-for="job in overview.tasks.recent" :key="job.id ?? `${job.name}-${job.finishedAt ?? ''}`" class="dashboard-job-row">
+            <div>
+              <strong>{{ job.name }}</strong>
+              <small>{{ job.summary }}</small>
+            </div>
+            <span class="status-badge" :class="job.status.toLowerCase()">{{ jobStatusText(job.status) }}</span>
+          </article>
+        </div>
+        <div v-else class="empty-tip">暂无最近任务记录。</div>
+      </article>
     </section>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import { getDashboardOverview, type DashboardOverview } from '../api/dashboard'
 
@@ -129,8 +118,6 @@ const overview = ref<DashboardOverview>()
 const loading = ref(false)
 const error = ref('')
 const lastUpdatedAt = ref('')
-
-const totalSites = computed(() => overview.value?.sites.total || 0)
 
 function formatBytes(value?: number, suffix = '') {
   if (value === undefined || value === null) return '--'
@@ -145,52 +132,27 @@ function formatBytes(value?: number, suffix = '') {
   return `${current.toFixed(index === 0 ? 0 : 1)} ${units[index]}${suffix}`
 }
 
-function formatTime(value?: string) {
-  return value ? new Date(value).toLocaleString('zh-CN') : '-'
+function downloaderTypeText(type: DashboardOverview['downloaders']['items'][number]['type']) {
+  return type === 'QBITTORRENT' ? 'qBittorrent' : type
 }
 
-function statusText(status: DashboardOverview['recentJobs'][number]['status']) {
+function downloaderStatusMeta(status: DashboardOverview['downloaders']['items'][number]['status']) {
+  const map = {
+    ONLINE: { label: '在线', className: 'online-chip' },
+    OFFLINE: { label: '离线', className: 'offline-chip' },
+    AUTH_FAILED: { label: '认证失败', className: 'auth-chip' },
+    UNKNOWN: { label: '未检测', className: 'unknown-chip' }
+  }
+  return map[status]
+}
+
+function jobStatusText(status: DashboardOverview['tasks']['recent'][number]['status']) {
   const map = {
     SUCCESS: '成功',
     FAILED: '失败',
     RUNNING: '运行中'
   }
   return map[status]
-}
-
-function runModeText(mode: NonNullable<DashboardOverview['recentJobs'][number]['runMode']>) {
-  const map = {
-    AUTO: '自动执行',
-    MANUAL_RUN: '手动运行'
-  }
-  return map[mode]
-}
-
-function taskResultText(job: DashboardOverview['recentJobs'][number]) {
-  const parts = [
-    job.fetchedCount === undefined ? '' : `抓取：${job.fetchedCount}`,
-    job.skippedExistingCount === undefined ? '' : `去重：${job.skippedExistingCount}`,
-    job.matchedCount === undefined ? '' : `命中：${job.matchedCount}`,
-    job.pushedCount === undefined ? '' : `推送成功：${job.pushedCount}`,
-    job.pushFailedCount === undefined ? '' : `推送失败：${job.pushFailedCount}`
-  ].filter(Boolean)
-  return parts.join('，')
-}
-
-function jobMetaText(job: DashboardOverview['recentJobs'][number]) {
-  return [
-    job.runMode ? `来源：${runModeText(job.runMode)}` : '',
-    job.startedAt ? `开始：${formatTime(job.startedAt)}` : '',
-    job.finishedAt ? `结束：${formatTime(job.finishedAt)}` : '',
-    taskResultText(job)
-  ]
-    .filter(Boolean)
-    .join(' / ')
-}
-
-function healthWidth(key: keyof DashboardOverview['sites']) {
-  if (!totalSites.value || key === 'total') return '0%'
-  return `${Math.max(((overview.value?.sites[key] ?? 0) / totalSites.value) * 100, 0)}%`
 }
 
 async function loadOverview() {

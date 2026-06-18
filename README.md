@@ -7,7 +7,7 @@
 当前镜像发布在 Docker Hub：
 
 ```bash
-docker pull qqxnz/xnz-pt-automation:0.3.1
+docker pull qqxnz/xnz-pt-automation:0.5.0
 ```
 
 推荐使用 `docker compose` 启动：
@@ -15,7 +15,7 @@ docker pull qqxnz/xnz-pt-automation:0.3.1
 ```yaml
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.3.1
+    image: qqxnz/xnz-pt-automation:0.5.0
     container_name: xnz-pt-automation
     restart: unless-stopped
     ports:
@@ -51,12 +51,12 @@ docker run -d \
   -p 3180:3180 \
   -e DEFAULT_ADMIN_PASSWORD=123456 \
   -v "$(pwd)/data:/data" \
-  qqxnz/xnz-pt-automation:0.3.1
+  qqxnz/xnz-pt-automation:0.5.0
 ```
 
 ### 镜像版本
 
-- `qqxnz/xnz-pt-automation:0.3.1`：当前稳定版本，推荐部署时使用固定版本。
+- `qqxnz/xnz-pt-automation:0.5.0`：当前稳定版本，推荐部署时使用固定版本。
 - `qqxnz/xnz-pt-automation:latest`：指向最新发布版本，适合测试或快速体验。
 
 升级到新版本时，先拉取新镜像，再重建容器：

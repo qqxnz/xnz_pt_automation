@@ -7,38 +7,65 @@ export type DashboardOverview = {
     offline: number
     authFailed: number
     unknown: number
+    signinEnabled: number
+    todaySigninSuccess: number
+    todaySigninFailed: number
+    todaySigninPending: number
+  }
+  downloaders: {
+    total: number
+    online: number
+    offline: number
+    authFailed: number
+    unknown: number
+    items: Array<{
+      id: string
+      name: string
+      type: 'QBITTORRENT'
+      status: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+      uploadSpeed: number
+      downloadSpeed: number
+    }>
+  }
+  tasks: {
+    total: number
+    autoRunEnabled: number
+    running: number
+    failed: number
+    recent: Array<{
+      id?: string
+      name: string
+      status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+      summary: string
+      createdAt?: string
+      runMode?: 'AUTO' | 'MANUAL_RUN'
+      startedAt?: string
+      finishedAt?: string
+      fetchedCount?: number
+      matchedCount?: number
+      skippedExistingCount?: number
+      pushedCount?: number
+      pushFailedCount?: number
+    }>
   }
   torrents: {
-    todayNew: number
-    pushed: number
-    expiringSoon: number
+    total: number
+    running: number
+    notRunning: number
+    totalUploaded: number
+    totalDownloaded: number
   }
-  transfer: {
-    uploadSpeed: number
-    downloadSpeed: number
+  traffic: {
     uploadedTotal: number
     downloadedTotal: number
-  } | null
+    todayUploaded: number
+    todayDownloaded: number
+  }
   risks: Array<{
     type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
     message: string
     actionText?: string
     actionPath?: string
-  }>
-  recentJobs: Array<{
-    id?: string
-    name: string
-    status: 'SUCCESS' | 'FAILED' | 'RUNNING'
-    summary: string
-    createdAt?: string
-    runMode?: 'AUTO' | 'MANUAL_RUN'
-    startedAt?: string
-    finishedAt?: string
-    fetchedCount?: number
-    matchedCount?: number
-    skippedExistingCount?: number
-    pushedCount?: number
-    pushFailedCount?: number
   }>
   quickActions: Array<{ text: string; path: string }>
 }

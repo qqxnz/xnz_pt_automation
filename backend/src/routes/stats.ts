@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserByUsername, listDownloadersFromDb, listSitesFromDb, listTorrents, queryLogs, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
+import { findUserByUsername, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
 import { verifyPassword } from '../utils/password.js'
 
@@ -13,47 +13,49 @@ type DashboardRisk = {
   actionPath: string
 }
 
-function localDayStartTime() {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  return start.getTime()
-}
-
 async function readTransferOverview(enabledDownloaders: DownloaderRecord[]) {
-  if (!enabledDownloaders.length) return null
-
   const results = await Promise.allSettled(enabledDownloaders.map((downloader) => getQbTransferInfo(downloader)))
-  const transfers = results
-    .filter((result): result is PromiseFulfilledResult<QbTransferInfo> => result.status === 'fulfilled')
-    .map((result) => result.value)
-  if (!transfers.length) return null
+  const byDownloader = new Map<string, QbTransferInfo>()
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') byDownloader.set(enabledDownloaders[index].id, result.value)
+  })
 
-  return transfers.reduce(
-    (total, transfer) => ({
-      uploadSpeed: total.uploadSpeed + transfer.uploadSpeed,
-      downloadSpeed: total.downloadSpeed + transfer.downloadSpeed,
-      uploadedTotal: total.uploadedTotal + transfer.uploadedTotal,
-      downloadedTotal: total.downloadedTotal + transfer.downloadedTotal
+  const total = [...byDownloader.values()].reduce(
+    (summary, transfer) => ({
+      uploadSpeed: summary.uploadSpeed + transfer.uploadSpeed,
+      downloadSpeed: summary.downloadSpeed + transfer.downloadSpeed,
+      uploadedTotal: summary.uploadedTotal + transfer.uploadedTotal,
+      downloadedTotal: summary.downloadedTotal + transfer.downloadedTotal
     }),
     { uploadSpeed: 0, downloadSpeed: 0, uploadedTotal: 0, downloadedTotal: 0 }
   )
+
+  return { byDownloader, total }
 }
 
 statsRouter.get('/overview', requireAuth, async (_req, res) => {
   await refreshStoredTorrentFreeStates()
 
-  const [sites, downloaders, recentLogs] = await Promise.all([
+  const [sites, downloaders, tasks, recentLogs, torrentStats] = await Promise.all([
     listSitesFromDb(),
     listDownloadersFromDb(),
-    queryLogs<TaskLogRecord>({ type: 'task', page: 1, pageSize: 5 })
+    listTasksFromDb(),
+    queryLogs<TaskLogRecord>({ type: 'task', page: 1, pageSize: 5 }),
+    readTorrentStats()
   ])
 
+  const today = new Date().toISOString().slice(0, 10)
+  const todaySigninLogs = await Promise.all(sites.map((site) => listLatestSigninLogBySiteAndDate(site.id, today)))
   const siteStats = {
     total: sites.length,
     online: sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
     offline: sites.filter((site) => site.connectivityStatus === 'OFFLINE').length,
     authFailed: sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
-    unknown: sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length
+    unknown: sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length,
+    signinEnabled: sites.filter((site) => site.signinEnabled).length,
+    todaySigninSuccess: todaySigninLogs.filter((log) => log?.status === 'SUCCESS' || log?.status === 'SKIPPED').length,
+    todaySigninFailed: todaySigninLogs.filter((log) => log?.status === 'FAILED').length,
+    todaySigninPending: sites.filter((site, index) => site.signinEnabled && !todaySigninLogs[index]).length
   }
   const risks: DashboardRisk[] = []
   const admin = await findUserByUsername('admin')
@@ -95,8 +97,6 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     })
   }
 
-  const todayStartTime = localDayStartTime()
-  const now = Date.now()
   const transfer = await readTransferOverview(downloaders.filter((downloader) => downloader.enabled))
   const recentJobs = recentLogs.items
     .map((log) => ({
@@ -113,23 +113,49 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       pushedCount: log.pushedCount,
       pushFailedCount: log.pushFailedCount
     }))
-
-  const [todayNew, pushedCount, torrentStats] = await Promise.all([
-    listTorrents({ page: 1, pageSize: 1 }),
-    listTorrents({ page: 1, pageSize: 1, pushStatus: 'PUSHED' }),
-    readTorrentStats()
-  ])
+  const todayTraffic = await readSiteStatistics({ startDate: today, endDate: today, page: 1, pageSize: 1 })
 
   res.json({
     sites: siteStats,
-    torrents: {
-      todayNew: todayNew.total,
-      pushed: pushedCount.total,
-      expiringSoon: torrentStats.expiringSoon
+    downloaders: {
+      total: downloaders.length,
+      online: downloaders.filter((downloader) => downloader.status === 'ONLINE').length,
+      offline: downloaders.filter((downloader) => downloader.status === 'OFFLINE').length,
+      authFailed: downloaders.filter((downloader) => downloader.status === 'AUTH_FAILED').length,
+      unknown: downloaders.filter((downloader) => downloader.status === 'UNKNOWN').length,
+      items: downloaders.map((downloader) => {
+        const speed = transfer.byDownloader.get(downloader.id)
+        return {
+          id: downloader.id,
+          name: downloader.name,
+          type: downloader.type,
+          status: speed ? 'ONLINE' : downloader.status,
+          uploadSpeed: speed?.uploadSpeed ?? 0,
+          downloadSpeed: speed?.downloadSpeed ?? 0
+        }
+      })
     },
-    transfer,
+    tasks: {
+      total: tasks.length,
+      autoRunEnabled: tasks.filter((task) => task.autoRunEnabled).length,
+      running: tasks.filter((task) => task.running).length,
+      failed: tasks.filter((task) => task.lastStatus === 'FAILED').length,
+      recent: recentJobs
+    },
+    torrents: {
+      total: torrentStats.total,
+      running: torrentStats.running,
+      notRunning: torrentStats.notRunning,
+      totalUploaded: torrentStats.totalUploaded,
+      totalDownloaded: torrentStats.totalDownloaded
+    },
+    traffic: {
+      uploadedTotal: transfer.total.uploadedTotal,
+      downloadedTotal: transfer.total.downloadedTotal,
+      todayUploaded: todayTraffic.totalUploaded,
+      todayDownloaded: todayTraffic.totalDownloaded
+    },
     risks,
-    recentJobs,
     quickActions: [
       { text: '新增站点', path: '/sites?action=create' },
       { text: '新增下载器', path: '/downloaders' },
