@@ -19,9 +19,11 @@
 ```text
 日志页
   |
-  |-- 操作日志
-  |-- 任务日志
-  |-- 签到日志
+  |-- 操作日志 (operation)
+  |-- 任务日志 (task)
+  |-- 定时日志 (schedule)
+  |-- 签到日志 (signin)
+  |-- 种子日志 (torrent)
 ```
 
 ## 3. 功能方案
@@ -91,10 +93,16 @@ MANUAL_RUN：用户点击【运行】。
 接口：
 
 ```text
-GET /api/logs?type=operation&page=&pageSize=&keyword=&status=&startAt=&endAt=
-GET /api/logs?type=task&page=&pageSize=&keyword=&status=&taskId=&runMode=&startAt=&endAt=
-GET /api/logs?type=signin&page=&pageSize=&keyword=&status=&siteId=&runMode=&startAt=&endAt=
+GET    /api/logs?type=operation&page=&pageSize=&keyword=&status=&startAt=&endAt=
+GET    /api/logs?type=task&page=&pageSize=&keyword=&status=&taskId=&runMode=&startAt=&endAt=
+GET    /api/logs?type=schedule&page=&pageSize=&keyword=&status=&startAt=&endAt=
+GET    /api/logs?type=signin&page=&pageSize=&keyword=&status=&siteId=&runMode=&startAt=&endAt=
+GET    /api/logs?type=torrent&page=&pageSize=&keyword=&status=&siteId=&startAt=&endAt=
+GET    /api/logs/export?type=...                # 返回 CSV（带 BOM \uFEFF）
+DELETE /api/logs?type=...                       # 清空指定类型
 ```
+
+- `type` 取值白名单：`operation | task | schedule | signin | torrent`（默认 `operation`）
 
 操作日志：
 
@@ -152,6 +160,50 @@ type SigninLog = {
   startedAt: string
   finishedAt?: string
   durationMs?: number
+  createdAt: string
+}
+```
+
+定时日志（v0.5.0 新增）：
+
+```ts
+type ScheduleLog = {
+  id: string
+  type: 'SCHEDULE'
+  jobName: string                       // task-auto-run-scan / task-stuck-check / torrent-download-stats-sync
+                                         // / torrent-ipv6-peer-sync / expired-free-download-cleanup
+                                         // / site-traffic-sync / site-auto-signin
+  message: string
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+  scheduledAt?: string
+  triggeredAt?: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  summary?: string
+  errorMessage?: string
+  details?: Record<string, unknown>
+  createdAt: string
+}
+```
+
+种子日志（v0.5.0 新增）：
+
+```ts
+type TorrentLog = {
+  id: string
+  type: 'TORRENT'
+  torrentId?: string
+  siteId?: string
+  siteName?: string
+  torrentTitle: string
+  event: 'INSERTED' | 'PUSHED' | 'PUSH_FAILED' | 'AUTO_DELETE_TASK' | 'MANUAL_DELETE_TASK' | 'MANUAL_RESET_TASK' | 'DELETE_RECORD' | 'UPDATE_SETTINGS'
+  status: 'SUCCESS' | 'FAILED'
+  message: string
+  reason?: string
+  source?: 'AUTO' | 'MANUAL' | 'SCHEDULER' | 'TASK'
+  actorId?: string
+  actorName?: string
   createdAt: string
 }
 ```
@@ -244,3 +296,65 @@ manual-button：手动按钮触发
 - 调度器到点签到时，会产生一条 AUTO 来源的签到日志。
 - 签到日志能按站点、来源、状态、关键词筛选，并支持导出 CSV 和清空。
 - 日志内容不泄露 Cookie、密钥、密码、passkey 和完整下载链接。
+
+## 11. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/logs.ts` + `utils/logger.ts` + 前端 `LogsPage.vue` 当前实现与上文的差异。
+
+### 11.1 5 类日志（v0.5.0）
+
+| 类型 | 表 | 触发点 |
+| --- | --- | --- |
+| `operation` | `operation_logs` | 登录/登出/改密/任务 CRUD/开关/测试/运行/站点 CRUD/手动签到/批量签到/下载器 CRUD/种子推送/批删/重置/设置修改/STORAGE_MIGRATION/STORAGE_SCHEMA_REPAIR |
+| `task` | `task_logs` | 仅 AUTO / MANUAL_RUN 真实执行；**TEST 不写** |
+| `schedule` | `schedule_logs` | 7 个调度 job 每次执行前/后（含 RUNNING + SUCCESS/FAILED） |
+| `signin` | `site_signin_logs` | 手动签到、批量签到、调度自动签到 |
+| `torrent` | `torrent_logs` | 种子的 INSERTED / PUSHED / PUSH_FAILED / AUTO_DELETE_TASK / MANUAL_DELETE_TASK / MANUAL_RESET_TASK / DELETE_RECORD / UPDATE_SETTINGS |
+
+### 11.2 任务日志字段扩展
+
+实际 `TaskLogRecord`：
+
+```ts
+{
+  id, type: 'TASK', taskId?, taskName, runMode?: 'AUTO' | 'MANUAL_RUN',
+  message, status: 'SUCCESS' | 'FAILED' | 'RUNNING',
+  startedAt?, finishedAt?,
+  fetchedCount?, matchedCount?, skippedExistingCount?,
+  pushedCount?, pushFailedCount?,
+  summary?, errorMessage?, fetchErrorMessage?, pushErrorMessages[]?, failureDetails[]?,
+  createdAt
+}
+```
+
+- 比原方案多：`skippedExistingCount` / `fetchErrorMessage` / `pushErrorMessages` / `failureDetails`
+- 前端任务日志弹窗"失败原因"展示 `failureDetails + fetchErrorMessage + pushErrorMessages` 合并（最多展示 4 条）
+
+### 11.3 导出 / 清空
+
+- `GET /api/logs/export?type=...`：返回 CSV 文本流，**第一字节为 BOM `\uFEFF`**，保证 Excel 直接打开不乱码
+- `DELETE /api/logs?type=...`：先写一条 `action=LOGS_CLEAR` 操作日志（包含 clearedCount），再清表
+
+### 11.4 状态展示
+
+- 状态映射：`SUCCESS→成功` / `FAILED→失败` / `RUNNING→运行中` / `SKIPPED→已跳过`
+- 列表默认 20/页
+
+### 11.5 日志脱敏
+
+- `sanitizeLogText` 替换：`cookie: ...`、`api_key=...`、`passkey=...`、`authorization: ...`、HTTP 链接 → `[已脱敏]`
+- 站点连通性日志只写访问方式（API_KEY / COOKIE）+ 失败原因摘要，不写完整凭证
+- 代理测试日志不记录代理密码
+
+### 11.6 TODO 状态
+
+- [x] 5 类日志：operation / task / schedule / signin / torrent
+- [x] 任务日志字段扩展（fetchedCount / matchedCount / skippedExistingCount / pushedCount / pushFailedCount / errorMessage / fetchErrorMessage / pushErrorMessages / failureDetails）
+- [x] 日志导出 CSV（带 BOM）
+- [x] 日志清空（写操作日志 + 清表）
+- [x] TEST 不写 task_log
+- [x] 失败原因多字段合并展示
+- [x] 日志脱敏
+- [x] 路由 `?type=` 决定默认 Tab
+- [x] 补 `designs/logs.svg`
+- [ ] 任务日志保留周期实际未做硬删除（待接入系统设置 `taskLogRetentionDays`）

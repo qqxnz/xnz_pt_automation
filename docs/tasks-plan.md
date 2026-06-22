@@ -44,20 +44,22 @@
 任务名称
 站点
 下载器
-执行间隔分钟
+执行间隔分钟（默认 30，最小 10）
 自动执行开关
-是否只抓免费
-是否自动推送到下载器
-免费类型范围：FREE、TWO_X_FREE、HALF_FREE
-抓取数量
+是否只抓免费（默认 true）
+是否自动推送到下载器（默认 true）
+免费类型范围：FREE、TWO_X_FREE、HALF_FREE、NORMAL（默认 FREE+TWO_X_FREE）
+抓取数量（默认 100，1-1000）
 排序规则
-入库数量
+入库数量（GT/EQ/LT + 整数）
 种子体积范围（GB）
-做种人数条件
-即将过期阈值
+做种人数范围（min/max）
 保存路径覆盖
-分类覆盖
+分类覆盖（同时作为 qB 推送的 category）
 标签覆盖
+仅免费下载开关
+免费到期删除开关
+低速阈值（kbps + minutes，同时设置或同时为空）
 ```
 
 操作：
@@ -77,15 +79,19 @@
 字段默认值和校验：
 
 ```text
-执行间隔分钟：默认 30，最小 30，必须为正整数
+执行间隔分钟：默认 30，最小 10，必须为正整数
 自动执行开关：默认关闭；打开后从打开时间开始计时
 是否只抓免费：默认开启
 是否自动推送到下载器：默认开启
-免费类型范围：默认 FREE、TWO_X_FREE、HALF_FREE 全选
-抓取数量：默认 100，整数，1 到 1000 之间，控制每次从站点列表抓取的种子候选上限；后端调用站点抓取时按此值请求 pageSize
+免费类型范围：默认 FREE + TWO_X_FREE（前端实现）
+抓取数量：默认 100，整数，1 到 1000 之间，控制每次从站点列表抓取的种子候选上限
 排序规则：默认不排序（按抓取顺序），可选做种人数升降序、发布时间升降序、种子体积升降序
-入库数量：默认 0（不限制），按任务过滤规则命中后取前 N 个入库
-即将过期阈值：默认 120 分钟
+入库数量：torrentCountCondition ∈ GT|EQ|LT 配 torrentCount 整数（前端当前仅暴露 LT 语义）
+做种人数范围：seederMin / seederMax（0 = 不限；同时 >0 时要求 min ≤ max）
+种子体积范围：sizeMinGb / sizeMaxGb（0 = 不限；同时 >0 时要求 min ≤ max）
+仅免费下载：默认 true，控制自动删除条件 ①
+免费到期删除：默认 false，控制自动删除条件 ②
+低速阈值：lowUploadKbps + lowUploadMinutes（同时设置或同时为 0/null），控制自动删除条件 ③
 ```
 
 自动执行开关规则：
@@ -170,7 +176,7 @@ type UpdateTaskAutoRunRequest = {
 }
 ```
 
-`POST /api/tasks/:id/test` 响应：
+`POST /api/tasks/:id/test` 响应（实际字段）：
 
 ```ts
 type TaskTestResult = {
@@ -179,7 +185,9 @@ type TaskTestResult = {
   siteId: string
   siteName: string
   fetchedCount: number
+  skippedExistingCount: number
   matchedCount: number
+  pushableCount: number
   items: Array<{
     title: string
     size: number
@@ -189,12 +197,15 @@ type TaskTestResult = {
     seeders?: number
     leechers?: number
     linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+    skippedExisting?: boolean   // 命中 siteId:torrentId 已存在
+    matched?: boolean           // 命中任务过滤规则
+    pushable?: boolean          // matched && linkStatus=SAVED
   }>
   errorMessage?: string
 }
 ```
 
-任务项：
+任务项（实际 `TaskRecord` 字段）：
 
 ```ts
 type TaskRunMode = 'AUTO' | 'MANUAL_RUN' | 'TEST'
@@ -203,39 +214,41 @@ type TaskItem = {
   id: string
   name: string
   siteId: string
-  siteName: string
   downloaderId: string
-  downloaderName: string
   autoRunEnabled: boolean
   autoRunStartedAt?: string
   nextRunAt?: string
   intervalMinutes: number
-  freeOnly: boolean
+  onlyFreeDownload: boolean       // 原 freeOnly 改名
+  deleteOnFreeExpire: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
   autoPush: boolean
-  discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE'>
-  fetchLimit?: number
-  sortRule?: 'SEEDERS_ASC' | 'SEEDERS_DESC' | 'CREATED_DESC' | 'CREATED_ASC' | 'SIZE_DESC' | 'SIZE_ASC'
+  discountTypes: Array<'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'>
+  seederMin: number
+  seederMax: number
+  sizeMinGb: number
+  sizeMaxGb: number
   torrentCountCondition?: 'GT' | 'EQ' | 'LT'
   torrentCount?: number
-  seederMin?: number
-  seederMax?: number
-  sizeMinGb?: number
-  sizeMaxGb?: number
-  expiringSoonMinutes?: number
+  sortRule?: 'SEEDERS_ASC' | 'SEEDERS_DESC' | 'CREATED_DESC' | 'CREATED_ASC' | 'SIZE_DESC' | 'SIZE_ASC'
+  fetchLimit: number              // 默认 100
   savePathOverride?: string
   categoryOverride?: string
   tagsOverride?: string[]
   running: boolean
-  lastRunMode?: Exclude<TaskRunMode, 'TEST'>
+  lastRunMode?: 'AUTO' | 'MANUAL_RUN'
   lastStartedAt?: string
   lastFinishedAt?: string
   lastStatus?: 'SUCCESS' | 'FAILED'
   lastSummary?: string
   lastError?: string
+  createdAt: string
+  updatedAt: string
 }
 ```
 
-创建任务请求如果没有传 `intervalMinutes`，后端需要写入 `30`；编辑任务时如果传入小于 `30` 的值，接口返回校验错误。旧字段 `enabled` 和 `paused` 不再使用，迁移时按 `autoRunEnabled = enabled && !paused` 兼容一次。
+创建任务请求如果没有传 `intervalMinutes`，后端需要写入 `30`；编辑任务时如果传入小于 `10` 的值，接口返回校验错误（实际后端最小值 10，原文档"30"已下调）。旧字段 `enabled` 和 `paused` 不再使用，迁移时按 `autoRunEnabled = enabled && !paused` 兼容一次。
 
 真实任务运行流程：
 
@@ -276,7 +289,7 @@ TEST：点击【测试】，只返回弹窗结果，不写种子记录，不推�
 - 测试只需要站点可用；下载器禁用不影响测试抓取。
 - 站点绑定的代理不存在或已禁用时任务不可运行，并记录明确错误。
 - 日志不输出 Cookie、密钥、密码、下载链接。
-- 修改执行间隔需要最小值限制，最小 `30` 分钟。
+- 修改执行间隔需要最小值限制，最小 `10` 分钟（v0.5.0 后端实际最小值；前端表单限制 min=10）。
 - 抓取数量需要在 1 到 1000 之间，超出范围返回校验错误。
 - 删除任务不删除已抓取种子记录，只停止后续调度。
 - 新建、编辑、打开开关、关闭开关、测试、运行和删除任务都需要写操作日志。
@@ -335,3 +348,104 @@ TEST：点击【测试】，只返回弹窗结果，不写种子记录，不推�
 - 新建、编辑、开启、关闭、测试、运行和删除任务能在操作日志中查看。
 - 运行中的任务不能重复启动。
 - 可查看失败日志且敏感信息不泄露。
+
+## 10. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/tasks.ts` 当前实现与上文的差异。
+
+### 10.1 执行流程（实际）
+
+`runTaskById(taskId, runMode)`：
+
+```text
+1. 内存 runningTaskIds Set + DB running=1 双重锁
+2. 读取 task、site、downloader；site/downloader 禁用或缺失 → 直接失败
+3. 标记 running=true, lastStartedAt=now, lastRunMode='AUTO'|'MANUAL_RUN'
+4. AUTO 时写 RUNNING 调度日志
+5. browseTorrents(site, '', 1, fetchLimit)        -> fetchedCount
+6. sortCandidatesByRule(sortRule)                 -> 排序
+7. siteId:torrentId 去重                          -> skippedExistingCount
+8. matched = filter(discountTypes, sizeMinGb, sizeMaxGb, seederMin, seederMax)
+9. 若 torrentCountCondition 设置，slice(0, torrentCount) -> matchedCount / pushableCount
+10. 对每条 matched：
+    - autoPush=false → 入库 pushStatus=NEW（不推送）
+    - autoPush=true  → addTorrentUrlToQb 成功 → PUSHED；失败 → PUSH_FAILED
+    - 复制 onlyFreeDownload / deleteOnFreeExpire / lowUploadKbps / lowUploadMinutes 到 torrent
+    - 写 INSERTED + (PUSHED|PUSH_FAILED) 两条 torrent_logs
+11. 批量 updateTaskFieldsInDb
+12. 成功：running=false, lastStatus=SUCCESS, lastSummary, nextRunAt = autoRunEnabled ? now+interval : undefined
+       写 SUCCESS task_log + AUTO schedule_log
+13. 失败：lastStatus=FAILED, lastError
+       写 FAILED task_log + AUTO schedule_log（fetchErrorMessage|pushErrorMessages|message）
+14. finally：清除 runningTaskIds
+```
+
+### 10.2 run 与 test 区别
+
+- `POST /api/tasks/:id/run`：调用 `runTaskById(id, 'MANUAL_RUN')`；**总是**从 now 重新计时（不管 nextRunAt）
+- `POST /api/tasks/:id/test`：**不**走 `runTaskById`，而是单独的实现：
+  - 仅 `browseTorrents → sort → 去重 → 过滤 → 截断`，**不写种子、不推送、不写 task_logs**
+  - 写一条 `action=任务测试` 操作日志
+  - 响应 `items[]` 每条带 `skippedExisting / matched / pushable` 三个布尔位供前端弹窗分组展示
+
+### 10.3 启动残留重置
+
+- `resetStuckRunningTasks({ source, thresholdMs })`：
+  - 阈值默认 10 分钟
+  - 找 `running=true && (lastStartedAt 未填 || NaN || now - lastStartedAt ≥ threshold) && 不在内存 runningTaskIds`
+  - 改为 `running=false, lastStatus='FAILED'`，写 `task_log` 与 console warn
+- 调用时机：`server.ts` 启动 + `task-stuck-check` 调度（每 60s）
+
+### 10.4 默认值与校验（后端实测）
+
+```text
+intervalMinutes     整数 ≥ 10，默认 30
+discountTypes       至少 1，默认 ['FREE','TWO_X_FREE']
+seederMin/Max       整数 ≥ 0；同时 >0 时 min ≤ max
+sizeMinGb/Max       整数 ≥ 0；同时 >0 时 min ≤ max
+torrentCountCondition  ∈ GT|EQ|LT|''；设置时 torrentCount 整数 ≥ 1
+fetchLimit          整数 1..1000，默认 100
+lowUploadKbps       与 lowUploadMinutes 必须同时设置或同时为空；各自整数 ≥ 1
+autoRunEnabled      true → nextRunAt = now + intervalMinutes
+```
+
+### 10.5 任务日志结构
+
+`TaskLogRecord` 实际字段：
+
+```ts
+{
+  id, type: 'TASK', taskId?, taskName, runMode?: 'AUTO' | 'MANUAL_RUN',
+  message, status: 'SUCCESS' | 'FAILED' | 'RUNNING',
+  startedAt?, finishedAt?,
+  fetchedCount?, matchedCount?, skippedExistingCount?,
+  pushedCount?, pushFailedCount?,
+  summary?, errorMessage?, fetchErrorMessage?, pushErrorMessages[]?, failureDetails[]?,
+  createdAt
+}
+```
+
+### 10.6 列表 & 详情
+
+- `GET /api/tasks` 支持 `?keyword=&autoRun=`（autoRun 接受 `ON|OFF`）
+- `GET /api/tasks/:id/logs?page=&pageSize=`：默认 20/页，最大 100
+- 响应 `tasks.items` 不直接包含 `siteName` / `downloaderName` 字段（由前端 `loadOptions()` 加载 `getSites` + `getDownloaders` 后本地匹配）
+
+### 10.7 操作日志动作名
+
+- `TASK_CREATE` / `TASK_UPDATE` / `TASK_DELETE`
+- `TASK_AUTO_RUN`（开关切换）
+- `TASK_RUN`（手动运行）
+- `TASK_TEST`（测试）
+- 调度日志 `jobName ∈ 'task-auto-run-scan' | 'task-stuck-check' | ...`
+
+### 10.8 TODO 状态
+
+- [x] 任务 CRUD + 调度 + 测试 + 运行 + 自动执行
+- [x] 抓取数量默认 100，1-1000
+- [x] 测试不写种子记录 / 推送 / task_log
+- [x] 启动 + watchdog 重置残留任务
+- [x] 操作日志 / 调度日志记录
+- [ ] 手动运行 / 测试的限频（当前未实现）
+- [ ] `autoPush=false` 时批量补推入口（当前依赖 `POST /api/torrents/batch-push` 单独处理）
+- [ ] `expiringSoonMinutes` 字段 UI 暴露（DB 仍保留）

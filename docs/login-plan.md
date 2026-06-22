@@ -138,6 +138,56 @@ PUT  /api/auth/password
 - [ ] 定义登录失败限频策略。
 - [ ] 补充登录接口错误码约定。
 
+## 8. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/auth.ts` + `utils/session.ts` + `utils/password.ts` 的当前实现与上文的差异，作为后续 TODO 收敛参考。
+
+### 8.1 登录态
+
+- **自签 token**（非 JWT，非 OAuth）：载荷 `{ userId, nonce, expiresAt }` JSON → `base64url` + `.` + HMAC-SHA256（密钥 `process.env.SESSION_SECRET ?? 'dev-session-secret-change-me'`）
+- **HTTP-only Cookie `pt_session` + `Authorization: Bearer`** 双轨并存：
+  - Cookie 名 `pt_session`，`httpOnly` + `sameSite=lax` + `path=/` + `maxAge = sessionTtlHours * 3600s`
+  - 登录响应体额外返回 `sessionToken`，前端存入 `localStorage['pt_session_token']` 并随 `apiRequest` 发送
+  - 401 拦截（`apiRequest`）会清状态并跳 `/login?redirect=...`
+- `SESSION_COOKIE_SECURE` 接受 `'auto'|'true'|'false'`；`auto` 在 `req.secure` 或 `x-forwarded-proto=https` 时启用 `secure=true`
+- 默认过期由 `system_settings.sessionTtlHours` 控制，默认 168 小时（7 天）
+
+### 8.2 密码哈希
+
+- 使用 `crypto.scrypt`（**不依赖 bcrypt / argon2**），格式 `scrypt:<saltHex>:<derivedHex>`
+- 默认密码 `123456` 来自 `process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'`，仅在 `users` 表为空时由 `ensureStorage` 写入
+
+### 8.3 接口
+
+```text
+POST /api/auth/login      # { username, password } -> { user, sessionToken }
+POST /api/auth/logout     # 始终 200，失败也不报错
+GET  /api/auth/me         # { user } | 401
+PUT  /api/auth/password   # { oldPassword, newPassword } -> { success, otherSessionsRevoked, user }
+```
+
+- 登录失败统一返回 `401 { message: '登录失败' }`，**不区分**"用户不存在"与"密码错误"
+- 改密新密码必须满足 `^(?=.*[A-Za-z])(?=.*\d).{8,64}$` 且不能与旧密码相同
+- 改密成功返回 `otherSessionsRevoked: true`（接口语义预留；当前单会话设备上不主动失效其他端）
+
+### 8.4 登录限频
+
+- **当前实现未做限频**（TODO 中"定义登录失败限频策略"仍待办）
+- 失败会被记入 `operation_logs`（`action=AUTH_LOGIN, status=FAILED`）便于事后排查
+
+### 8.5 路由守卫
+
+- 前端 `router/index.ts:31-46` 在首次导航时调用 `auth.fetchMe()`；未登录 → `/login?redirect=<from>`，已登录访问 `/login` → `/dashboard`
+- `authStore` 由 Pinia 管理（`stores/auth.ts`），`fetchMe` 幂等
+
+### 8.6 TODO 状态
+
+- [x] 登录态采用 HTTP-only Cookie + Bearer 双轨
+- [x] 登录态默认过期 7 天
+- [x] 首次登录后风险提示由 Dashboard 风险横幅承担（`security.defaultPasswordInUse`）
+- [ ] 登录失败限频策略（仍未实现）
+- [ ] 登录接口错误码细分（当前统一 `401 登录失败`）
+
 ## 7. 验收标准
 
 - 默认密码不在页面展示。

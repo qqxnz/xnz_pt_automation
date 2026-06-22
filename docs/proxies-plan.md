@@ -475,3 +475,48 @@ idx_sites_proxy_id
 - 站点只能从已启用代理中选择代理；不选择时表示不使用代理。
 - 站点绑定的代理不存在或已禁用时，站点测试和任务运行失败并记录明确原因。
 - 系统设置中的测试目标和超时时间能影响代理测试默认行为。
+
+## 14. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/proxies.ts` 当前实现与上文的差异。
+
+### 14.1 接口现状
+
+**当前后端仅暴露：**
+
+```text
+GET /api/proxies    # 列表（去掉 password 字段）；需要 requireAuth
+```
+
+- **未实现**：`POST /api/proxies`、`GET/PUT/DELETE /api/proxies/:id`、`POST /api/proxies/test`、`POST /api/proxies/:id/test`、`GET /api/proxies/options`、`GET /api/proxies/:id/references`
+- **未实现**：前端 `/proxies` 页面（`designs/proxies.svg` 已存在但页面未开发；侧边栏当前也未挂载"代理"入口）
+
+### 14.2 数据存储
+
+- `proxies` 表结构（`storage.ts:553-564`）已按上文创建：
+
+  ```text
+  id, name, enabled, type, host, port, username, password,
+  last_test_status, last_tested_at
+  ```
+
+- 与上文差异：
+  - 实际表**无** `remark` / `last_test_target_url` / `last_test_latency_ms` / `last_test_error` 字段
+  - 实际表**无** `updated_at` / `created_at` 字段
+  - `password` 字段当前为**明文**存储（接口剔除，前端不可见）
+
+### 14.3 与其他模块的引用关系
+
+- 站点 `proxyId` 字段已存在（`sites.proxy_id`，允许 NULL）
+- 任务运行 / 站点连通性 / 抓取 / 浏览都按 `site.proxyId → proxy.enabled` 走代理调用 `fetch`
+- 由于代理 CRUD 尚未实现，**当前无法在前端新增/编辑/测试代理**；`proxies` 表行只可能由手工 SQL 注入
+
+### 14.4 TODO 状态
+
+- [ ] 实现代理 CRUD 接口
+- [ ] 实现代理测试接口（保存版 + 草稿版）
+- [ ] 实现 `/api/proxies/options` 给站点表单用
+- [ ] 实现 `/api/proxies/:id/references` 引用站点查询
+- [ ] 实现密码 KEEP/UPDATE/CLEAR 语义与 `hasPassword` 响应
+- [ ] 前端 `/proxies` 页面开发（侧边栏入口 + 卡片列表 + 弹窗表单）
+- [ ] 给 `proxies` 表补 `created_at` / `updated_at` 字段

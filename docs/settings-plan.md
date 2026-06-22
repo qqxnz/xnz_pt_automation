@@ -161,16 +161,13 @@ type SystemInfo = {
 
 ## 6. 基础参数
 
-第一版可配置参数：
+第一版可配置参数（v0.5.0 **实际**持久化的字段）：
 
 ```ts
 type SystemSettings = {
   sessionTtlHours: number
-  operationLogRetentionDays: number
-  taskLogRetentionDays: number
-  torrentRetentionDays: number
   requestTimeoutMs: number
-  proxyTestUrl: string
+  proxyTestUrl: string            // GET /api/settings 响应中隐藏，不展示给前端
   maxConcurrentTasks: number
   defaultUserAgent: string
 }
@@ -178,16 +175,15 @@ type SystemSettings = {
 
 字段说明：
 
-| 字段 | 分组 | 默认值 | 范围 | 影响 |
+| 字段 | 分组 | 默认值 | 范围 | v0.5.0 影响 |
 | --- | --- | --- | --- | --- |
-| 登录态有效期 | 会话 | 168 小时 | 1-720 小时 | 新签发会话的过期时间。 |
-| 操作日志保留天数 | 数据保留 | 180 天 | 7-3650 天 | 日志清理任务删除过期操作日志。 |
-| 任务日志保留天数 | 数据保留 | 60 天 | 7-3650 天 | 日志清理任务删除过期任务日志。 |
-| 种子记录保留天数 | 数据保留 | 365 天 | 30-3650 天 | 种子清理任务删除过期抓取记录。 |
-| 请求超时时间 | 网络 | 15000 ms | 3000-120000 ms | 站点测试、代理测试、任务抓取的默认超时。 |
-| 代理测试目标 URL | 网络 | `https://www.gstatic.com/generate_204` | 合法 http/https URL | 代理管理模块默认测试目标。 |
-| 最大并发任务数 | 任务 | 2 | 1-10 | 调度器同一时间允许执行的任务数量。 |
-| 默认 User-Agent | 网络 | 浏览器常见 UA | 20-300 字 | 新增站点时作为 User-Agent 默认值。 |
+| 登录态有效期 | 会话 | 168 小时 | 1-720 小时 | 新签发会话的过期时间；当前会话保持原 TTL。 |
+| 请求超时时间 | 网络 | 15000 ms | 3000-120000 ms | 站点抓取/测试、下载器 HTTP 默认超时。 |
+| 代理测试目标 URL | 网络 | `https://www.gstatic.com/generate_204` | 合法 http/https URL | 内部使用；`GET /api/settings` 响应**隐藏**该字段，前端无法读取；只由后端内部模块使用。 |
+| 最大并发任务数 | 任务 | 2 | 1-10 | 当前仅记录；并发执行由 1s 轮询 + 内存 `runningTaskIds` Set + DB `running` 标志保证单实例单任务。 |
+| 默认 User-Agent | 网络 | Chrome 120 UA | trim 后 20-300 字符 | 站点 UA 缺省值。 |
+
+**与原方案差异**：原方案列出 `operationLogRetentionDays / taskLogRetentionDays / torrentRetentionDays` 3 个数据保留字段，v0.5.0 **未持久化**也**未实现**清理任务；当前日志/种子记录由用户在【日志】页手动清空。
 
 保存规则：
 
@@ -202,9 +198,10 @@ type SystemSettings = {
 校验规则：
 
 - 数字字段必须是整数。
-- URL 字段必须以 `http://` 或 `https://` 开头，且能被 URL 解析。
+- `proxyTestUrl` 必须以 `http://` 或 `https://` 开头，且能被 URL 解析。
 - 默认 User-Agent 去除首尾空格后不能为空，长度 20-300 字。
-- 保留天数不能小于最小值，避免误删近期记录。
+- 未在白名单的字段返回 `400`（`unknown setting: xxx`）。
+- `proxyTestUrl` 字段**只允许**通过内部 PUT 写入；公开 `PUT /api/settings` 接受 `proxyTestUrl` 但 `GET` 不返回。
 
 ## 7. 接口和数据
 
@@ -328,44 +325,38 @@ SETTINGS_SAVE_FAILED         设置保存失败
 
 ## 10. 持久化建议
 
-建议表：`system_settings`
+实际表：`system_settings`（v0.5.0 schema v20）
 
 ```text
-key
-value
-value_type
-updated_at
+id INTEGER PRIMARY KEY CHECK (id = 1)
+settings_json TEXT NOT NULL     -- JSON.stringify(SystemSettings)
+updated_at TEXT
 ```
 
-建议默认数据：
+实际默认数据（`storage.ts:376`）：
 
 ```text
 sessionTtlHours              168
-operationLogRetentionDays    180
-taskLogRetentionDays         60
-torrentRetentionDays         365
 requestTimeoutMs             15000
 proxyTestUrl                 https://www.gstatic.com/generate_204
 maxConcurrentTasks           2
-defaultUserAgent             Mozilla/5.0 ...
+defaultUserAgent             Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 ```
 
-建议迁移记录表：`schema_migrations`
+迁移记录：使用 `app_meta` 表（`key/value`）：
 
 ```text
-version
-name
-status
-started_at
-finished_at
-error
+key                   value
+schema_version        20
+last_migration_status SUCCESS|FAILED
+migrated_at           ISO 时间
+migrated_from         'app_state' | 'app-state.json' | 'v<n>-additive' | 'initial'
+torrent_traffic_seeded_at  ISO 时间
 ```
 
-说明：
-
-- 如果当前项目已有迁移记录结构，优先复用现有结构。
-- `system_settings.value` 可以按字符串存储，读取时按 `value_type` 转换和校验。
-- 启动时缺失默认设置应自动补齐。
+- 启动时 `app_meta.schema_version` < 20 走 `migrateStructuredDatabase`（v3..v19）
+- 启动时 `schema_version == 20` 走 `inspectTaskSchemaCompatibility`，缺列自动 ALTER 并写 `STORAGE_SCHEMA_REPAIR` 操作日志
+- `system_settings` 启动时缺失默认设置会自动补齐
 
 ## 11. 设计稿
 
@@ -415,3 +406,71 @@ error
 - 未保存设置离开页面时有确认提示。
 - 代理测试目标和请求超时时间保存后能被代理模块后续测试使用。
 - 日志和种子保留周期保存后能被后续系统维护作业读取。
+
+## 15. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/settings.ts` + `storage.ts` + 前端 `SettingsPage.vue` 当前实现与上文的差异。
+
+### 15.1 接口
+
+```text
+GET    /api/settings/system-info      # 系统信息
+GET    /api/settings                  # 当前设置（隐藏 proxyTestUrl）
+PUT    /api/settings                  # 保存设置（白名单字段）
+POST   /api/settings/validate         # 校验草稿
+PUT    /api/auth/password             # 改密
+```
+
+- 原方案中 `POST /api/settings/validate` 已实现：返回 `{ valid: true }` 或 `{ valid: false, field, message }`
+- 改密响应：`{ success, otherSessionsRevoked, user }`（`otherSessionsRevoked` 当前固定 `true`；单会话设备不感知差异）
+
+### 15.2 system-info 响应
+
+```ts
+{
+  version, env, nodeVersion, startedAt, timezone,
+  database: { type:'sqlite', path, sizeBytes, schemaVersion,
+              lastMigrationAt, lastMigrationStatus, lastMigrationError },
+  paths: { dataDir, logDir, cacheDir },
+  security: { defaultPasswordInUse: boolean }   // scrypt 校验 admin 是否仍为 123456
+}
+```
+
+- `security.defaultPasswordInUse` 是 Dashboard 风险横幅的输入
+
+### 15.3 白名单字段
+
+`PUT /api/settings` 接受字段（其他字段被 `400 unknown setting` 拒绝）：
+
+- `sessionTtlHours`、`requestTimeoutMs`、`proxyTestUrl`、`maxConcurrentTasks`、`defaultUserAgent`
+- **未持久化**：`operationLogRetentionDays` / `taskLogRetentionDays` / `torrentRetentionDays`
+
+### 15.4 校验规则
+
+- `sessionTtlHours`：整数 1-720
+- `requestTimeoutMs`：整数 3000-120000
+- `proxyTestUrl`：必须可解析为 http(s) URL
+- `maxConcurrentTasks`：整数 1-10
+- `defaultUserAgent`：trim 后长度 20-300
+
+### 15.5 设置修改日志
+
+- `PUT /api/settings` 成功写 `action=SETTINGS_UPDATE, status=SUCCESS, message` 包含变更字段名列表（仅字段名，不含值）
+
+### 15.6 前端展示
+
+- `?section=password|network|session` 滚动到对应小节（`onMounted`）
+- `beforeunload` + `onBeforeRouteLeave` 在 dirty 时弹确认
+- 顶部"有未保存修改"提示 + 保存按钮 disabled
+
+### 15.7 TODO 状态
+
+- [x] 修改密码 + 旧密码校验 + 8-64 字符 + 字母数字
+- [x] 系统信息（version / runtime / node / startedAt / tz / database / paths / defaultPasswordInUse）
+- [x] 基础参数：会话 / 网络（请求超时、UA） / 最大并发任务数
+- [x] `proxyTestUrl` 内部使用 + GET 响应隐藏
+- [x] `PUT /api/settings/validate` 草稿校验
+- [ ] 数据保留天数（operationLogRetentionDays / taskLogRetentionDays / torrentRetentionDays）字段未实现
+- [ ] 数据保留清理任务未实现
+- [ ] 环境变量锁定（高优先级覆盖 DB）未实现
+- [ ] 磁盘剩余空间展示未实现

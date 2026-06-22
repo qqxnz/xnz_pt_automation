@@ -459,3 +459,78 @@ GET  /api/v2/torrents/info
 - 被任务引用的下载器不能删除，并能跳转查看引用任务。
 - 禁用下载器后，任务模块不能新选择该下载器，已有任务运行时跳过并记录错误。
 - 配置、测试和状态同步日志不包含密码、Cookie、密钥和完整下载链接。
+
+## 13. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/downloaders.ts` + `utils/qbittorrent.ts` + 前端 `DownloadersPage.vue` 当前实现与上文的差异。
+
+### 13.1 页面布局（实测）
+
+- 实际为**单页卡片列表**（无右侧详情面板），每张卡片展示：
+  - 名称、类型、host、savePath、状态、状态消息、最近测试/同步时间、上传/下载速度
+  - 可选 IPv6 角标（当该下载器存在 IPv6 peer 时）
+  - 禁用/失败状态徽标
+- 行内操作按钮：测试 / 编辑 / 删除
+- 顶部【新增下载器】主按钮 + 统计卡（总 / 在线 / 认证失败 / 离线 / 未知）
+
+### 13.2 数据模型
+
+- `DownloaderRecord` 增 `hasIpv6Peers` / `ipv6TorrentCount` / `ipv6SyncedAt`（v4）
+- `status` 增 `UNKNOWN`；`statusMessage` 字符串（不堆栈）
+
+### 13.3 响应字段
+
+- `DownloaderConfig` 当前**不返回**明文 `password`，改用 `hasPassword: boolean`
+- 详情接口 `GET /api/downloaders/:id` 仍返回**含明文密码**（用于编辑时复用）
+- 更新请求 `UpdateDownloaderRequest.passwordAction ∈ 'KEEP' | 'UPDATE' | 'CLEAR'`
+
+### 13.4 qBittorrent API 实际使用
+
+```text
+POST   /api/v2/auth/login
+GET    /api/v2/app/version
+GET    /api/v2/transfer/info
+GET    /api/v2/torrents/info
+POST   /api/v2/torrents/add        # 推送
+POST   /api/v2/torrents/delete     # hashes + deleteFiles
+GET    /api/v2/sync/torrentPeers   # IPv6 peer 统计
+```
+
+- 测试：登录 + `/app/version` (8s) + `/transfer/info` (8s)，成功返回 `version / uploadSpeed / downloadSpeed / testedAt`
+- 状态：仅 `/transfer/info` (10s)，映射 `up_info_speed / dl_info_speed / up_info_data / dl_info_data / free_space_on_disk`
+- 推送：`addTorrentUrlToQb()` → `fetchTorrentFile()` 校验首字节 `0x64` → multipart POST → 1s 后重新拉取 → 按 hash 或名称定位新任务
+- 删除：`deleteTorrentFromQb(hash, deleteFiles=true)` → 验证 hash → POST 删除 → 1s 后再次拉取，若 hash 仍在则抛 `下载器删除任务未生效`
+
+### 13.5 实时刷新
+
+- 前端 `DownloadersPage` **5 秒**调用 `GET /api/downloaders/:id/status`（不是文档中"3s"）
+- `document.hidden` 时暂停（visibilitychange 监听）
+- 当前任务列表 `GET /api/downloaders/:id/torrents` 当前由用户手动刷新（无自动轮询）
+
+### 13.6 删除保护
+
+- `GET /api/downloaders/:id/task-references` 返回 `{ items, total }`，引用任务列表阻止删除
+- 实际响应结构（占位/简化版）：当前实现返回 `items: []`、`total: 0`（TODO：补齐引用解析）
+
+### 13.7 超时
+
+- 测试 8s
+- 状态 10s
+- 实时任务列表 15s
+- 推送 / 删除 30s
+- 推送后回查 1s（轮询 qB 列表确认任务出现）
+
+### 13.8 错误码映射
+
+- `QbittorrentError.code ∈ 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT'`
+- `DownloaderError` 包含更细的状态映射
+- `DownloaderErrorCodes` 含 `INVALID_HOST / NETWORK_ERROR / AUTH_FAILED / UNSUPPORTED_TYPE / TIMEOUT / DUPLICATE_NAME / REFERENCED_BY_TASKS / INVALID_PAYLOAD / PASSWORD_REQUIRED`
+
+### 13.9 TODO 状态
+
+- [x] 下载器 CRUD、测试、状态、当前任务、引用查询
+- [x] qBittorrent 客户端（推送/删除/IPv6 peer）
+- [x] 密码 KEEP/UPDATE/CLEAR 语义
+- [x] 删除前任务引用保护
+- [x] 5s 状态轮询 + visibility 暂停
+- [ ] `GET /api/downloaders/:id/task-references` 返回真实任务引用（当前占位空数组）

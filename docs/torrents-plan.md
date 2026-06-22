@@ -81,16 +81,20 @@
 接口：
 
 ```text
-GET  /api/torrents?keyword=&siteId=&downloaderId=&taskId=&discountType=&pushStatus=&freeState=&currentState=&page=&pageSize=
+GET  /api/torrents?keyword=&siteId=&downloaderId=&taskId=&pushStatus=&sourceRunMode=&page=&pageSize=
 GET  /api/torrents/:id
+PATCH /api/torrents/:id              # 修改 onlyFreeDownload / deleteOnFreeExpire / lowUpload* / downloaderId / taskSavePath
 POST /api/torrents/:id/push
 POST /api/torrents/:id/delete-from-downloader
 POST /api/torrents/batch-push
+POST /api/torrents/batch-delete              # 删记录
+POST /api/torrents/batch-delete-from-downloader
+POST /api/torrents/batch-reset-task          # 仅 PUSHED；不联系下载器
 ```
 
 详情接口需要返回脱敏后的链接展示信息和推送历史；完整下载链接只允许后端用于下载 torrent 文件或提交下载器，不直接返回给列表接口。
 
-列表项：
+列表项（实际 `TorrentListItem`，不含 `downloadUrl`）：
 
 ```ts
 type TorrentListItem = {
@@ -108,12 +112,27 @@ type TorrentListItem = {
   leechers?: number
   pushStatus: 'NEW' | 'PUSHED' | 'PUSH_FAILED' | 'DELETED'
   linkStatus: 'SAVED' | 'MISSING' | 'INVALID'
+  onlyFreeDownload: boolean
+  deleteOnFreeExpire: boolean
+  lowUploadKbps?: number
+  lowUploadMinutes?: number
+  lowUploadSince?: string
   detailUrl?: string
   downloaderId?: string
   downloaderName?: string
   downloaderType?: 'QBITTORRENT'
   downloaderState?: string
   torrentHash?: string
+  downloadProgress?: number
+  downloadState?: string
+  ratio?: number
+  uploadSpeed?: number
+  downloadSpeed?: number
+  uploaded?: number
+  downloaded?: number
+  taskSavePath?: string
+  downloaderSavePath?: string
+  downloadStatsSyncedAt?: string
   sourceTaskId?: string
   sourceTaskName?: string
   sourceRunMode: 'AUTO' | 'MANUAL_RUN'
@@ -121,20 +140,18 @@ type TorrentListItem = {
   firstSeenAt: string
   lastSeenAt: string
   pushedAt?: string
+  hasIpv6Peers?: boolean
+  ipv6PeerCount?: number
+  totalPeerCount?: number
 }
 ```
 
-持久化字段：
+持久化字段（`TorrentRecord` 内部多出的）：
 
 ```ts
 type TorrentRecord = TorrentListItem & {
-  downloadUrlEncrypted?: string
-  downloadUrlHash?: string
-  detailUrl?: string
-  targetDownloaderId?: string
-  targetDownloaderName?: string
-  sourceTaskNameSnapshot?: string
-  downloaderNameSnapshot?: string
+  downloadUrl?: string        // 明文存储；列表/详情接口通过 safeTorrent() 剔除
+  downloadUrlHash?: string    // sha1(siteId + ':' + torrentId)
 }
 ```
 
@@ -206,3 +223,85 @@ TEST 点击测试：不写入种子记录，不影响种子统计，不进入推
 - 推送失败可查看明确失败原因。
 - 删除下载器任务前有二次确认。
 - 移动端不出现横向宽表格。
+
+## 10. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/torrents.ts` + `utils/torrentSync.ts` + 前端 `TorrentsPage.vue` 当前实现与上文的差异。
+
+### 10.1 列表 / 详情安全
+
+- `safeTorrent()` 在所有 GET 响应中剔除 `downloadUrl` 字段
+- 若 `pushStatus='PUSHED'` 但 `downloadUrl` 缺失，自动降级为 `PUSH_FAILED` 并写 `errorMessage='缺少真实下载链接，无法确认已推送到下载器'`
+- 列表接口同时调用 `refreshStoredTorrentFreeStates()`，根据 `freeEndAt` 实时计算 `isFreeNow` / `currentState`
+
+### 10.2 当前状态计算（refreshStoredTorrentFreeStates）
+
+```text
+PUSH_FAILED | PUSHED | DOWNLOADER_DELETED  → 保持不变
+discountType === 'NORMAL'                    → NEW
+freeEndAt <= now                             → EXPIRED
+freeEndAt - now <= EXPIRING_SOON_THRESHOLD   → EXPIRING_SOON
+其他                                          → FREE_NOW
+```
+
+- `EXPIRING_SOON_THRESHOLD` 当前未单独实现为可配项（前端基于 `freeEndAt - now` 自定义阈值展示）
+
+### 10.3 PATCH /api/torrents/:id
+
+可修改字段：
+
+- `onlyFreeDownload: boolean`
+- `deleteOnFreeExpire: boolean`
+- `lowUploadKbps: number | null` + `lowUploadMinutes: number | null`（同时设置或同时清空）
+- `downloaderId: string`
+- `taskSavePath: string | null`
+
+限制：
+
+- 当 `pushStatus='PUSHED' && torrentHash` 时，**禁止**修改 `downloaderId` 与 `taskSavePath`（避免与下载器内的真实任务脱节）
+- 修改后 `lowUploadSince` 自动重置
+- 写 `UPDATE_SETTINGS` 种子日志（`source='MANUAL'`）
+
+### 10.4 推送流程（POST /:id/push 与 batch-push）
+
+```text
+1. 解析 downloaderId / taskSavePath
+2. linkStatus !== 'SAVED' 或 downloadUrl 缺失 → 标记 PUSH_FAILED（reason: 缺少真实种子下载链接）
+3. addTorrentUrlToQb(downloader, site, url, filename, { savePath, category=torrent.sourceTaskName, tags })
+4. 成功：torrentHash / downloaderState / pushStatus=PUSHED / currentState=PUSHED / pushedAt=now
+5. 触发 syncTorrentDownloadStats(downloaderId)
+6. 写 PUSHED 或 PUSH_FAILED torrent_log
+```
+
+### 10.5 批量操作
+
+- `POST /api/torrents/batch-push`：按 `ids` 顺序推送；返回 `{ successCount, failedCount, failed: [{ id, message }] }`
+- `POST /api/torrents/batch-delete`：调用 `deleteTorrents(ids)`，仅删 DB 记录
+- `POST /api/torrents/batch-delete-from-downloader`：每条调用 `deleteTorrentFromQb(hash, true)`；成功 → `pushStatus='DELETED' / currentState='DOWNLOADER_DELETED' / downloaderState='deleted' / lowUploadSince=undefined`
+- `POST /api/torrents/batch-reset-task`：**仅**对 PUSHED 生效；**不联系**下载器；改为 `pushStatus='DELETED' / currentState='DOWNLOADER_DELETED' / downloaderState='deleted' / lowUploadSince=undefined`；写 `MANUAL_RESET_TASK` 种子日志
+
+### 10.6 3s 实时刷新
+
+- 前端 `TorrentsPage` 每 3s 调用 `loadTorrents()`
+- `document.hidden` 时暂停（visibilitychange 监听）
+- 状态字段（progress / ratio / speed / uploaded / downloaded）由后端 `torrent-download-stats-sync` 调度（每 3s）从 qB 拉回
+
+### 10.7 过滤项
+
+- 实际接口支持：`keyword` / `siteId` / `taskId` / `downloaderId` / `pushStatus` / `sourceRunMode` / `page` / `pageSize`
+- `discountType` / `freeState` / `currentState` **未在接口层实现**（前端基于列表本地计算）
+
+### 10.8 列表 / 详情中不带 `detailUrl` 明文
+
+- `detailUrl` 字段存在但作为可选项；前端列表/详情默认不展示点击跳转（避免泄露站点信息与认证）
+- `safeTorrent()` 不剔除 `detailUrl`，由前端按需展示
+
+### 10.9 TODO 状态
+
+- [x] 种子列表 / 详情 / 单推 / 批推 / 单删 / 批删 / 批重置
+- [x] 推送后 3s 状态同步 + 30s IPv6 peer 同步
+- [x] 免费/低速守卫（60s）
+- [x] PATCH 修改删除规则与下载器归属
+- [x] `safeTorrent()` 脱敏 + 自动降级 PUSH_FAILED
+- [ ] 列表过滤项 `discountType` / `freeState` / `currentState`（当前未在接口层提供）
+- [ ] 详情页跳转（点 title 跳转 PT 站点详情）

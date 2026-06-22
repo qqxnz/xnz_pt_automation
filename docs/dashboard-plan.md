@@ -65,23 +65,59 @@ type DashboardOverview = {
     offline: number
     authFailed: number
     unknown: number
+    signinEnabled: number
+    todaySigninSuccess: number
+    todaySigninPending: number
   }
-  torrents: {
-    todayNew: number
-    pushed: number
-    expiringSoon: number
-  }
-  transfer: {
+  downloaders: Array<{
+    id: string
+    name: string
+    type: 'QBITTORRENT'
+    enabled: boolean
+    status: 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
+    statusMessage?: string
     uploadSpeed: number
     downloadSpeed: number
+    lastSyncedAt?: string
+  }>
+  tasks: {
+    total: number
+    autoRunEnabled: number
+    running: number
+    failed: number
+    recent: Array<{
+      id: string
+      taskName: string
+      runMode: 'AUTO' | 'MANUAL_RUN'
+      status: 'SUCCESS' | 'FAILED' | 'RUNNING'
+      startedAt?: string
+      finishedAt?: string
+      summary?: string
+    }>
+  }
+  torrents: {
+    total: number
+    running: number
+    notRunning: number
+    totalUploaded: number
+    totalDownloaded: number
+  }
+  traffic: {
     uploadedTotal: number
     downloadedTotal: number
+    todayUploaded: number
+    todayDownloaded: number
   }
   risks: Array<{
     type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
     message: string
     actionText?: string
     actionPath?: string
+    siteId?: string        // AUTH_FAILED 关联具体站点
+  }>
+  quickActions: Array<{
+    label: string
+    path: string
   }>
 }
 ```
@@ -135,6 +171,51 @@ type DashboardOverview = {
 - [ ] 确认风险提示是否包含默认密码未修改。
 - [ ] 确认快捷操作是否需要直接打开对应新增弹窗。
 - [ ] 确认上传下载速度来自下载器还是站点统计。
+
+## 9. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/stats.ts` + 前端 `DashboardPage.vue` 当前实现与上文的差异。
+
+### 9.1 风险横幅（后端统一生成）
+
+- 4 类风险按优先级：
+  - `DEFAULT_PASSWORD`：`security.defaultPasswordInUse === true`（scrypt 校验）
+  - `DOWNLOADER_NOT_CONFIGURED`：无任何下载器
+  - `AUTH_FAILED`：每个 `connectivityStatus='AUTH_FAILED'` 的站点生成一条（带 `siteId`）
+  - `ALL_OFFLINE`：所有站点都非 `ONLINE` 时追加在顶部
+- 排序：`AUTH_FAILED` 与 `ALL_OFFLINE` 通过 unshift 推到最前
+
+### 9.2 速度与总量
+
+- `uploadSpeed` / `downloadSpeed`：并发调用所有启用下载器的 `getQbTransferInfo()` 求和
+- `totalUploaded` / `totalDownloaded`：同上
+- **未做**站点级或任务级速度聚合
+
+### 9.3 任务
+
+- `recent[]` 取最近 5 条 `task_logs`（按 `createdAt DESC`），不区分 AUTO/MANUAL_RUN
+- `running` 当前实时数（DB `running=1`）
+- `failed` 取所有 `lastStatus='FAILED'`
+
+### 9.4 流量
+
+- `traffic.uploadedTotal` / `downloadedTotal`：来自 `site_torrent_traffic_daily` 全量聚合
+- `traffic.todayUploaded` / `todayDownloaded`：取当天 `site_torrent_traffic_daily` 聚合
+- **未实现**"今日新增种子数"（文档中 `torrents.todayNew` 字段当前未填充，前端无展示）
+
+### 9.5 实时刷新
+
+- 顶部【刷新】按钮：手动调用 `loadOverview()`，前端无自动轮询
+- 进入页面即加载一次（`onMounted`）
+
+### 9.6 TODO 状态
+
+- [x] 首页指标全部接真实接口
+- [x] 最近任务来自 `task_logs` 聚合
+- [x] 风险提示包含 `DEFAULT_PASSWORD`
+- [x] 快捷操作项为 `/sites` `/downloaders` `/tasks` `/torrents` 4 个（`quickActions[]` 字段后端拼装）
+- [x] 上传下载速度来自下载器
+- [ ] "今日新增种子数"暂未在 `torrents` 字段中提供（需补 `first_seen_at = today` 聚合）
 
 ## 7. 验收标准
 

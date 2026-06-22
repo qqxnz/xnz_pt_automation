@@ -198,7 +198,7 @@ type BrowseTorrentItem = {
 ## 7. 接口
 
 ```text
-GET    /api/sites?keyword=&connectivityStatus=&proxyUsage=&enabled=&signinEnabled=&page=&pageSize=
+GET    /api/sites?keyword=&connectivityStatus=&enabled=&signinEnabled=&page=&pageSize=
 POST   /api/sites
 GET    /api/sites/:id
 PUT    /api/sites/:id
@@ -207,6 +207,9 @@ POST   /api/sites/:id/test-connectivity
 POST   /api/sites/:id/browse-torrents
 POST   /api/sites/:id/signin
 POST   /api/sites/signin-all
+POST   /api/sites/:id/update            # 单站入队更新（202）
+POST   /api/sites/update-all            # 批量入队（staleOnly=true，202）
+POST   /api/sites/sync-traffic          # 同步执行批量更新，返回完整结果
 ```
 
 ## 8. 签到
@@ -307,3 +310,94 @@ index.ts              // 派发 + 同站防重入 + 写 site_signin_logs
 - 日志模块新增「签到日志」Tab，支持查询、导出 CSV、清空。
 - 更新设计稿和 UI 文档。
 - 通过后端、前端类型检查和完整构建。
+
+## 10. v0.5.0 实际实现差异
+
+> 本节记录 `backend/src/routes/sites/index.ts` + `routes/signin/*` + 前端 `SitesPage.vue` 当前实现与上文的差异。
+
+### 10.1 数据模型扩展
+
+- `sites` 表新增 `signinEnabled` / `signinTime` / `lastSigninAt` / `lastSigninStatus` / `lastSigninMessage`（v8 + v9 自我修复）
+- `sites` 表新增 `name` 字段（v10），迁移时按 `lower(domain)` 映射 12 个站点的中文显示名（`馒头 / 憨憨 / 家园 / 麒麟 / 听听歌 / 朋友 / 彩虹岛 / 猫站 / 我堡 / 铂金家 / 优堡 / 时间`），未知域名 `name = domain`
+- `name` 也可在创建/编辑时由前端直接传入（文档原方案未列出；前端表单当前不展示 name 字段，后端在迁移与响应中补齐）
+
+### 10.2 站点更新与流量同步
+
+- 调度 `site-traffic-sync` 每 6 小时（21600000ms）调用 `syncSiteTrafficStats({ staleOnly: true })`
+- `isStaleForAutoUpdate`：`(now - site.trafficSyncedAt) || (now - site.updatedAt) ≥ 6h`（`connectivityStatus !== 'UNKNOWN'` 时用 `updatedAt`）
+- 单站更新总超时 90s；批量并发上限 5；每站 `siteUpdatePromises` 实现单飞
+- 60s watchdog：清理超过 5min 的卡死条目
+- `POST /api/sites/:id/update` 返回 `{ accepted, alreadyRunning }`；`POST /api/sites/update-all` 返回 `{ accepted, alreadyRunning, sites: [...] }`
+- `POST /api/sites/sync-traffic` 同步执行并返回完整汇总（包含 `results[]`）
+
+### 10.3 列表项扩展
+
+- `SiteListItem` 增字段（`listItem` 在 `routes/sites/index.ts:430`）：
+  - `yesterdayUploaded`、`todayUploaded`：基于 `site_traffic_snapshots` 与 `site_torrent_traffic_daily` 聚合
+  - `todaySigninStatus` / `lastSigninStatus` / `lastSigninMessage` / `signinRunning` / `updating`
+- 列表筛选新增 `signinEnabled=ENABLED|DISABLED|ALL`
+
+### 10.4 签到处理器现状
+
+- `backend/src/routes/signin/` 当前文件：
+  - `index.ts`：派发 + 同站防重入（`Map<siteId, Promise>`）
+  - `types.ts`：`SigninContext { runMode, triggerSource, now }` / `SigninResult { status, message, errorMessage?, durationMs? }`
+  - `baseNexusPhp.ts`：默认 `match: ()=>true`，POST `attendance.php?action=post&content=`
+  - `standardNexusPhp.ts`：`makeStandardNexusPhpSignin({...})` 工厂
+  - `mteam.ts`：m-team 域 → `SKIPPED`（无公开端点）
+  - `pterclub.ts`：`/attendance-ajax.php` JSON 响应，按 `status=1` / `status=0` 判定，提取"X 克猫粮"
+  - `chdbits / hdhome / hdkyl / hhanclub / keepfrds / ourbits / pthome / pttime / totheglory / ubits .ts`：每个仅声明 `matchDomains`，其余走 `standardNexusPhp` 默认
+- 调度器 `site-auto-signin` 每 60s 扫描；条件：`enabled && signinEnabled && currentMinutes ≥ signinTime && !sameDay(lastSigninAt)`
+- `lastSigninStatus = 'SKIPPED'` 也写入 `lastSigninAt`（避免重复触发）
+
+### 10.5 立即签到接口返回
+
+```ts
+type SigninManualResponse = {
+  ok: boolean                  // SKIPPED 视为 true
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  message: string
+  errorMessage?: string
+  siteId: string
+  siteName: string
+  logId: string
+  durationMs: number
+}
+```
+
+- 成功后同时写一条操作日志 `action=站点签到`；批量签到写 `action=批量站点签到`
+
+### 10.6 浏览器弹窗现状
+
+- 控件：keyword 输入 + 类别下拉 + 搜索按钮 + 表格（标题 / 剩余免费 / 大小 / 做种 / 下载）
+- 请求 `POST /api/sites/:id/browse-torrents` body `{ keyword, page, pageSize, category? }`
+- 响应第一版不返回详情 URL，类别作为可选参数
+
+### 10.7 任务表单
+
+- 当前 `SiteForm` 含 `domain / enabled / apiKey / cookie / userAgent / proxyId / signinEnabled / signinTime`
+- 不需要 `apiKey` 和 `cookie` 同时存在，但**至少要有一个**（保持原方案）
+- `signinTime` 校验正则 `^([01]\d|2[0-3]):[0-5]\d$`
+
+### 10.8 浏览器弹窗补充
+
+- `lastConnectError` 写入最近一次失败原因（仅错误摘要，不含完整 HTML/凭证）
+- `trafficSyncedAt` 与 `lastConnectedAt` 同时记录 `updateSiteStats` 完成时间
+
+### 10.9 前端展示
+
+- 进入页面时自动调用 `POST /api/sites/update-all` 触发 6h 周期同步（同时启动 3s 轮询 `loadSites` 仅在存在 `updating` 时执行）
+- 签到按钮 loading 期间显示"签到中..."，并禁用
+- 列表响应 `yesterdayUploaded` / `todayUploaded` 在 Daily 列表中显示
+
+### 10.10 TODO 状态
+
+- [x] 站点数据模型扩展 signin 字段
+- [x] `site_signin_logs` 表
+- [x] 12 个内置站点 + NexusPHP 兜底签到实现与派发
+- [x] 手动 / 批量 / 自动签到接口
+- [x] 调度器 `site-auto-signin` job
+- [x] 列表与表单签到字段 + 过滤器
+- [x] 站点更新 / 流量同步 6h 自动 + 立即入口
+- [ ] `proxyUsage` 列表过滤项（当前通过 `proxyId` 间接查询；未提供独立 filter）
+- [ ] M-Team 自动签到端点（依赖站点 API）
