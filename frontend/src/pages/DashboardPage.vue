@@ -73,7 +73,7 @@
       <article class="panel dashboard-section-card">
         <div class="panel-title-row">
           <h2>流量</h2>
-          <router-link to="/site-statistics">查看统计</router-link>
+          <router-link to="/statistics">查看统计</router-link>
         </div>
         <div class="dashboard-stat-grid">
           <div><span>总上传</span><strong class="success">{{ formatBytes(overview?.traffic.uploadedTotal) }}</strong></div>

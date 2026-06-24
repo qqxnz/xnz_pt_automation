@@ -23,11 +23,9 @@ async function readTransferOverview(enabledDownloaders: DownloaderRecord[]) {
   const total = [...byDownloader.values()].reduce(
     (summary, transfer) => ({
       uploadSpeed: summary.uploadSpeed + transfer.uploadSpeed,
-      downloadSpeed: summary.downloadSpeed + transfer.downloadSpeed,
-      uploadedTotal: summary.uploadedTotal + transfer.uploadedTotal,
-      downloadedTotal: summary.downloadedTotal + transfer.downloadedTotal
+      downloadSpeed: summary.downloadSpeed + transfer.downloadSpeed
     }),
-    { uploadSpeed: 0, downloadSpeed: 0, uploadedTotal: 0, downloadedTotal: 0 }
+    { uploadSpeed: 0, downloadSpeed: 0 }
   )
 
   return { byDownloader, total }
@@ -113,6 +111,7 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       pushedCount: log.pushedCount,
       pushFailedCount: log.pushFailedCount
     }))
+  const allTimeTraffic = await readSiteStatistics({ startDate: '1970-01-01', endDate: '2999-12-31', page: 1, pageSize: 1 })
   const todayTraffic = await readSiteStatistics({ startDate: today, endDate: today, page: 1, pageSize: 1 })
 
   res.json({
@@ -150,8 +149,8 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       totalDownloaded: torrentStats.totalDownloaded
     },
     traffic: {
-      uploadedTotal: transfer.total.uploadedTotal,
-      downloadedTotal: transfer.total.downloadedTotal,
+      uploadedTotal: allTimeTraffic.allTimeUploaded,
+      downloadedTotal: allTimeTraffic.allTimeDownloaded,
       todayUploaded: todayTraffic.totalUploaded,
       todayDownloaded: todayTraffic.totalDownloaded
     },

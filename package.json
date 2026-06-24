@@ -1,7 +1,7 @@
 {
   "name": "xnz-pt-automation",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "workspaces": [
     "backend",
     "frontend"
