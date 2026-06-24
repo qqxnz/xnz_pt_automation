@@ -2,10 +2,7 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
     tags: [ "v*" ]
-  pull_request:
-    branches: [ "main" ]
 
 env:
   DOCKER_HUB_IMAGE: qqxnz/xnz-pt-automation
@@ -15,14 +12,13 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Get version
       id: version
-      run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
