@@ -1,4 +1,4 @@
-import { listSitesFromDb } from '../storage.js'
+import { appendSigninLog, listLatestSigninLogBySiteAndDate, listSitesFromDb, type SiteRecord } from '../storage.js'
 import { performSiteSignin } from '../routes/signin/index.js'
 import { siteDisplayName, syncSiteTrafficStats } from '../routes/sites/index.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
@@ -6,6 +6,7 @@ import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 import { syncTorrentDownloadStats } from './torrentSync.js'
+import { localDateKey } from './time.js'
 
 const SCHEDULER_TICK_INTERVAL_MS = 1000
 const TASK_SCAN_INTERVAL_MS = 1000
@@ -28,6 +29,7 @@ type SchedulerJob = {
 }
 
 let schedulerTimer: NodeJS.Timeout | undefined
+let siteAutoSigninHeartbeatDate = ''
 
 function iso(value: number) {
   return new Date(value).toISOString()
@@ -141,7 +143,16 @@ const jobs: SchedulerJob[] = [
     nextRunAt: Date.now() + SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS,
     running: false,
     logStart: false,
-    shouldLogSuccess: (result) => Number(result.scheduledCount ?? 0) > 0,
+    shouldLogSuccess: (result) => {
+      if (Number(result.scheduledCount ?? 0) > 0) return true
+      if (Number(result.backfilledCount ?? 0) > 0) return true
+      const today = localDateKey()
+      if (siteAutoSigninHeartbeatDate !== today) {
+        siteAutoSigninHeartbeatDate = today
+        return true
+      }
+      return false
+    },
     run: async () => runDueSignins()
   }
 ]
@@ -229,20 +240,55 @@ function tick() {
 export async function runDueSignins() {
   const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled)
   const now = new Date()
-  const todayKey = now.toISOString().slice(0, 10)
+  const todayKey = localDateKey(now)
   const currentMinutes = now.getHours() * 60 + now.getMinutes()
 
-  const due = sites.filter((site) => {
+  const due: SiteRecord[] = []
+  const backfillNeeded: SiteRecord[] = []
+
+  for (const site of sites) {
     const match = /^(2[0-3]|[01]\d):([0-5]\d)$/.exec(site.signinTime)
-    if (!match) return false
+    if (!match) continue
     const targetMinutes = Number(match[1]) * 60 + Number(match[2])
-    if (currentMinutes < targetMinutes) return false
-    if (site.lastSigninAt && site.lastSigninAt.slice(0, 10) === todayKey) return false
-    return true
-  })
+    if (currentMinutes < targetMinutes) continue
+
+    const lastSigninLocalKey = site.lastSigninAt ? localDateKey(new Date(site.lastSigninAt)) : undefined
+    if (lastSigninLocalKey === todayKey) {
+      // 站点表已记录今日签到，但 site_signin_logs 可能缺失 → 检查并回填
+      const existingLog = await listLatestSigninLogBySiteAndDate(site.id, todayKey)
+      if (!existingLog) backfillNeeded.push(site)
+      continue
+    }
+    due.push(site)
+  }
+
+  let backfilledCount = 0
+  for (const site of backfillNeeded) {
+    try {
+      await appendSigninLog({
+        siteId: site.id,
+        siteName: siteDisplayName(site),
+        runMode: 'AUTO',
+        triggerSource: 'scheduler-backfill',
+        status: site.lastSigninStatus ?? 'SUCCESS',
+        message: site.lastSigninMessage ?? '签到状态回填（原始日志缺失）',
+        errorMessage: undefined,
+        startedAt: site.lastSigninAt!,
+        finishedAt: site.lastSigninAt!,
+        durationMs: 0
+      })
+      backfilledCount += 1
+    } catch (error) {
+      logger.warn('scheduler', 'signin log backfill failed', {
+        siteId: site.id,
+        siteName: siteDisplayName(site),
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
 
   if (!due.length) {
-    return { scheduledCount: 0, successCount: 0, failedCount: 0, skippedCount: 0, details: [] }
+    return { scheduledCount: 0, successCount: 0, failedCount: 0, skippedCount: 0, backfilledCount, details: [] }
   }
 
   let successCount = 0
@@ -279,7 +325,7 @@ export async function runDueSignins() {
     }
   }
 
-  return { scheduledCount: due.length, successCount, failedCount, skippedCount, details }
+  return { scheduledCount: due.length, successCount, failedCount, skippedCount, backfilledCount, details }
 }
 
 export function startScheduler() {

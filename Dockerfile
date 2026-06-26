@@ -28,7 +28,7 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.5.0
+ARG VERSION=0.5.6
 ARG DATA_DIR=/data
 
 # 强制使用 Asia/Shanghai 时区，避免容器默认 UTC 与用户本地时区错位

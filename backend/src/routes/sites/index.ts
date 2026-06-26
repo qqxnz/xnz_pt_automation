@@ -28,6 +28,7 @@ import {
   listLatestSigninLogBySiteAndDate
 } from '../../storage.js'
 import { logger, recordOperationLog } from '../../utils/logger.js'
+import { isoOnLocalDate } from '../../utils/time.js'
 import { isSiteSigninRunning, signinSiteById } from '../signin/index.js'
 import { pickAdapter, siteDisplayNameByDomain, siteTorrentPathByDomain } from './adapters.js'
 import { browseNexusTorrents, fetchNexusTraffic } from './nexusphp.js'
@@ -431,6 +432,9 @@ async function listItem(site: SiteRecord) {
   const deltas = await trafficDeltas(site)
   const today = dateKey()
   const latest = await listLatestSigninLogBySiteAndDate(site.id, today)
+  // 日志缺失时回退到 sites.last_signin_*（权威状态）
+  const todaySigninStatus = latest?.status
+    ?? (isoOnLocalDate(site.lastSigninAt, today) ? site.lastSigninStatus : undefined)
   return {
     id: site.id,
     displayName: siteDisplayName(site),
@@ -453,7 +457,7 @@ async function listItem(site: SiteRecord) {
     hasCookie: Boolean(site.cookie),
     signinEnabled: site.signinEnabled,
     signinTime: site.signinTime,
-    todaySigninStatus: latest?.status,
+    todaySigninStatus,
     lastSigninAt: site.lastSigninAt,
     lastSigninStatus: site.lastSigninStatus,
     lastSigninMessage: site.lastSigninMessage,

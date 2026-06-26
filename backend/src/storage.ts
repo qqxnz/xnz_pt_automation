@@ -5,6 +5,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { createPasswordHash } from './utils/password.js'
+import { localDayRangeIso } from './utils/time.js'
 
 export type UserRecord = {
   id: string
@@ -73,7 +74,7 @@ export type SigninLogRecord = {
   siteId: string
   siteName: string
   runMode: 'AUTO' | 'MANUAL'
-  triggerSource: 'scheduler' | 'manual-button'
+  triggerSource: 'scheduler' | 'manual-button' | 'scheduler-backfill'
   status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
   message: string
   errorMessage?: string
@@ -981,6 +982,7 @@ function localDateKey(value: Date) {
   return `${year}-${month}-${day}`
 }
 
+
 function seedTorrentTrafficStatistics(db: DatabaseSync, migratedAt: string) {
   const alreadySeeded = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('torrent_traffic_seeded_at') as { value?: string } | undefined
   if (alreadySeeded?.value) return
@@ -1771,9 +1773,10 @@ export async function appendTorrentLog(payload: Omit<TorrentLogRecord, 'id' | 't
 
 export async function listLatestSigninLogBySiteAndDate(siteId: string, dateKey: string): Promise<SigninLogRecord | undefined> {
   const db = await readyDb()
+  const { startIso, endIso } = localDayRangeIso(dateKey)
   const row = db.prepare(
-    'SELECT * FROM site_signin_logs WHERE site_id = ? AND substr(created_at, 1, 10) = ? ORDER BY created_at DESC, id DESC LIMIT 1'
-  ).get(siteId, dateKey) as any
+    'SELECT * FROM site_signin_logs WHERE site_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC, id DESC LIMIT 1'
+  ).get(siteId, startIso, endIso) as any
   return row ? signinLogFromRow(row) : undefined
 }
 

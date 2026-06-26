@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserByUsername, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type TaskLogRecord } from '../storage.js'
+import { findUserByUsername, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
 import { verifyPassword } from '../utils/password.js'
+import { isoOnLocalDate, localDateKey } from '../utils/time.js'
 
 export const statsRouter = Router()
 
@@ -42,8 +43,19 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     readTorrentStats()
   ])
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateKey()
   const todaySigninLogs = await Promise.all(sites.map((site) => listLatestSigninLogBySiteAndDate(site.id, today)))
+
+  // 判定函数：当日是否已签到（日志缺失时回退到 sites.lastSigninAt + lastSigninStatus）
+  const judgeSignedToday = (site: SiteRecord, log: SigninLogRecord | undefined): { signed: boolean; status?: string } => {
+    if (log) return { signed: true, status: log.status }
+    if (site.lastSigninStatus && isoOnLocalDate(site.lastSigninAt, today)) {
+      return { signed: true, status: site.lastSigninStatus }
+    }
+    return { signed: false }
+  }
+  const signinJudgments = sites.map((site, index) => judgeSignedToday(site, todaySigninLogs[index]))
+
   const siteStats = {
     total: sites.length,
     online: sites.filter((site) => site.connectivityStatus === 'ONLINE').length,
@@ -51,9 +63,9 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     authFailed: sites.filter((site) => site.connectivityStatus === 'AUTH_FAILED').length,
     unknown: sites.filter((site) => site.connectivityStatus === 'UNKNOWN').length,
     signinEnabled: sites.filter((site) => site.signinEnabled).length,
-    todaySigninSuccess: todaySigninLogs.filter((log) => log?.status === 'SUCCESS' || log?.status === 'SKIPPED').length,
-    todaySigninFailed: todaySigninLogs.filter((log) => log?.status === 'FAILED').length,
-    todaySigninPending: sites.filter((site, index) => site.signinEnabled && !todaySigninLogs[index]).length
+    todaySigninSuccess: signinJudgments.filter((judgment) => judgment.status === 'SUCCESS' || judgment.status === 'SKIPPED').length,
+    todaySigninFailed: signinJudgments.filter((judgment) => judgment.status === 'FAILED').length,
+    todaySigninPending: sites.filter((site, index) => site.signinEnabled && !signinJudgments[index].signed).length
   }
   const risks: DashboardRisk[] = []
   const admin = await findUserByUsername('admin')

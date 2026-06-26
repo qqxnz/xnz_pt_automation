@@ -11,6 +11,7 @@ import {
   type TorrentLogRecord
 } from '../storage.js'
 import { logger, recordOperationLog } from '../utils/logger.js'
+import { localDateKey } from '../utils/time.js'
 
 export const logsRouter = Router()
 
@@ -174,7 +175,7 @@ logsRouter.get('/export', requireAuth, async (req, res) => {
             ? torrentRows(items as TorrentLogRecord[])
             : operationRows(items as OperationLogRecord[])
   const csv = `\uFEFF${toCsv(source.headers, source.rows)}\n`
-  const date = new Date().toISOString().slice(0, 10)
+  const date = localDateKey()
   const filename = `${type === 'task' ? 'task-logs' : type === 'schedule' ? 'schedule-logs' : type === 'signin' ? 'signin-logs' : type === 'torrent' ? 'torrent-logs' : 'operation-logs'}-${date}.csv`
 
   logger.info('logs', '导出日志', {
