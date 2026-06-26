@@ -2227,6 +2227,23 @@ a {
   background: #f3f4f6;
 }
 
+.disabled-chip {
+  color: #9ca3af;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  text-decoration: line-through;
+  text-decoration-color: #d1d5db;
+}
+
+.warning-hint {
+  color: #b45309;
+  background: #fff7ed;
+  border-left: 3px solid #f59e0b;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
 .pending-chip {
   color: #2563eb;
   background: #eff6ff;

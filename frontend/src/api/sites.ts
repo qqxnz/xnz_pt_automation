@@ -23,11 +23,12 @@ export type SiteListItem = {
   lastConnectError?: string
   hasApiKey: boolean
   hasCookie: boolean
+  signinSupported: boolean
   signinEnabled: boolean
   signinTime: string
-  todaySigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  todaySigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   lastSigninAt?: string
-  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   lastSigninMessage?: string
   signinRunning: boolean
   updating: boolean
@@ -160,7 +161,7 @@ export function syncSiteTraffic() {
 
 export type TriggerSigninResponse = {
   ok: boolean
-  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   message: string
   errorMessage?: string
   siteId: string
@@ -176,7 +177,7 @@ export function triggerSiteSignin(id: string) {
 export function signinAllEnabledSites() {
   return apiRequest<{
     total: number
-    results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED'; message: string; durationMs: number }>
+    results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'; message: string; durationMs: number }>
   }>('/api/sites/signin-all', { method: 'POST' })
 }
 

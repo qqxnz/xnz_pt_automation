@@ -30,7 +30,7 @@ import {
 import { logger, recordOperationLog } from '../../utils/logger.js'
 import { isoOnLocalDate } from '../../utils/time.js'
 import { isSiteSigninRunning, signinSiteById } from '../signin/index.js'
-import { pickAdapter, siteDisplayNameByDomain, siteTorrentPathByDomain } from './adapters.js'
+import { isSiteSigninSupported, pickAdapter, siteDisplayNameByDomain, siteTorrentPathByDomain } from './adapters.js'
 import { browseNexusTorrents, fetchNexusTraffic } from './nexusphp.js'
 import {
   extractHostnamePreserveCase
@@ -92,6 +92,9 @@ export function normalizeSiteDomain(value: string): string {
   const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
   return url.hostname.toLowerCase()
 }
+
+// 站点是否支持签到：仅按域名硬编码（来自 adapters.ts 的 SITE_METADATA）
+export { isSiteSigninSupported }
 
 export function siteBaseUrl(site: SiteRecord): string {
   return `https://${site.domain}`
@@ -455,6 +458,7 @@ async function listItem(site: SiteRecord) {
     lastConnectError: site.lastConnectError,
     hasApiKey: Boolean(site.apiKey),
     hasCookie: Boolean(site.cookie),
+    signinSupported: isSiteSigninSupported(site.domain),
     signinEnabled: site.signinEnabled,
     signinTime: site.signinTime,
     todaySigninStatus,
@@ -627,6 +631,15 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
   const site = await getSiteFromDb(siteId)
   if (!site) return res.status(404).json({ message: '站点不存在' })
 
+  if (!isSiteSigninSupported(site.domain)) {
+    return res.status(409).json({
+      ok: false,
+      status: 'UNSUPPORTED',
+      message: '此站点不支持签到功能',
+      errorMessage: '此站点不支持签到功能'
+    })
+  }
+
   const actor = res.locals.user as { id?: string; username?: string } | undefined
   try {
     const result = await signinSiteById(siteId, {
@@ -673,7 +686,7 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
 sitesRouter.post('/signin-all', requireAuth, async (req, res) => {
   const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled)
   const actor = res.locals.user as { id?: string; username?: string } | undefined
-  const results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED'; message: string; durationMs: number }> = []
+  const results: Array<{ siteId: string; siteName: string; status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'; message: string; durationMs: number }> = []
   for (const site of sites) {
     try {
       const result = await signinSiteById(site.id, {

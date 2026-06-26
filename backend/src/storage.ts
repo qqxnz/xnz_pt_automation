@@ -75,7 +75,7 @@ export type SigninLogRecord = {
   siteName: string
   runMode: 'AUTO' | 'MANUAL'
   triggerSource: 'scheduler' | 'manual-button' | 'scheduler-backfill'
-  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   message: string
   errorMessage?: string
   startedAt: string
@@ -245,7 +245,7 @@ export type SiteRecord = {
   signinEnabled: boolean
   signinTime: string
   lastSigninAt?: string
-  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  lastSigninStatus?: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   lastSigninMessage?: string
   createdAt: string
   updatedAt: string

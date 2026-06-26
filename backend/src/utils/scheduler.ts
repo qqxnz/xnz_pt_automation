@@ -1,6 +1,6 @@
 import { appendSigninLog, listLatestSigninLogBySiteAndDate, listSitesFromDb, type SiteRecord } from '../storage.js'
 import { performSiteSignin } from '../routes/signin/index.js'
-import { siteDisplayName, syncSiteTrafficStats } from '../routes/sites/index.js'
+import { isSiteSigninSupported, siteDisplayName, syncSiteTrafficStats } from '../routes/sites/index.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
@@ -238,7 +238,7 @@ function tick() {
 }
 
 export async function runDueSignins() {
-  const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled)
+  const sites = (await listSitesFromDb()).filter((site) => site.enabled && site.signinEnabled && isSiteSigninSupported(site.domain))
   const now = new Date()
   const todayKey = localDateKey(now)
   const currentMinutes = now.getHours() * 60 + now.getMinutes()

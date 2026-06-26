@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SigninLogRecord, SiteRecord } from '../../storage.js'
 import { appendSigninLog, getSiteFromDb, updateSiteInDb } from '../../storage.js'
-import { siteDisplayName } from '../sites/index.js'
+import { isSiteSigninSupported, siteDisplayName } from '../sites/index.js'
 import { baseNexusPhpSignin } from './baseNexusPhp.js'
 import { chdbitsSignin } from './chdbits.js'
 import { hdhomeSignin } from './hdhome.js'
@@ -35,9 +35,12 @@ const HANDLERS: SigninHandler[] = [
 
 const signinLocks = new Map<string, Promise<SigninResult>>()
 
-function pickHandler(site: SiteRecord): SigninHandler {
+function pickHandler(site: SiteRecord): SigninHandler | null {
+  if (!isSiteSigninSupported(site.domain)) return null
   return HANDLERS.find((handler) => handler.match(site)) ?? baseNexusPhpSignin
 }
+
+const UNSUPPORTED_MESSAGE = '此站点不支持签到功能'
 
 export async function performSiteSignin(
   site: SiteRecord,
@@ -46,6 +49,52 @@ export async function performSiteSignin(
   const startedAt = Date.now()
   const startedAtIso = new Date(startedAt).toISOString()
   const handler = pickHandler(site)
+  if (!handler) {
+    const finishedAt = Date.now()
+    const finishedAtIso = new Date(finishedAt).toISOString()
+    const log: SigninLogRecord = {
+      id: randomUUID(),
+      type: 'SIGNIN',
+      siteId: site.id,
+      siteName: siteDisplayName(site),
+      runMode: ctx.runMode,
+      triggerSource: ctx.triggerSource,
+      status: 'UNSUPPORTED',
+      message: UNSUPPORTED_MESSAGE,
+      errorMessage: undefined,
+      startedAt: startedAtIso,
+      finishedAt: finishedAtIso,
+      durationMs: 0,
+      createdAt: finishedAtIso
+    }
+    const saved = await appendSigninLog({
+      siteId: log.siteId,
+      siteName: log.siteName,
+      runMode: log.runMode,
+      triggerSource: log.triggerSource,
+      status: log.status,
+      message: log.message,
+      errorMessage: log.errorMessage,
+      startedAt: log.startedAt,
+      finishedAt: log.finishedAt,
+      durationMs: log.durationMs
+    })
+    await updateSiteInDb({
+      ...site,
+      lastSigninAt: startedAtIso,
+      lastSigninStatus: 'UNSUPPORTED',
+      lastSigninMessage: UNSUPPORTED_MESSAGE,
+      updatedAt: finishedAtIso
+    })
+    return {
+      status: 'UNSUPPORTED',
+      message: UNSUPPORTED_MESSAGE,
+      siteId: site.id,
+      siteName: siteDisplayName(site),
+      logId: saved.id,
+      durationMs: 0
+    }
+  }
   const result = await handler.signin(site, ctx)
   const finishedAt = Date.now()
   const durationMs = finishedAt - startedAt

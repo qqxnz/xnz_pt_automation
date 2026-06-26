@@ -110,7 +110,7 @@
             <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
             <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
             <div class="row-actions">
-              <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
+              <button type="button" :disabled="!site.signinSupported || site.signinRunning" :aria-busy="site.signinRunning" :title="!site.signinSupported ? '此站点不支持签到功能' : ''" @click="triggerSignin(site)">{{ signinButtonLabel(site) }}</button>
               <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
@@ -153,11 +153,11 @@
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>
-            <p>签到：{{ signinStatusMeta(site).label }}<span v-if="site.signinEnabled">（{{ site.signinTime }}）</span></p>
+            <p>签到：{{ signinStatusMeta(site).label }}<span v-if="site.signinSupported && site.signinEnabled">（{{ site.signinTime }}）</span></p>
             <p>最近成功：{{ formatDate(site.lastConnectedAt) }}</p>
             <p v-if="site.lastConnectError">错误：{{ site.lastConnectError }}</p>
             <div class="row-actions">
-              <button type="button" :disabled="site.signinRunning" :aria-busy="site.signinRunning" @click="triggerSignin(site)">{{ site.signinRunning ? '签到中...' : '签到' }}</button>
+              <button type="button" :disabled="!site.signinSupported || site.signinRunning" :aria-busy="site.signinRunning" :title="!site.signinSupported ? '此站点不支持签到功能' : ''" @click="triggerSignin(site)">{{ signinButtonLabel(site) }}</button>
               <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
               <button type="button" @click="openBrowse(site)">浏览</button>
               <button type="button" @click="openEdit(site)">编辑</button>
@@ -232,6 +232,7 @@
               <input v-model.trim="form.signinTime" placeholder="HH:mm，例如 09:00" pattern="^([01]\d|2[0-3]):[0-5]\d$" required />
             </label>
             <p v-if="!form.signinEnabled" class="form-hint">开启后调度器会按签到时间自动签到；列表【签到】按钮始终可用。</p>
+            <p v-else-if="!signinSupportedForForm" class="form-hint warning-hint">此站点不支持签到功能，开启后调度器会自动跳过。</p>
             <p v-else class="form-hint">时间采用 24 小时制 HH:mm；签到结果将记录到【日志 &gt; 签到日志】。</p>
           </section>
         </div>
@@ -313,6 +314,7 @@ import {
   type SiteListItem,
   type SiteStats
 } from '../api/sites'
+import { isSigninSupportedByDomain } from '../config/siteSigninSupport'
 
 const route = useRoute()
 const router = useRouter()
@@ -360,6 +362,9 @@ const browseFilters = reactive({
   page: 1,
   pageSize: 100
 })
+
+// 与后端 isSiteSigninSupported 对齐：仅按域名判断
+const signinSupportedForForm = computed(() => isSigninSupportedByDomain(form.domain || ''))
 
 const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.enabled !== 'ALL' || filters.signinEnabled !== 'ALL'))
 const statCards = computed(() => [
@@ -436,6 +441,9 @@ function credentialLabel(site: SiteListItem) {
 }
 
 function signinStatusMeta(site: SiteListItem) {
+  if (!site.signinSupported) {
+    return { label: '不支持', className: 'disabled-chip' }
+  }
   if (!site.signinEnabled) {
     return { label: '已关闭', className: 'muted-chip' }
   }
@@ -451,7 +459,16 @@ function signinStatusMeta(site: SiteListItem) {
   if (site.todaySigninStatus === 'SKIPPED') {
     return { label: '已跳过', className: 'unknown-chip' }
   }
+  if (site.todaySigninStatus === 'UNSUPPORTED') {
+    return { label: '不支持', className: 'disabled-chip' }
+  }
   return { label: '待签到', className: 'unknown-chip' }
+}
+
+function signinButtonLabel(site: SiteListItem) {
+  if (site.signinRunning) return '签到中...'
+  if (!site.signinSupported) return '不支持'
+  return '签到'
 }
 
 function formatDate(value?: string) {
@@ -593,7 +610,11 @@ async function saveSite() {
     const payload = buildSitePayload()
     editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
     formVisible.value = false
-    Snackbar.success('站点已保存，正在后台更新')
+    if (payload.signinEnabled && !signinSupportedForForm) {
+      Snackbar.warning('此站点不支持签到功能，自动签到将被忽略')
+    } else {
+      Snackbar.success('站点已保存，正在后台更新')
+    }
     await loadSites()
     startUpdatePolling()
   } catch (err) {
@@ -644,6 +665,10 @@ async function triggerAutomaticUpdate() {
 }
 
 async function triggerSignin(site: SiteListItem) {
+  if (!site.signinSupported) {
+    Snackbar.warning('此站点不支持签到功能')
+    return
+  }
   if (site.signinRunning) {
     Snackbar.warning('该站点签到正在执行中')
     return
@@ -654,7 +679,7 @@ async function triggerSignin(site: SiteListItem) {
     const result = await triggerSiteSignin(site.id)
     if (result.status === 'SUCCESS') {
       Snackbar.success(result.message)
-    } else if (result.status === 'SKIPPED') {
+    } else if (result.status === 'SKIPPED' || result.status === 'UNSUPPORTED') {
       Snackbar.warning(result.message)
     } else {
       Snackbar.error(result.errorMessage || result.message || '签到失败')

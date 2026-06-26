@@ -9,7 +9,7 @@ export type SigninContext = {
 }
 
 export type SigninResult = {
-  status: 'SUCCESS' | 'FAILED' | 'SKIPPED'
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   message: string
   errorMessage?: string
   durationMs?: number
