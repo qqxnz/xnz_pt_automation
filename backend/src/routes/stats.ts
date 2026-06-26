@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserByUsername, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
+import { findUserByUsername, getLatestScheduleLogPerJob, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
 import { verifyPassword } from '../utils/password.js'
+import { getSchedulerJobs } from '../utils/scheduler.js'
 import { isoOnLocalDate, localDateKey } from '../utils/time.js'
 
 export const statsRouter = Router()
@@ -35,12 +36,13 @@ async function readTransferOverview(enabledDownloaders: DownloaderRecord[]) {
 statsRouter.get('/overview', requireAuth, async (_req, res) => {
   await refreshStoredTorrentFreeStates()
 
-  const [sites, downloaders, tasks, recentLogs, torrentStats] = await Promise.all([
+  const [sites, downloaders, tasks, recentLogs, torrentStats, latestScheduleLogs] = await Promise.all([
     listSitesFromDb(),
     listDownloadersFromDb(),
     listTasksFromDb(),
     queryLogs<TaskLogRecord>({ type: 'task', page: 1, pageSize: 5 }),
-    readTorrentStats()
+    readTorrentStats(),
+    getLatestScheduleLogPerJob()
   ])
 
   const today = localDateKey()
@@ -165,6 +167,16 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       downloadedTotal: allTimeTraffic.allTimeDownloaded,
       todayUploaded: todayTraffic.totalUploaded,
       todayDownloaded: todayTraffic.totalDownloaded
+    },
+    scheduler: {
+      jobs: getSchedulerJobs().map((job) => {
+        const latest = latestScheduleLogs.get(job.name)
+        return {
+          ...job,
+          lastStatus: latest?.status,
+          lastRunAt: latest?.finishedAt
+        }
+      })
     },
     risks,
     quickActions: [

@@ -1,5 +1,15 @@
 import { apiRequest } from './client'
 
+export type SchedulerJobStatus = {
+  name: string
+  readableName: string
+  intervalMs: number
+  nextRunAt: string
+  running: boolean
+  lastStatus?: string
+  lastRunAt?: string
+}
+
 export type DashboardOverview = {
   sites: {
     total: number
@@ -60,6 +70,9 @@ export type DashboardOverview = {
     downloadedTotal: number
     todayUploaded: number
     todayDownloaded: number
+  }
+  scheduler: {
+    jobs: SchedulerJobStatus[]
   }
   risks: Array<{
     type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'

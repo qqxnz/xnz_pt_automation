@@ -328,6 +328,24 @@ export async function runDueSignins() {
   return { scheduledCount: due.length, successCount, failedCount, skippedCount, backfilledCount, details }
 }
 
+export type SchedulerJobStatus = {
+  name: string
+  readableName: string
+  intervalMs: number
+  nextRunAt: string
+  running: boolean
+}
+
+export function getSchedulerJobs(): SchedulerJobStatus[] {
+  return jobs.map((job) => ({
+    name: job.name,
+    readableName: readableJobName(job.name),
+    intervalMs: job.intervalMs,
+    nextRunAt: iso(job.nextRunAt),
+    running: job.running
+  }))
+}
+
 export function startScheduler() {
   if (schedulerTimer) return
   schedulerTimer = setInterval(tick, SCHEDULER_TICK_INTERVAL_MS)

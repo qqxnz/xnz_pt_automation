@@ -524,6 +524,10 @@ a {
   grid-template-columns: minmax(120px, 1.2fr) 120px 100px 130px 130px;
 }
 
+.scheduler-overview-table .dashboard-table-row {
+  grid-template-columns: minmax(140px, 1.5fr) 80px 80px 110px 110px;
+}
+
 .dashboard-table-row.table-head {
   background: transparent;
   padding-block: 0;

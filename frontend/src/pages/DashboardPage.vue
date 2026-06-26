@@ -105,6 +105,25 @@
         </div>
         <div v-else class="empty-tip">暂无最近任务记录。</div>
       </article>
+
+      <article class="panel dashboard-section-card wide">
+        <div class="panel-title-row">
+          <h2>后台任务</h2>
+          <span>{{ overview?.scheduler.jobs.length ?? 0 }} 个任务</span>
+        </div>
+        <div class="dashboard-table scheduler-overview-table">
+          <div class="dashboard-table-row table-head">
+            <span>任务名称</span><span>间隔</span><span>状态</span><span>上次执行</span><span>下次运行</span>
+          </div>
+          <div v-for="job in overview?.scheduler.jobs" :key="job.name" class="dashboard-table-row">
+            <strong>{{ job.readableName }}</strong>
+            <span>{{ job.intervalMs }}秒</span>
+            <span class="status-badge" :class="schedulerStatusClass(job)">{{ schedulerStatusText(job) }}</span>
+            <span>{{ formatTime(job.lastRunAt) }}</span>
+            <span>{{ formatTime(job.nextRunAt) }}</span>
+          </div>
+        </div>
+      </article>
     </section>
   </AppLayout>
 </template>
@@ -112,7 +131,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
-import { getDashboardOverview, type DashboardOverview } from '../api/dashboard'
+import { getDashboardOverview, type DashboardOverview, type SchedulerJobStatus } from '../api/dashboard'
 
 const overview = ref<DashboardOverview>()
 const loading = ref(false)
@@ -153,6 +172,35 @@ function jobStatusText(status: DashboardOverview['tasks']['recent'][number]['sta
     RUNNING: '运行中'
   }
   return map[status]
+}
+
+function schedulerStatusClass(job: SchedulerJobStatus) {
+  if (job.running) return 'running'
+  if (job.lastStatus === 'FAILED') return 'failed'
+  if (job.lastStatus === 'SUCCESS') return 'success'
+  return ''
+}
+
+function schedulerStatusText(job: SchedulerJobStatus) {
+  if (job.running) return '运行中'
+  if (job.lastStatus === 'FAILED') return '失败'
+  if (job.lastStatus === 'SUCCESS') return '空闲'
+  return '等待中'
+}
+
+function formatTime(value?: string) {
+  if (!value) return '-'
+  const diff = Date.now() - new Date(value).getTime()
+  if (diff < 0) {
+    const remain = Math.abs(diff)
+    if (remain < 60000) return `${Math.floor(remain / 1000)}秒后`
+    if (remain < 3600000) return `${Math.floor(remain / 60000)}分钟后`
+    return `${Math.floor(remain / 3600000)}小时后`
+  }
+  if (diff < 60000) return `${Math.floor(diff / 1000)}秒前`
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
+  return `${Math.floor(diff / 86400000)}天前`
 }
 
 async function loadOverview() {

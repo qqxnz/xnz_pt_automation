@@ -1780,6 +1780,21 @@ export async function listLatestSigninLogBySiteAndDate(siteId: string, dateKey: 
   return row ? signinLogFromRow(row) : undefined
 }
 
+export async function getLatestScheduleLogPerJob(): Promise<Map<string, { status: string; finishedAt?: string }>> {
+  const db = await readyDb()
+  const rows = db.prepare(
+    `SELECT s1.job_name, s1.status, s1.finished_at
+     FROM schedule_logs s1
+     LEFT JOIN schedule_logs s2 ON s1.job_name = s2.job_name AND s1.created_at < s2.created_at
+     WHERE s2.id IS NULL`
+  ).all() as any[]
+  const map = new Map<string, { status: string; finishedAt?: string }>()
+  for (const row of rows) {
+    map.set(row.job_name, { status: row.status, finishedAt: row.finished_at ?? undefined })
+  }
+  return map
+}
+
 export async function clearLogsByType(type: LogType) {
   const db = await readyDb()
   const table = logTable(type)
