@@ -521,11 +521,19 @@ a {
 }
 
 .downloader-overview-table .dashboard-table-row {
-  grid-template-columns: minmax(120px, 1.2fr) 120px 100px 130px 130px;
+  grid-template-columns: minmax(100px, 1fr) minmax(60px, 0.7fr) minmax(64px, 0.7fr) minmax(80px, 0.85fr) minmax(80px, 0.85fr);
+}
+
+.downloader-overview-table .dashboard-table-row > * {
+  min-width: 0;
 }
 
 .scheduler-overview-table .dashboard-table-row {
   grid-template-columns: minmax(140px, 1.5fr) 80px 80px 110px 110px;
+}
+
+.scheduler-overview-table .dashboard-table-row > * {
+  min-width: 0;
 }
 
 .dashboard-table-row.table-head {
@@ -1886,11 +1894,16 @@ a {
 }
 
 .task-row {
-  grid-template-columns: minmax(210px, 1.4fr) 86px 80px 132px minmax(170px, 1fr) minmax(300px, 1.4fr);
+  grid-template-columns: minmax(180px, 1.2fr) 80px 74px 116px minmax(150px, 0.9fr) minmax(240px, 1.2fr);
+}
+
+.task-row > *,
+.torrent-row > * {
+  min-width: 0;
 }
 
 .torrent-row {
-  grid-template-columns: 28px minmax(240px, 1.35fr) minmax(130px, 0.75fr) minmax(130px, 0.7fr) minmax(180px, 0.95fr) minmax(180px, 0.9fr) minmax(150px, 0.75fr) minmax(220px, 1.05fr);
+  grid-template-columns: 26px minmax(170px, 1.05fr) minmax(96px, 0.6fr) minmax(96px, 0.55fr) minmax(130px, 0.7fr) minmax(130px, 0.7fr) minmax(110px, 0.6fr) minmax(170px, 0.95fr);
 }
 
 .torrent-site-summary {
@@ -2127,11 +2140,15 @@ a {
 
 .site-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1.3fr) 92px minmax(92px, 0.8fr) 74px 94px 94px 112px 112px 84px minmax(210px, 1.2fr);
+  grid-template-columns: minmax(120px, 1.2fr) 72px minmax(78px, 0.7fr) 60px 86px 86px 86px 72px 72px minmax(180px, 1.1fr);
   gap: 12px;
   align-items: center;
   border-top: 1px solid #e5e7eb;
   padding: 20px 0;
+}
+
+.site-row > * {
+  min-width: 0;
 }
 
 .site-row.table-head {
@@ -2889,6 +2906,87 @@ a {
   color: #94a3b8;
   background: #f1f5f9;
   cursor: not-allowed;
+}
+
+/* ============================================
+   笔记本屏幕适配（1025-1366px）
+   桌面端布局在笔记本屏幕上内容容易溢出，
+   这里压缩列宽 + 收紧侧栏 + 减小内边距，确保主要表格不溢出
+   ============================================ */
+@media (max-width: 1366px) {
+  .app-shell {
+    margin-left: 200px;
+  }
+
+  .sidebar {
+    width: 200px;
+    padding: 28px 20px;
+  }
+
+  .nav-item {
+    padding: 12px 24px;
+    font-size: 14px;
+  }
+
+  .content {
+    padding: 32px 28px 56px;
+  }
+
+  .dashboard-sections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-section-card.wide {
+    grid-column: auto;
+  }
+
+  .downloader-overview-table .dashboard-table-row {
+    grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(100px, 0.9fr) minmax(120px, 1fr) minmax(120px, 1fr);
+  }
+
+  .downloader-overview-table .dashboard-table-row > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .site-row {
+    grid-template-columns: minmax(110px, 1fr) 64px minmax(72px, 0.7fr) 56px 78px 78px 78px 64px 64px minmax(160px, 1fr);
+    gap: 10px;
+  }
+
+  .site-row > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .torrent-row {
+    grid-template-columns: 24px minmax(170px, 1.05fr) minmax(94px, 0.6fr) minmax(94px, 0.55fr) minmax(128px, 0.7fr) minmax(128px, 0.7fr) minmax(108px, 0.6fr) minmax(168px, 0.95fr);
+    gap: 10px;
+  }
+
+  .torrent-row > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .task-row {
+    grid-template-columns: minmax(160px, 1.1fr) 72px 68px 108px minmax(140px, 0.85fr) minmax(220px, 1.15fr);
+    gap: 10px;
+  }
+
+  .task-row > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .statistics-toolbar {
+    grid-template-columns: repeat(2, minmax(160px, 0.7fr));
+  }
+
+  .torrent-batch-bar {
+    left: 200px;
+    padding: 14px 28px;
+  }
 }
 
 @media (max-width: 1024px) {
