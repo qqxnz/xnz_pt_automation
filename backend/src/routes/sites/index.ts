@@ -223,24 +223,34 @@ async function recordSiteTrafficSnapshot(site: SiteRecord, syncedAt: string) {
   await saveSiteTrafficSnapshotToDb(snapshot)
 }
 
-async function uploadedDelta(siteId: string, date: string): Promise<number | undefined> {
+type TrafficField = 'uploaded' | 'downloaded'
+
+async function trafficDelta(siteId: string, date: string, field: TrafficField): Promise<number | undefined> {
   const snapshots = await listSiteTrafficSnapshotsFromDb()
   const current = snapshots.find((item) => item.siteId === siteId && item.date === date)
-  if (current?.uploaded === undefined) return undefined
+  if (!current || current[field] === undefined) return undefined
   const previous = snapshots
-    .filter((item) => item.siteId === siteId && item.date < date && item.uploaded !== undefined)
+    .filter((item) => item.siteId === siteId && item.date < date && item[field] !== undefined)
     .sort((a, b) => b.date.localeCompare(a.date))[0]
-  if (!previous) return Math.max(current.uploaded ?? 0, 0)
-  if (previous.uploaded === undefined) return undefined
-  return Math.max(current.uploaded - previous.uploaded, 0)
+  if (!previous) return Math.max(current[field] ?? 0, 0)
+  if (previous[field] === undefined) return undefined
+  return Math.max(current[field]! - previous[field]!, 0)
 }
 
 async function trafficDeltas(site: SiteRecord) {
   const today = dateKey()
   const yesterday = shiftDateKey(today, -1)
+  const [todayUploaded, yesterdayUploaded, todayDownloaded, yesterdayDownloaded] = await Promise.all([
+    trafficDelta(site.id, today, 'uploaded'),
+    trafficDelta(site.id, yesterday, 'uploaded'),
+    trafficDelta(site.id, today, 'downloaded'),
+    trafficDelta(site.id, yesterday, 'downloaded')
+  ])
   return {
-    todayUploaded: await uploadedDelta(site.id, today),
-    yesterdayUploaded: await uploadedDelta(site.id, yesterday)
+    todayUploaded,
+    yesterdayUploaded,
+    todayDownloaded,
+    yesterdayDownloaded
   }
 }
 
@@ -453,6 +463,8 @@ async function listItem(site: SiteRecord) {
     downloaded: site.downloaded,
     yesterdayUploaded: deltas.yesterdayUploaded,
     todayUploaded: deltas.todayUploaded,
+    yesterdayDownloaded: deltas.yesterdayDownloaded,
+    todayDownloaded: deltas.todayDownloaded,
     trafficSyncedAt: site.trafficSyncedAt,
     lastConnectedAt: site.lastConnectedAt,
     lastConnectError: site.lastConnectError,

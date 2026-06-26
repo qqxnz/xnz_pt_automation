@@ -18,6 +18,8 @@ export type SiteListItem = {
   downloaded?: number
   yesterdayUploaded?: number
   todayUploaded?: number
+  yesterdayDownloaded?: number
+  todayDownloaded?: number
   trafficSyncedAt?: string
   lastConnectedAt?: string
   lastConnectError?: string

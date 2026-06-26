@@ -85,10 +85,9 @@
             <span>连通状态</span>
             <span>用户等级</span>
             <span>分享率</span>
-            <span>上传量</span>
-            <span>下载量</span>
-            <span>昨日上传量</span>
-            <span>今日上传量</span>
+            <span>总流量</span>
+            <span>昨日</span>
+            <span>今日</span>
             <span>凭证</span>
             <span>签到</span>
             <span>操作</span>
@@ -103,10 +102,18 @@
             <span class="ratio-value" :class="{ good: Boolean(site.ratioInfinite || (site.ratio ?? 0) >= 2), warning: !site.ratioInfinite && (site.ratio ?? 0) > 0 && (site.ratio ?? 0) < 1 }">
               {{ formatRatio(site) }}
             </span>
-            <span>{{ formatBytes(site.uploaded) }}</span>
-            <span>{{ formatBytes(site.downloaded) }}</span>
-            <span>{{ formatBytes(site.yesterdayUploaded) }}</span>
-            <span>{{ formatBytes(site.todayUploaded) }}</span>
+            <span class="traffic-pair">
+              <span class="traffic-up">↑{{ formatBytes(site.uploaded) }}</span>
+              <span class="traffic-down">↓{{ formatBytes(site.downloaded) }}</span>
+            </span>
+            <span class="traffic-pair">
+              <span class="traffic-up">↑{{ formatBytes(site.yesterdayUploaded) }}</span>
+              <span class="traffic-down">↓{{ formatBytes(site.yesterdayDownloaded) }}</span>
+            </span>
+            <span class="traffic-pair">
+              <span class="traffic-up">↑{{ formatBytes(site.todayUploaded) }}</span>
+              <span class="traffic-down">↓{{ formatBytes(site.todayDownloaded) }}</span>
+            </span>
             <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
             <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
             <div class="row-actions">
@@ -136,20 +143,16 @@
                 <dd>{{ formatRatio(site) }}</dd>
               </div>
               <div>
-                <dt>上传量</dt>
-                <dd>{{ formatBytes(site.uploaded) }}</dd>
+                <dt>总流量</dt>
+                <dd>{{ formatTrafficPair(site.uploaded, site.downloaded) }}</dd>
               </div>
               <div>
-                <dt>下载量</dt>
-                <dd>{{ formatBytes(site.downloaded) }}</dd>
+                <dt>昨日</dt>
+                <dd>{{ formatTrafficPair(site.yesterdayUploaded, site.yesterdayDownloaded) }}</dd>
               </div>
               <div>
-                <dt>昨日上传量</dt>
-                <dd>{{ formatBytes(site.yesterdayUploaded) }}</dd>
-              </div>
-              <div>
-                <dt>今日上传量</dt>
-                <dd>{{ formatBytes(site.todayUploaded) }}</dd>
+                <dt>今日</dt>
+                <dd>{{ formatTrafficPair(site.todayUploaded, site.todayDownloaded) }}</dd>
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>
@@ -513,6 +516,10 @@ function formatBytes(value?: number) {
     maximumFractionDigits
   }).format(size)
   return `${formatted} ${units[unitIndex]}`
+}
+
+function formatTrafficPair(up?: number, down?: number) {
+  return `↑${formatBytes(up)} · ↓${formatBytes(down)}`
 }
 
 function restoreUserAgent() {
