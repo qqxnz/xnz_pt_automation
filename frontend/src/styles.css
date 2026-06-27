@@ -2287,9 +2287,12 @@ a {
 
 .traffic-pair {
   display: inline-flex;
-  gap: 0.4rem;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .traffic-pair .traffic-up {
@@ -3159,6 +3162,11 @@ a {
     font-weight: 850;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .site-stat-grid dd.traffic-pair {
+    overflow: visible;
+    white-space: normal;
   }
 
   .form-grid {

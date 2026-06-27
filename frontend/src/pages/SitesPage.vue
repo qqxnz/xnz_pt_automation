@@ -103,16 +103,16 @@
               {{ formatRatio(site) }}
             </span>
             <span class="traffic-pair">
-              <span class="traffic-up">↑{{ formatBytes(site.uploaded) }}</span>
-              <span class="traffic-down">↓{{ formatBytes(site.downloaded) }}</span>
+              <span class="traffic-up">↑ {{ formatBytes(site.uploaded) }}</span>
+              <span class="traffic-down">↓ {{ formatBytes(site.downloaded) }}</span>
             </span>
             <span class="traffic-pair">
-              <span class="traffic-up">↑{{ formatBytes(site.yesterdayUploaded) }}</span>
-              <span class="traffic-down">↓{{ formatBytes(site.yesterdayDownloaded) }}</span>
+              <span class="traffic-up">↑ {{ formatBytes(site.yesterdayUploaded) }}</span>
+              <span class="traffic-down">↓ {{ formatBytes(site.yesterdayDownloaded) }}</span>
             </span>
             <span class="traffic-pair">
-              <span class="traffic-up">↑{{ formatBytes(site.todayUploaded) }}</span>
-              <span class="traffic-down">↓{{ formatBytes(site.todayDownloaded) }}</span>
+              <span class="traffic-up">↑ {{ formatBytes(site.todayUploaded) }}</span>
+              <span class="traffic-down">↓ {{ formatBytes(site.todayDownloaded) }}</span>
             </span>
             <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
             <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
@@ -144,15 +144,24 @@
               </div>
               <div>
                 <dt>总流量</dt>
-                <dd>{{ formatTrafficPair(site.uploaded, site.downloaded) }}</dd>
+                <dd class="traffic-pair">
+                  <span class="traffic-up">↑ {{ formatBytes(site.uploaded) }}</span>
+                  <span class="traffic-down">↓ {{ formatBytes(site.downloaded) }}</span>
+                </dd>
               </div>
               <div>
                 <dt>昨日</dt>
-                <dd>{{ formatTrafficPair(site.yesterdayUploaded, site.yesterdayDownloaded) }}</dd>
+                <dd class="traffic-pair">
+                  <span class="traffic-up">↑ {{ formatBytes(site.yesterdayUploaded) }}</span>
+                  <span class="traffic-down">↓ {{ formatBytes(site.yesterdayDownloaded) }}</span>
+                </dd>
               </div>
               <div>
                 <dt>今日</dt>
-                <dd>{{ formatTrafficPair(site.todayUploaded, site.todayDownloaded) }}</dd>
+                <dd class="traffic-pair">
+                  <span class="traffic-up">↑ {{ formatBytes(site.todayUploaded) }}</span>
+                  <span class="traffic-down">↓ {{ formatBytes(site.todayDownloaded) }}</span>
+                </dd>
               </div>
             </dl>
             <p>凭证：{{ credentialLabel(site) }}</p>
@@ -516,10 +525,6 @@ function formatBytes(value?: number) {
     maximumFractionDigits
   }).format(size)
   return `${formatted} ${units[unitIndex]}`
-}
-
-function formatTrafficPair(up?: number, down?: number) {
-  return `↑${formatBytes(up)} · ↓${formatBytes(down)}`
 }
 
 function restoreUserAgent() {
