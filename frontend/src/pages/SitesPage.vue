@@ -93,7 +93,7 @@
             <span>操作</span>
           </div>
           <div v-for="site in items" :key="site.id" class="site-row">
-            <div>
+            <div class="site-name-cell" @click="openSite(site)">
               <strong>{{ site.displayName }}</strong>
               <small>{{ site.domain }}</small>
             </div>
@@ -128,11 +128,11 @@
 
         <div class="mobile-site-list">
           <article v-for="site in items" :key="site.id" class="site-card">
-            <div>
+            <div class="site-name-cell" @click="openSite(site)">
               <strong>{{ site.displayName }}</strong>
               <span class="chip" :class="statusMeta(site.connectivityStatus).className">{{ statusMeta(site.connectivityStatus).label }}</span>
             </div>
-            <p>{{ site.domain }}</p>
+            <p class="site-domain-cell" @click="openSite(site)">{{ site.domain }}</p>
             <dl class="site-stat-grid">
               <div>
                 <dt>用户等级</dt>
@@ -559,6 +559,10 @@ async function loadSites() {
   } finally {
     loading.value = false
   }
+}
+
+function openSite(site: SiteListItem) {
+  window.open(site.baseUrl, '_blank', 'noopener,noreferrer')
 }
 
 function openCreate() {
