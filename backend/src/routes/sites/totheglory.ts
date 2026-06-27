@@ -45,6 +45,7 @@ function parseTothegloryRows(html: string): TorrentListItem[] {
     const isFreeNow = /alt\s*=\s*["']?free/i.test(tds[1] ?? '') || /ico_free/i.test(tds[1] ?? '') || /剩余/.test(cellText)
     // 标签：从标题/td 文本里抓 free/2x/50% 等关键词
     const tags = [...new Set([...cellText.matchAll(/(免费|FREE|50%|2X|2x)/gi)].map((m) => m[1]))]
+    if (isFreeNow && !tags.includes('FREE')) tags.push('FREE')
 
     items.push({
       id,
