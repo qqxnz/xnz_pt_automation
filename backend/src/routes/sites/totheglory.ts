@@ -47,6 +47,10 @@ function parseTothegloryRows(html: string): TorrentListItem[] {
     const tags = [...new Set([...cellText.matchAll(/(免费|FREE|50%|2X|2x)/gi)].map((m) => m[1]))]
     if (isFreeNow && !tags.includes('FREE')) tags.push('FREE')
 
+    // TTG 下载链接格式：/dl/{id}/{passkey}，列表页 HTML 中就有
+    const dlMatch = row.match(/\/dl\/(\d+)\/(\d+)/)
+    const downloadUrl = dlMatch ? `/dl/${dlMatch[1]}/${dlMatch[2]}` : undefined
+
     items.push({
       id,
       title,
@@ -55,7 +59,8 @@ function parseTothegloryRows(html: string): TorrentListItem[] {
       freeEndAt,
       seeders,
       leechers,
-      tags
+      tags,
+      downloadUrl
     })
   }
   return items

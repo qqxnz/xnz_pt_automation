@@ -222,6 +222,7 @@ function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['di
 
 function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
   if (!item.id) return undefined
+  if (item.downloadUrl) return resolveSiteUrl(site, item.downloadUrl)
   if (['m-team.cc', 'pt.m-team.cc', 'api.m-team.cc'].map(normalizeSiteDomain).includes(normalizeSiteDomain(site.domain)) && site.apiKey?.trim()) {
     const url = new URL('https://api.m-team.cc/api/torrent/genDlToken')
     url.searchParams.set('id', item.id)
@@ -235,6 +236,8 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
   return result.items.map((item) => {
     const discountType = discountTypeFromBrowseItem(item)
     const downloadUrl = options.includeDownloadUrl ? downloadUrlFromBrowseItem(site, item) : undefined
+    // TTG 等站点使用 /t/{id}/ 格式的详情页
+    const detailUrl = resolveSiteUrl(site, item.downloadUrl ? `/t/${encodeURIComponent(item.id)}/` : `/details.php?id=${encodeURIComponent(item.id)}`)
     return {
       torrentId: item.id,
       title: item.title,
@@ -245,7 +248,7 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
       seeders: item.seeders ?? 0,
       leechers: item.leechers ?? 0,
       linkStatus: downloadUrl ? 'SAVED' : 'MISSING',
-      detailUrl: resolveSiteUrl(site, `/details.php?id=${encodeURIComponent(item.id)}`),
+      detailUrl,
       downloadUrl,
       createdAt: item.createdAt
     }

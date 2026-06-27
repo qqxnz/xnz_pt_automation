@@ -28,6 +28,7 @@ export type TorrentListItem = {
   seeders?: number
   leechers?: number
   tags: string[]
+  downloadUrl?: string
 }
 
 export type BrowseTorrentsResult = {
