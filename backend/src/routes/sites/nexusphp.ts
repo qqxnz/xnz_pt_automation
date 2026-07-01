@@ -156,7 +156,7 @@ function parseNexusTorrentLinks(html: string): TorrentListItem[] {
   const items: TorrentListItem[] = []
   for (let index = 0; index < linkMatches.length; index += 1) {
     const match = linkMatches[index]
-    const title = textFromHtml(match[2])
+    const title = textFromHtml(match[3])
     const start = match.index ?? 0
     const nextStart = linkMatches[index + 1]?.index ?? html.length
     const segment = html.slice(start, nextStart)
