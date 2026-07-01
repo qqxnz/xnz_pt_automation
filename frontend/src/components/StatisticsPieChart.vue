@@ -55,6 +55,7 @@
           </g>
         </svg>
         <div
+          ref="calloutBoxEl"
           v-if="calloutBox && activeIndex >= 0"
           class="statistics-pie-callout-box"
           :style="{
@@ -87,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 export type PieSlice = {
   name: string
@@ -106,8 +107,13 @@ const props = withDefaults(
 
 const containerRef = ref<HTMLDivElement | null>(null)
 const chartEl = ref<HTMLDivElement | null>(null)
+const calloutBoxEl = ref<HTMLDivElement | null>(null)
 const containerWidth = ref(360)
 const svgRenderedWidth = ref(360)
+const svgRenderedHeight = ref(240)
+const chartRenderedWidth = ref(360)
+const chartRenderedHeight = ref(240)
+const calloutBoxSize = ref({ width: 116, height: 44 })
 const hoverIndex = ref(-1)
 const pinnedIndex = ref(-1)
 
@@ -176,12 +182,13 @@ const callout = computed(() => {
   const slice = angleSlices.value[activeIndex.value]
   if (!slice) return null
   const edge = polar(slice.midAngle, radius.value)
-  const tip = polar(slice.midAngle, radius.value + 18)
+  const tip = polar(slice.midAngle, radius.value + 20)
   return {
     color: slice.color,
     name: slice.name,
     value: slice.value,
-    line: { x1: edge.x, y1: edge.y, x2: tip.x, y2: tip.y }
+    line: { x1: edge.x, y1: edge.y, x2: tip.x, y2: tip.y },
+    tip
   }
 })
 
@@ -191,27 +198,26 @@ const calloutValueText = computed(() => (callout.value ? formatValue(callout.val
 const calloutLine = computed(() => callout.value?.line ?? null)
 
 function viewBoxToPixel(vx: number, vy: number) {
-  const scale = svgRenderedWidth.value / width.value
-  return { x: vx * scale, y: vy * scale }
+  const scaleX = svgRenderedWidth.value / width.value
+  const scaleY = svgRenderedHeight.value / height
+  return { x: vx * scaleX, y: vy * scaleY }
 }
 
 const calloutBox = computed(() => {
   if (!callout.value) return null
   const slice = angleSlices.value[activeIndex.value]
-  const tipVb = polar(slice.midAngle, radius.value + 18)
-  const tip = viewBoxToPixel(tipVb.x, tipVb.y)
-  const halfW = 64
-  const halfH = 22
-  let x = tip.x
-  let y = tip.y - halfH
+  if (!slice) return null
+  const tip = viewBoxToPixel(callout.value.tip.x, callout.value.tip.y)
+  const boxWidth = calloutBoxSize.value.width
+  const boxHeight = calloutBoxSize.value.height
+  const gap = 8
   const dirX = Math.cos(slice.midAngle)
-  if (dirX >= 0) {
-    x = tip.x + 6
-  } else {
-    x = tip.x - 6 - halfW * 2
-  }
-  const maxX = Math.max(0, svgRenderedWidth.value - halfW * 2 - 4)
-  const maxY = Math.max(0, height - halfH * 2 - 4)
+  const chartWidth = Math.max(chartRenderedWidth.value, svgRenderedWidth.value)
+  const chartHeight = Math.max(chartRenderedHeight.value, svgRenderedHeight.value)
+  let x = dirX >= 0 ? tip.x + gap : tip.x - boxWidth - gap
+  let y = tip.y - boxHeight / 2
+  const maxX = Math.max(4, chartWidth - boxWidth - 4)
+  const maxY = Math.max(4, chartHeight - boxHeight - 4)
   x = Math.min(Math.max(x, 4), maxX)
   y = Math.min(Math.max(y, 4), maxY)
   return { x, y }
@@ -290,10 +296,26 @@ function measure() {
     containerWidth.value = containerRef.value.clientWidth
   }
   if (chartEl.value) {
+    chartRenderedWidth.value = chartEl.value.clientWidth || chartRenderedWidth.value
+    chartRenderedHeight.value = chartEl.value.clientHeight || chartRenderedHeight.value
     const svg = chartEl.value.querySelector('svg')
-    if (svg) svgRenderedWidth.value = svg.clientWidth || svgRenderedWidth.value
+    if (svg) {
+      svgRenderedWidth.value = svg.clientWidth || svgRenderedWidth.value
+      svgRenderedHeight.value = svg.clientHeight || svgRenderedHeight.value
+    }
+  }
+  if (calloutBoxEl.value) {
+    calloutBoxSize.value = {
+      width: calloutBoxEl.value.offsetWidth || calloutBoxSize.value.width,
+      height: calloutBoxEl.value.offsetHeight || calloutBoxSize.value.height
+    }
   }
 }
+
+watch([activeIndex, calloutName, calloutValueText], async () => {
+  await nextTick()
+  measure()
+})
 
 onMounted(() => {
   measure()
