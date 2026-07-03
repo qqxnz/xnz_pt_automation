@@ -9,6 +9,7 @@ import {
   listDownloadersFromDb,
   updateDownloaderInDb
 } from '../storage.js'
+import { logger, recordOperationLog } from '../utils/logger.js'
 import { getQbTorrentItems, getQbTransferInfo, QbittorrentError, testQbConnection } from '../utils/qbittorrent.js'
 
 export const downloadersRouter = Router()
@@ -127,6 +128,68 @@ downloadersRouter.get('/', requireAuth, async (req, res) => {
     return true
   })
   res.json({ items: filtered.map(listItem), total: filtered.length, stats: stats(downloaders) })
+})
+
+downloadersRouter.get('/export', requireAuth, async (req, res) => {
+  const downloaders = await listDownloadersFromDb()
+  const exportData = downloaders.map((downloader) => ({
+    name: downloader.name,
+    type: downloader.type,
+    enabled: downloader.enabled,
+    host: downloader.host,
+    username: downloader.username,
+    password: downloader.password,
+    savePath: downloader.savePath
+  }))
+  const date = new Date().toISOString().slice(0, 10)
+  const filename = `downloaders-${date}.json`
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  res.json(exportData)
+})
+
+downloadersRouter.post('/import', requireAuth, async (req, res) => {
+  const data = req.body
+  if (!Array.isArray(data)) return res.status(400).json({ message: '导入数据必须是数组格式' })
+  const now = new Date().toISOString()
+  let imported = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const item of data) {
+    if (!item?.name) {
+      failed += 1
+      errors.push('缺少名称字段')
+      continue
+    }
+    if (!item?.host) {
+      failed += 1
+      errors.push(`${item.name}: 缺少服务地址字段`)
+      continue
+    }
+    try {
+      const downloader: DownloaderRecord = {
+        id: randomUUID(),
+        name: item.name.trim(),
+        type: 'QBITTORRENT',
+        enabled: item.enabled ?? true,
+        host: normalizeHost(item.host),
+        username: item.username?.trim() || undefined,
+        password: item.password || undefined,
+        savePath: item.savePath?.trim() || undefined,
+        status: 'UNKNOWN',
+        createdAt: now,
+        updatedAt: now
+      }
+      await insertDownloaderToDb(downloader)
+      imported += 1
+    } catch (error) {
+      failed += 1
+      errors.push(`${item.name}: ${error instanceof Error ? error.message : '导入失败'}`)
+    }
+  }
+
+  res.json({ imported, failed, errors })
 })
 
 downloadersRouter.get('/:id', requireAuth, async (req, res) => {

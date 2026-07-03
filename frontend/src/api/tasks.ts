@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, handleUnauthorized } from './client'
 
 export type DiscountType = 'FREE' | 'TWO_X_FREE' | 'HALF_FREE' | 'NORMAL'
 export type TorrentCountCondition = 'GT' | 'EQ' | 'LT'
@@ -162,5 +162,35 @@ export function testTask(id: string) {
 export function runTask(id: string) {
   return apiRequest<{ task: TaskItem; fetchedCount: number; matchedCount: number; skippedExistingCount: number; pushedCount: number; pushFailedCount: number; summary: string }>(`/api/tasks/${id}/run`, {
     method: 'POST'
+  })
+}
+
+export async function exportTasks() {
+  const response = await fetch('/api/tasks/export', { credentials: 'include' })
+  if (response.status === 401) {
+    await handleUnauthorized()
+    throw new Error('登录态已过期，请重新登录')
+  }
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { message?: string }
+    throw new Error(data.message ?? '任务导出失败')
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'tasks.json'
+  return { blob, filename }
+}
+
+export async function importTasks(file: File) {
+  const text = await file.text()
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error('文件格式不正确，请上传 JSON 文件')
+  }
+  return apiRequest<{ imported: number; failed: number; errors: string[] }>('/api/tasks/import', {
+    method: 'POST',
+    body: JSON.stringify(data)
   })
 }

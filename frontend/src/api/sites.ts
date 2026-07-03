@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, handleUnauthorized } from './client'
 
 export type ConnectivityStatus = 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
 export type Credential = 'API_KEY' | 'COOKIE'
@@ -187,5 +187,35 @@ export function browseSiteTorrents(id: string, payload: { keyword?: string; cate
   return apiRequest<BrowseTorrentsResponse>(`/api/sites/${id}/browse-torrents`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  })
+}
+
+export async function exportSites() {
+  const response = await fetch('/api/sites/export', { credentials: 'include' })
+  if (response.status === 401) {
+    await handleUnauthorized()
+    throw new Error('登录态已过期，请重新登录')
+  }
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { message?: string }
+    throw new Error(data.message ?? '站点导出失败')
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'sites.json'
+  return { blob, filename }
+}
+
+export async function importSites(file: File) {
+  const text = await file.text()
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error('文件格式不正确，请上传 JSON 文件')
+  }
+  return apiRequest<{ imported: number; failed: number; errors: string[] }>('/api/sites/import', {
+    method: 'POST',
+    body: JSON.stringify(data)
   })
 }

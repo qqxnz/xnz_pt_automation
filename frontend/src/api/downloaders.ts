@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, handleUnauthorized } from './client'
 
 export type DownloaderStatusValue = 'UNKNOWN' | 'ONLINE' | 'OFFLINE' | 'AUTH_FAILED'
 
@@ -142,4 +142,34 @@ export function getDownloaderStatus(id: string) {
 
 export function getDownloaderTorrents(id: string) {
   return apiRequest<{ items: DownloaderTorrentItem[]; total: number }>(`/api/downloaders/${id}/torrents`)
+}
+
+export async function exportDownloaders() {
+  const response = await fetch('/api/downloaders/export', { credentials: 'include' })
+  if (response.status === 401) {
+    await handleUnauthorized()
+    throw new Error('登录态已过期，请重新登录')
+  }
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { message?: string }
+    throw new Error(data.message ?? '下载器导出失败')
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'downloaders.json'
+  return { blob, filename }
+}
+
+export async function importDownloaders(file: File) {
+  const text = await file.text()
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error('文件格式不正确，请上传 JSON 文件')
+  }
+  return apiRequest<{ imported: number; failed: number; errors: string[] }>('/api/downloaders/import', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
 }

@@ -31,8 +31,11 @@
           size="small"
           @change="loadTasks"
         />
-        <button class="secondary-button" type="button" :disabled="loading" @click="loadTasks">{{ loading ? '刷新中...' : '刷新' }}</button>
-      </section>
+<button class="secondary-button" type="button" :disabled="loading" @click="loadTasks">{{ loading ? '刷新中...' : '刷新' }}</button>
+          <button class="secondary-button" type="button" :disabled="loading" @click="handleExport">导出</button>
+          <button class="secondary-button" type="button" :disabled="loading" @click="triggerImport">导入</button>
+          <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
+        </section>
 
       <section class="panel">
         <div class="panel-title-row">
@@ -286,7 +289,9 @@ import { getSites, type SiteListItem } from '../api/sites'
 import {
   createTask,
   deleteTask,
+  exportTasks,
   getTasks,
+  importTasks,
   runTask,
   testTask,
   updateTask,
@@ -312,6 +317,7 @@ const editingTaskId = ref<string>()
 const testResult = ref<TaskTestResult>()
 const testingTaskId = ref<string>()
 const showOnlyFreeDownloadHint = ref(false)
+const importInputRef = ref<HTMLInputElement>()
 
 const filters = reactive({ keyword: '', autoRun: 'ALL' as 'ALL' | 'ON' | 'OFF' })
 const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: number; lowUploadMinutes: number; sortRule: TaskSortRule | '' }>({
@@ -644,6 +650,43 @@ function statusClass(task: TaskItem) {
   if (task.lastStatus === 'FAILED') return 'offline-chip'
   if (task.lastStatus === 'SUCCESS') return 'online-chip'
   return 'muted-chip'
+}
+
+async function handleExport() {
+  try {
+    const { blob, filename } = await exportTasks()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+    Snackbar.success('任务配置已导出')
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导出失败')
+  }
+}
+
+function triggerImport() {
+  importInputRef.value?.click()
+}
+
+async function handleImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const result = await importTasks(file)
+    Snackbar.success(`导入完成：成功 ${result.imported} 个，失败 ${result.failed} 个`)
+    if (result.errors.length) {
+      result.errors.forEach((msg) => Snackbar.warning(msg))
+    }
+    await loadTasks()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导入失败')
+  } finally {
+    input.value = ''
+  }
 }
 
 onMounted(async () => {

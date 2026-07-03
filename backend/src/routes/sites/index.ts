@@ -543,6 +543,83 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   res.json({ items, total: filtered.length, stats })
 })
 
+sitesRouter.get('/export', requireAuth, async (req, res) => {
+  const sites = await listSitesFromDb()
+  const exportData = sites.map((site) => ({
+    name: site.name,
+    domain: site.domain,
+    enabled: site.enabled,
+    apiKey: site.apiKey,
+    cookie: site.cookie,
+    userAgent: site.userAgent,
+    signinEnabled: site.signinEnabled,
+    signinTime: site.signinTime
+  }))
+  const date = new Date().toISOString().slice(0, 10)
+  const filename = `sites-${date}.json`
+  await recordOperationLog({
+    action: '导出站点配置',
+    message: `导出 ${exportData.length} 个站点配置`,
+    status: 'SUCCESS',
+    actorId: (res.locals.user as any)?.id,
+    actorName: (res.locals.user as any)?.username,
+    ip: req.ip,
+    userAgent: req.get('user-agent')
+  })
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  res.json(exportData)
+})
+
+sitesRouter.post('/import', requireAuth, async (req, res) => {
+  const data = req.body
+  if (!Array.isArray(data)) return res.status(400).json({ message: '导入数据必须是数组格式' })
+  const now = new Date().toISOString()
+  let imported = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const item of data) {
+    if (!item?.domain) {
+      failed += 1
+      errors.push('缺少域名字段')
+      continue
+    }
+    try {
+      const site: SiteRecord = {
+        id: randomUUID(),
+        name: item.name || item.domain,
+        domain: normalizeSiteDomain(item.domain),
+        enabled: item.enabled ?? true,
+        apiKey: item.apiKey || undefined,
+        cookie: item.cookie || undefined,
+        userAgent: item.userAgent || undefined,
+        connectivityStatus: 'UNKNOWN',
+        signinEnabled: item.signinEnabled ?? false,
+        signinTime: item.signinTime || '09:00',
+        createdAt: now,
+        updatedAt: now
+      }
+      await insertSiteToDb(site)
+      imported += 1
+    } catch (error) {
+      failed += 1
+      errors.push(`${item.name || item.domain}: ${error instanceof Error ? error.message : '导入失败'}`)
+    }
+  }
+
+  await recordOperationLog({
+    action: '导入站点配置',
+    message: `导入 ${imported} 个站点成功，${failed} 个失败`,
+    status: failed === 0 ? 'SUCCESS' : 'FAILED',
+    actorId: (res.locals.user as any)?.id,
+    actorName: (res.locals.user as any)?.username,
+    ip: req.ip,
+    userAgent: req.get('user-agent')
+  })
+  res.json({ imported, failed, errors })
+})
+
 sitesRouter.get('/:id', requireAuth, async (req, res) => {
   const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })

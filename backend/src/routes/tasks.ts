@@ -846,6 +846,97 @@ tasksRouter.post('/', requireAuth, async (req, res) => {
   res.status(201).json(listItem(task, { sites, downloaders }))
 })
 
+tasksRouter.get('/export', requireAuth, async (req, res) => {
+  const tasks = await listTasksFromDb()
+  const exportData = tasks.map((task) => ({
+    name: task.name,
+    siteId: task.siteId,
+    downloaderId: task.downloaderId,
+    autoRunEnabled: task.autoRunEnabled,
+    intervalMinutes: task.intervalMinutes,
+    onlyFreeDownload: task.onlyFreeDownload,
+    deleteOnFreeExpire: task.deleteOnFreeExpire,
+    skipHitAndRun: task.skipHitAndRun,
+    lowUploadKbps: task.lowUploadKbps,
+    lowUploadMinutes: task.lowUploadMinutes,
+    autoPush: task.autoPush,
+    discountTypes: task.discountTypes,
+    seederMin: task.seederMin,
+    seederMax: task.seederMax,
+    sizeMinGb: task.sizeMinGb,
+    sizeMaxGb: task.sizeMaxGb,
+    torrentCountCondition: task.torrentCountCondition,
+    torrentCount: task.torrentCount,
+    sortRule: task.sortRule,
+    fetchLimit: task.fetchLimit,
+    savePathOverride: task.savePathOverride,
+    categoryOverride: task.categoryOverride,
+    tagsOverride: task.tagsOverride
+  }))
+  const date = new Date().toISOString().slice(0, 10)
+  const filename = `tasks-${date}.json`
+  await logOperation(req, res, '导出任务配置', `导出 ${exportData.length} 个任务配置`)
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  res.json(exportData)
+})
+
+tasksRouter.post('/import', requireAuth, async (req, res) => {
+  const data = req.body
+  if (!Array.isArray(data)) return res.status(400).json({ message: '导入数据必须是数组格式' })
+  const now = new Date().toISOString()
+  let imported = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const item of data) {
+    if (!item?.name) {
+      failed += 1
+      errors.push('缺少名称字段')
+      continue
+    }
+    try {
+      const task: TaskRecord = {
+        id: randomUUID(),
+        name: item.name.trim(),
+        siteId: item.siteId || '',
+        downloaderId: item.downloaderId || '',
+        autoRunEnabled: item.autoRunEnabled ?? false,
+        intervalMinutes: item.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES,
+        onlyFreeDownload: item.onlyFreeDownload ?? true,
+        deleteOnFreeExpire: item.deleteOnFreeExpire ?? false,
+        skipHitAndRun: item.skipHitAndRun ?? true,
+        lowUploadKbps: item.lowUploadKbps ?? undefined,
+        lowUploadMinutes: item.lowUploadMinutes ?? undefined,
+        autoPush: item.autoPush ?? true,
+        discountTypes: item.discountTypes?.length ? item.discountTypes : ['FREE', 'TWO_X_FREE'],
+        seederMin: item.seederMin ?? 0,
+        seederMax: item.seederMax ?? 0,
+        sizeMinGb: item.sizeMinGb ?? 0,
+        sizeMaxGb: item.sizeMaxGb ?? 0,
+        torrentCountCondition: item.torrentCountCondition ?? undefined,
+        torrentCount: item.torrentCountCondition ? (item.torrentCount ?? 1) : undefined,
+        sortRule: item.sortRule ?? undefined,
+        fetchLimit: item.fetchLimit ?? DEFAULT_FETCH_LIMIT,
+        savePathOverride: item.savePathOverride?.trim() || undefined,
+        categoryOverride: item.categoryOverride?.trim() || undefined,
+        tagsOverride: item.tagsOverride ?? undefined,
+        running: false,
+        createdAt: now,
+        updatedAt: now
+      }
+      await insertTaskToDb(task)
+      imported += 1
+    } catch (error) {
+      failed += 1
+      errors.push(`${item.name}: ${error instanceof Error ? error.message : '导入失败'}`)
+    }
+  }
+
+  await logOperation(req, res, '导入任务配置', `导入 ${imported} 个任务成功，${failed} 个失败`, failed === 0 ? 'SUCCESS' : 'FAILED')
+  res.json({ imported, failed, errors })
+})
+
 tasksRouter.get('/:id', requireAuth, async (req, res) => {
   const [task, sites, downloaders] = await Promise.all([
     getTaskFromDb(String(req.params.id)),

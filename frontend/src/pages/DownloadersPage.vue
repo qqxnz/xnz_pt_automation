@@ -26,6 +26,11 @@
             <div class="panel-title-row">
               <h2>下载器列表</h2>
               <span>{{ items.length }} 个下载器</span>
+              <div class="panel-title-actions">
+                <button class="secondary-button" type="button" @click="handleExport">导出</button>
+                <button class="secondary-button" type="button" @click="triggerImport">导入</button>
+                <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
+              </div>
             </div>
 
             <div v-if="loading && !items.length" class="empty-tip">下载器列表加载中...</div>
@@ -162,9 +167,11 @@ import AppLayout from '../components/AppLayout.vue'
 import {
   createDownloader,
   deleteDownloader,
+  exportDownloaders,
   getDownloader,
   getDownloaders,
   getDownloaderStatus,
+  importDownloaders,
   testDownloader,
   testDownloaderDraft,
   updateDownloader,
@@ -192,6 +199,7 @@ const originalDownloaderPassword = ref('')
 const testAfterSave = ref(true)
 const draftTestResult = ref<DownloaderTestResult>()
 let statusTimer: number | undefined
+const importInputRef = ref<HTMLInputElement>()
 
 const form = reactive<DownloaderFormPayload>({
   name: '',
@@ -441,6 +449,43 @@ function handleVisibilityChange() {
   } else {
     refreshAllStatuses()
     startStatusPolling()
+  }
+}
+
+async function handleExport() {
+  try {
+    const { blob, filename } = await exportDownloaders()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+    Snackbar.success('下载器配置已导出')
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导出失败')
+  }
+}
+
+function triggerImport() {
+  importInputRef.value?.click()
+}
+
+async function handleImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const result = await importDownloaders(file)
+    Snackbar.success(`导入完成：成功 ${result.imported} 个，失败 ${result.failed} 个`)
+    if (result.errors.length) {
+      result.errors.forEach((msg) => Snackbar.warning(msg))
+    }
+    await loadDownloaders()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导入失败')
+  } finally {
+    input.value = ''
   }
 }
 

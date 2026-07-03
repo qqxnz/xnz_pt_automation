@@ -61,10 +61,13 @@
           size="small"
           @change="loadSites"
         />
-        <button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
-          {{ loading ? '刷新中...' : '刷新' }}
-        </button>
-      </section>
+<button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
+            {{ loading ? '刷新中...' : '刷新' }}
+          </button>
+          <button class="secondary-button" type="button" :disabled="loading" @click="handleExport">导出</button>
+          <button class="secondary-button" type="button" :disabled="loading" @click="triggerImport">导入</button>
+          <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
+        </section>
 
       <section class="sites-table panel">
         <div v-if="error" class="error-banner">
@@ -314,8 +317,10 @@ import {
   browseSiteTorrents,
   createSite,
   deleteSite,
+  exportSites,
   getSite,
   getSites,
+  importSites,
   triggerSiteSignin,
   updateAllSites,
   updateSiteInfo,
@@ -350,6 +355,7 @@ const browsingSite = ref<SiteListItem>()
 const browseItems = ref<BrowseTorrentItem[]>([])
 const browseTotal = ref(0)
 let updatePollingTimer: number | undefined
+const importInputRef = ref<HTMLInputElement>()
 
 const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
   keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
@@ -749,6 +755,43 @@ function resetFilters() {
   filters.enabled = 'ALL'
   filters.signinEnabled = 'ALL'
   loadSites()
+}
+
+async function handleExport() {
+  try {
+    const { blob, filename } = await exportSites()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+    Snackbar.success('站点配置已导出')
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导出失败')
+  }
+}
+
+function triggerImport() {
+  importInputRef.value?.click()
+}
+
+async function handleImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const result = await importSites(file)
+    Snackbar.success(`导入完成：成功 ${result.imported} 个，失败 ${result.failed} 个`)
+    if (result.errors.length) {
+      result.errors.forEach((msg) => Snackbar.warning(msg))
+    }
+    await loadSites()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '导入失败')
+  } finally {
+    input.value = ''
+  }
 }
 
 onMounted(async () => {
