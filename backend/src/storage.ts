@@ -1173,8 +1173,8 @@ function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
       // v19 记录 schema 健康检查结果到操作日志，导出日志时可发现迁移跨度导致的结构问题
       taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
     }
-    if (currentVersion < 20) {
-      // v20 HR 拦截：tasks 新增 skip_hit_and_run，默认 1（默认跳过 HR 种子，H3/H5/未完成 HR 一律不抓）
+    if (currentVersion < 21) {
+      // v21 HR 拦截：tasks 新增 skip_hit_and_run，默认 1（默认跳过 HR 种子，H3/H5/未完成 HR 一律不抓）
       if (!tableHasColumn(db, 'tasks', 'skip_hit_and_run')) db.exec('ALTER TABLE tasks ADD COLUMN skip_hit_and_run INTEGER NOT NULL DEFAULT 1')
     }
     setMeta(db, 'schema_version', String(schemaVersion))
