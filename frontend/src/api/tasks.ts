@@ -24,6 +24,7 @@ export type TaskItem = {
   intervalMinutes: number
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
+  skipHitAndRun?: boolean
   lowUploadKbps?: number
   lowUploadMinutes?: number
   autoPush: boolean
@@ -58,6 +59,7 @@ export type TaskPayload = {
   intervalMinutes: number
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
+  skipHitAndRun?: boolean
   lowUploadKbps?: number | null
   lowUploadMinutes?: number | null
   autoPush: boolean
@@ -95,6 +97,7 @@ export type TaskTestResult = {
   fetchedCount: number
   matchedCount: number
   skippedExistingCount?: number
+  excludedByHitAndRunCount?: number
   pushableCount: number
   total: number
   items: Array<{
@@ -110,6 +113,7 @@ export type TaskTestResult = {
     skippedExisting: boolean
     matched: boolean
     pushable: boolean
+    excludedBy?: 'HIT_AND_RUN'
   }>
 }
 

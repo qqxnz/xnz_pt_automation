@@ -33,6 +33,7 @@ type TaskPayload = {
   intervalMinutes?: number
   onlyFreeDownload?: boolean
   deleteOnFreeExpire?: boolean
+  skipHitAndRun?: boolean
   lowUploadKbps?: number | null
   sortRule?: TaskSortRule | ''
   lowUploadMinutes?: number | null
@@ -64,6 +65,7 @@ type CandidateTorrent = {
   detailUrl?: string
   downloadUrl?: string
   createdAt?: string
+  tags: string[]
 }
 
 const DEFAULT_INTERVAL_MINUTES = 30
@@ -107,6 +109,7 @@ function validatePayload(
   const interval = payload.intervalMinutes ?? DEFAULT_INTERVAL_MINUTES
   if (!Number.isInteger(interval) || interval < MIN_INTERVAL_MINUTES) return '执行间隔不能小于 10 分钟'
   if (payload.discountTypes?.some((type) => !['FREE', 'TWO_X_FREE', 'HALF_FREE', 'NORMAL'].includes(type))) return '优惠类型范围不合法'
+  if (payload.skipHitAndRun !== undefined && typeof payload.skipHitAndRun !== 'boolean') return '跳过 HR 格式不正确'
   if (payload.seederMin !== undefined && (!Number.isInteger(Number(payload.seederMin)) || Number(payload.seederMin) < 0)) return '最小做种人数必须是大于等于 0 的整数'
   if (payload.seederMax !== undefined && (!Number.isInteger(Number(payload.seederMax)) || Number(payload.seederMax) < 0)) return '最大做种人数必须是大于等于 0 的整数'
   const seederMin = Number(payload.seederMin ?? 0)
@@ -183,6 +186,7 @@ function buildTask(payload: TaskPayload, existing?: TaskRecord): TaskRecord {
     intervalMinutes,
     onlyFreeDownload: payload.onlyFreeDownload ?? existing?.onlyFreeDownload ?? true,
     deleteOnFreeExpire: payload.deleteOnFreeExpire ?? existing?.deleteOnFreeExpire ?? false,
+    skipHitAndRun: payload.skipHitAndRun ?? existing?.skipHitAndRun ?? true,
     lowUploadKbps: bothLow ? lowUploadKbps : undefined,
     lowUploadMinutes: bothLow ? lowUploadMinutes : undefined,
     autoPush: payload.autoPush ?? existing?.autoPush ?? true,
@@ -220,6 +224,20 @@ function discountTypeFromBrowseItem(item: TorrentListItem): CandidateTorrent['di
   return 'NORMAL'
 }
 
+// 从抓取结果中识别 HR 标记：CHDBits 的 H3/H5（div.circle-text 文字）和通用 H&R 文本/图标。
+// HR_DONE 表示"已达标"——返回 null（不过滤，避免误伤完成 HR 的种子）。
+function hitRunFromTags(tags: string[]): 'H3' | 'H5' | 'HR' | null {
+  const upperTags = tags.map((t) => t.toUpperCase())
+  if (upperTags.includes('H3')) return 'H3'
+  if (upperTags.includes('H5')) return 'H5'
+  if (upperTags.includes('HR')) return 'HR'
+  return null
+}
+
+function hitRunFromBrowseItem(item: TorrentListItem): 'H3' | 'H5' | 'HR' | null {
+  return hitRunFromTags(item.tags)
+}
+
 function downloadUrlFromBrowseItem(site: SiteRecord, item: TorrentListItem) {
   if (!item.id) return undefined
   if (item.downloadUrl) return resolveSiteUrl(site, item.downloadUrl)
@@ -250,22 +268,35 @@ async function candidatesForTask(site: Parameters<typeof resolveSiteUrl>[0], opt
       linkStatus: downloadUrl ? 'SAVED' : 'MISSING',
       detailUrl,
       downloadUrl,
-      createdAt: item.createdAt
+      createdAt: item.createdAt,
+      tags: item.tags
     }
   })
 }
 
-function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]) {
-  return items.filter((item) => {
-    if (!task.discountTypes.includes(item.discountType)) return false
+type MatchedCandidatesResult = {
+  matched: CandidateTorrent[]
+  excludedByHitAndRun: CandidateTorrent[]
+}
+
+function matchedCandidates(task: TaskRecord, items: CandidateTorrent[]): MatchedCandidatesResult {
+  const matched: CandidateTorrent[] = []
+  const excludedByHitAndRun: CandidateTorrent[] = []
+  for (const item of items) {
+    if (!task.discountTypes.includes(item.discountType)) continue
     const minBytes = (task.sizeMinGb ?? 0) * GB_BYTES
     const maxBytes = (task.sizeMaxGb ?? 0) * GB_BYTES
-    if (minBytes > 0 && item.size < minBytes) return false
-    if (maxBytes > 0 && item.size > maxBytes) return false
-    if ((task.seederMin ?? 0) > 0 && item.seeders < (task.seederMin ?? 0)) return false
-    if ((task.seederMax ?? 0) > 0 && item.seeders > (task.seederMax ?? 0)) return false
-    return true
-  })
+    if (minBytes > 0 && item.size < minBytes) continue
+    if (maxBytes > 0 && item.size > maxBytes) continue
+    if ((task.seederMin ?? 0) > 0 && item.seeders < (task.seederMin ?? 0)) continue
+    if ((task.seederMax ?? 0) > 0 && item.seeders > (task.seederMax ?? 0)) continue
+    if (task.skipHitAndRun && hitRunFromTags(item.tags) !== null) {
+      excludedByHitAndRun.push(item)
+      continue
+    }
+    matched.push(item)
+  }
+  return { matched, excludedByHitAndRun }
 }
 
 function torrentHash(site: SiteRecord, item: CandidateTorrent) {
@@ -452,7 +483,8 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
-    const matched = matchedCandidates(task, deduped)
+    const { matched, excludedByHitAndRun } = matchedCandidates(task, deduped)
+    const excludedByHitAndRunCount = excludedByHitAndRun.length
     const pushable = applyTorrentCountCondition(task, matched)
     const now = new Date().toISOString()
     let pushedCount = 0
@@ -561,7 +593,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       await insertTorrents(pushedTorrentRecords)
     }
     const finishedAt = new Date().toISOString()
-    const baseSummary = `抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，待入库 ${pushable.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
+    const baseSummary = `抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个（HR 排除 ${excludedByHitAndRunCount} 个），待入库 ${pushable.length} 个，推送 ${pushedCount} 个，失败 ${pushFailedCount} 个`
     const failureSummary = pushErrorMessages.length ? `；失败原因：${pushErrorMessages.slice(0, 3).join('；')}${pushErrorMessages.length > 3 ? `；另有 ${pushErrorMessages.length - 3} 条失败` : ''}` : ''
     const summary = `${baseSummary}${failureSummary}`
     task.running = false
@@ -886,19 +918,21 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
     const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
-    const matched = matchedCandidates(task, deduped)
+    const { matched, excludedByHitAndRun } = matchedCandidates(task, deduped)
     const pushable = applyTorrentCountCondition(task, matched)
     const pushableCount = pushable.length
     const dedupedIds = new Set(deduped.map((item) => item.torrentId))
     const matchedIds = new Set(matched.map((item) => item.torrentId))
     const pushableIds = new Set(pushable.map((item) => item.torrentId))
+    const hitRunExcludedIds = new Set(excludedByHitAndRun.map((item) => item.torrentId))
     const items = fetched.map((item) => ({
       ...item,
       skippedExisting: !dedupedIds.has(item.torrentId),
       matched: matchedIds.has(item.torrentId),
-      pushable: pushableIds.has(item.torrentId)
+      pushable: pushableIds.has(item.torrentId),
+      excludedBy: hitRunExcludedIds.has(item.torrentId) ? 'HIT_AND_RUN' : undefined
     }))
-    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个，待入库 ${pushableCount} 个，测试列表展示全部抓取种子`)
+    await logOperation(req, res, '测试任务', `测试任务「${task.name}」：抓取 ${fetched.length} 个，去重 ${dedupedCount} 个，命中 ${matched.length} 个（HR 排除 ${excludedByHitAndRun.length} 个），待入库 ${pushableCount} 个，测试列表展示全部抓取种子`)
     return res.json({
       taskId: task.id,
       taskName: task.name,
@@ -907,6 +941,7 @@ tasksRouter.post('/:id/test', requireAuth, async (req, res) => {
       fetchedCount: fetched.length,
       skippedExistingCount: dedupedCount,
       matchedCount: matched.length,
+      excludedByHitAndRunCount: excludedByHitAndRun.length,
       pushableCount,
       items,
       total: fetched.length

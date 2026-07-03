@@ -2115,6 +2115,12 @@ a {
   color: #6b7280;
 }
 
+.test-result-list article.is-excluded {
+  background: #f5f5f5;
+  color: #6b7280;
+  border-style: dashed;
+}
+
 .test-result-list article .match-badge {
   display: inline-block;
   margin-right: 6px;
@@ -2137,6 +2143,10 @@ a {
 
 .test-result-list article .match-badge.badge-pushable {
   background: #2e7d32;
+}
+
+.test-result-list article .match-badge.badge-excluded {
+  background: #9a3412;
 }
 
 .site-row {

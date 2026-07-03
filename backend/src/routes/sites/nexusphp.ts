@@ -122,6 +122,26 @@ export async function fetchNexusTraffic(site: SiteRecord, profilePath: string, _
   return { stats, meta: { finalUrl: fetched.finalUrl, httpStatus: fetched.httpStatus, bodyExcerpt } }
 }
 
+// 从行 HTML 中抽取 HR 标记（H3/H5 是 CHDBits 在 <div class="circle-text">hN</div> 这种结构里的文字，
+// 通用 H&R 是其他 NexusPHP 站点的行内文本/图标 alt）。结果以 tag 形式合并到 TorrentListItem.tags。
+function parseHitRunTags(row: string, text: string): string[] {
+  const tags: string[] = []
+  const levelMatch = row.match(/<div[^>]*class=["']circle-text["'][^>]*>\s*(h[1-6])\s*<\/div>/i)
+  if (levelMatch) tags.push(levelMatch[1].toUpperCase())
+  const genericHr = /H&R|hit\.?\s*and\.?\s*run|hit\.?\s*run/i.test(text)
+  if (genericHr) {
+    if (/未完成|未达标|未做种|未达到|未还种/i.test(text)) tags.push('HR')
+    else if (/已完成|已达标|已做种|已还种|completed|done/i.test(text)) tags.push('HR_DONE')
+    else tags.push('HR')
+  }
+  return tags
+}
+
+function buildRowTags(row: string, text: string): string[] {
+  const base = [...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1])
+  return [...new Set([...base, ...parseHitRunTags(row, text)])]
+}
+
 function parseNexusTorrentRows(html: string): TorrentListItem[] {
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((match) => match[1])
   const items: TorrentListItem[] = []
@@ -142,7 +162,7 @@ function parseNexusTorrentRows(html: string): TorrentListItem[] {
       freeEndAt: parseFreeEndAt(text, row),
       seeders,
       leechers,
-      tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((match) => match[1]))]
+      tags: buildRowTags(row, text)
     })
   }
   return items.length && items.some((item) => item.size !== undefined || item.seeders !== undefined || item.leechers !== undefined) ? items : parseNexusTorrentLinks(html)
@@ -170,7 +190,7 @@ function parseNexusTorrentLinks(html: string): TorrentListItem[] {
       freeEndAt: parseFreeEndAt(text, segment),
       seeders: readLinkedNumber(segment, '#seeders'),
       leechers: readLinkedNumber(segment, '#leechers'),
-      tags: [...new Set([...text.matchAll(/(免费|FREE|50%|2X|中字|粤配|官组)/gi)].map((tagMatch) => tagMatch[1]))]
+      tags: buildRowTags(segment, text)
     })
   }
   return items

@@ -201,6 +201,12 @@
                 <label>最大做种人数<input v-model.number="form.seederMax" min="0" step="1" type="number" /></label>
               </div>
             </fieldset>
+            <fieldset class="rule-group">
+              <legend>HR 策略</legend>
+              <label class="inline-check">
+                <input v-model="form.skipHitAndRun" type="checkbox" /> 跳过 HR 种子（H3/H5/未完成 HR，默认勾选）
+              </label>
+            </fieldset>
           </section>
 
           <section class="form-section">
@@ -243,17 +249,19 @@
               <span class="stat">抓取 {{ testResult.fetchedCount }} 个</span>
               <span v-if="(testResult.skippedExistingCount ?? 0) > 0" class="stat">去重 {{ testResult.skippedExistingCount }} 个</span>
               <span class="stat">命中 {{ testResult.matchedCount }} 个</span>
+              <span v-if="(testResult.excludedByHitAndRunCount ?? 0) > 0" class="stat">HR 跳过 {{ testResult.excludedByHitAndRunCount }} 个</span>
               <span class="stat stat-pushable">待入库 {{ testResult.pushableCount }} 个</span>
             </p>
           </div>
           <button type="button" @click="testResult = undefined">×</button>
         </div>
         <div class="test-result-list">
-          <article v-for="item in testResult.items" :key="item.torrentId" :class="{ 'is-matched': item.matched, 'is-pushable': item.pushable, 'is-skipped': item.skippedExisting }">
+          <article v-for="item in testResult.items" :key="item.torrentId" :class="{ 'is-matched': item.matched, 'is-pushable': item.pushable, 'is-skipped': item.skippedExisting, 'is-excluded': item.excludedBy }">
             <strong>
               <span v-if="item.skippedExisting" class="match-badge badge-skipped">去重</span>
               <span v-if="item.matched" class="match-badge badge-matched">命中</span>
               <span v-if="item.pushable" class="match-badge badge-pushable">待入库</span>
+              <span v-if="item.excludedBy === 'HIT_AND_RUN'" class="match-badge badge-excluded">H&R 已过滤</span>
               {{ item.title }}
             </strong>
             <span>{{ formatBytes(item.size) }} · {{ discountText(item.discountType) }} · {{ freeEndText(item) }} · 做种 {{ item.seeders ?? 0 }}</span>
@@ -314,6 +322,7 @@ const form = reactive<TaskPayload & { torrentCount: number; lowUploadKbps: numbe
   intervalMinutes: 30,
   onlyFreeDownload: true,
   deleteOnFreeExpire: false,
+  skipHitAndRun: true,
   lowUploadKbps: 0,
   lowUploadMinutes: 0,
   autoPush: true,
@@ -378,6 +387,7 @@ function resetForm() {
     intervalMinutes: 30,
     onlyFreeDownload: true,
     deleteOnFreeExpire: false,
+    skipHitAndRun: true,
     lowUploadKbps: 0,
     lowUploadMinutes: 0,
     autoPush: true,
@@ -413,6 +423,7 @@ function openEdit(task: TaskItem) {
     intervalMinutes: task.intervalMinutes,
     onlyFreeDownload: task.onlyFreeDownload ?? false,
     deleteOnFreeExpire: task.deleteOnFreeExpire ?? false,
+    skipHitAndRun: task.skipHitAndRun ?? true,
     lowUploadKbps: task.lowUploadKbps ?? 0,
     lowUploadMinutes: task.lowUploadMinutes ?? 0,
     autoPush: task.autoPush,
@@ -495,6 +506,7 @@ async function saveTask() {
       intervalMinutes: form.intervalMinutes,
       onlyFreeDownload: form.onlyFreeDownload,
       deleteOnFreeExpire: form.deleteOnFreeExpire,
+      skipHitAndRun: form.skipHitAndRun,
       lowUploadKbps: (form.lowUploadKbps ?? 0) > 0 ? Number(form.lowUploadKbps) : null,
       lowUploadMinutes: (form.lowUploadMinutes ?? 0) > 0 ? Number(form.lowUploadMinutes) : null,
       autoPush: form.autoPush,
@@ -595,6 +607,7 @@ function rangeText(task: TaskItem) {
   const parts = [task.discountTypes.map(discountText).join(', ')]
   if (task.onlyFreeDownload) parts.push('仅免费下载')
   if (task.deleteOnFreeExpire) parts.push('免费到期')
+  if (task.skipHitAndRun !== false) parts.push('跳过 HR')
   if (task.lowUploadKbps && task.lowUploadMinutes) parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`)
   const seederMin = task.seederMin ?? 0
   const seederMax = task.seederMax ?? 0

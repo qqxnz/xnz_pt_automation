@@ -59,6 +59,7 @@
 标签覆盖
 仅免费下载开关
 免费到期删除开关
+跳过 HR 开关（H3/H5/未完成 HR，默认勾选）
 低速阈值（kbps + minutes，同时设置或同时为空）
 ```
 
@@ -91,6 +92,7 @@
 种子体积范围：sizeMinGb / sizeMaxGb（0 = 不限；同时 >0 时要求 min ≤ max）
 仅免费下载：默认 true，控制自动删除条件 ①
 免费到期删除：默认 false，控制自动删除条件 ②
+跳过 HR：默认 true，抓取时拦截 H3/H5/未完成 HR 标记的种子；关闭后会照常抓取
 低速阈值：lowUploadKbps + lowUploadMinutes（同时设置或同时为 0/null），控制自动删除条件 ③
 ```
 
@@ -187,6 +189,7 @@ type TaskTestResult = {
   fetchedCount: number
   skippedExistingCount: number
   matchedCount: number
+  excludedByHitAndRunCount: number
   pushableCount: number
   items: Array<{
     title: string
@@ -200,6 +203,7 @@ type TaskTestResult = {
     skippedExisting?: boolean   // 命中 siteId:torrentId 已存在
     matched?: boolean           // 命中任务过滤规则
     pushable?: boolean          // matched && linkStatus=SAVED
+    excludedBy?: 'HIT_AND_RUN'  // 被 HR 过滤
   }>
   errorMessage?: string
 }
@@ -221,6 +225,7 @@ type TaskItem = {
   intervalMinutes: number
   onlyFreeDownload: boolean       // 原 freeOnly 改名
   deleteOnFreeExpire: boolean
+  skipHitAndRun: boolean          // 默认 true，跳过 H3/H5/未完成 HR
   lowUploadKbps?: number
   lowUploadMinutes?: number
   autoPush: boolean
@@ -406,6 +411,7 @@ sizeMinGb/Max       整数 ≥ 0；同时 >0 时 min ≤ max
 torrentCountCondition  ∈ GT|EQ|LT|''；设置时 torrentCount 整数 ≥ 1
 fetchLimit          整数 1..1000，默认 100
 lowUploadKbps       与 lowUploadMinutes 必须同时设置或同时为空；各自整数 ≥ 1
+skipHitAndRun       布尔，默认 true（跳过 H3/H5/未完成 HR）；DB 列 DEFAULT 1
 autoRunEnabled      true → nextRunAt = now + intervalMinutes
 ```
 
@@ -449,3 +455,20 @@ autoRunEnabled      true → nextRunAt = now + intervalMinutes
 - [ ] 手动运行 / 测试的限频（当前未实现）
 - [ ] `autoPush=false` 时批量补推入口（当前依赖 `POST /api/torrents/batch-push` 单独处理）
 - [ ] `expiringSoonMinutes` 字段 UI 暴露（DB 仍保留）
+
+### 10.9 HR 拦截（v0.5.x 增量）
+
+抓取层和过滤层独立加 HR 拦截，与 `discountTypes` 解耦：
+
+- `tasks` 表新增 `skip_hit_and_run INTEGER NOT NULL DEFAULT 1`（v21 迁移；老任务升级后默认勾选，行为变化需关注）。
+- `TaskRecord` / `TaskPayload` 新增 `skipHitAndRun: boolean`；前端新增「HR 策略」独立复选框，默认勾选。
+- 抓取层（`sites/nexusphp.ts`）：`parseNexusTorrentRows` / `parseNexusTorrentLinks` 加 `parseHitRunTags` 工具，识别：
+  - CHDBits 专用 `<div class="circle-text">hN</div>` → 写入 `H3`/`H5` tag；
+  - 通用 `H&R` / `hit and run` 文本 + 「未完成/未达标/未做种/未达到/未还种」 → 写入 `HR` tag；
+  - 同上但带「已完成/已达标/已做种/已还种/completed/done」 → 写入 `HR_DONE` tag（过滤函数识别，**不**被拦截）。
+- 过滤层（`tasks.ts`）：`hitRunFromBrowseItem(item)` 从 `tags` 中识别 H3/H5/HR；`matchedCandidates` 在原有过滤后追加 `task.skipHitAndRun && hitRunFromBrowseItem(item) !== null` 的二次过滤。
+- `matchedCandidates` 改为返回 `{ matched, excludedByHitAndRun }` 以便 `runTaskById` 与 `testTask` 共享同一过滤管道。
+- `runTaskById` 的 `lastSummary` 改为：`抓取 N，去重 M，命中 K（HR 排除 X），待入库 Z，推送 P，失败 Q`。
+- `testTask` 响应新增 `excludedByHitAndRunCount` 与 `items[].excludedBy?: 'HIT_AND_RUN'`。
+- 测试结果弹窗新增 `H&R 已过滤` badge 与 `HR 跳过 N 个` 统计；任务列表「抓取范围」概要加 `跳过 HR`。
+- 设计权衡：H&R 优先于 FREE。HR 标记的免费种按 HR 处理——勾选 `skipHitAndRun` 即跳过，不勾即抓。`discountType` 仍只表达 `FREE/TWO_X_FREE/HALF_FREE/NORMAL` 四种，不污染既有语义。
