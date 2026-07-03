@@ -1,8 +1,8 @@
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.5.6
+    image: qqxnz/xnz-pt-automation:0.6.0
     container_name: xnz-pt-automation
-    restart: always
+    restart: on-failure:5
     ports:
       - "3180:3180"
     environment:
@@ -12,3 +12,9 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - ./data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3180/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

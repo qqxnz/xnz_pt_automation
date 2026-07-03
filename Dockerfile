@@ -28,8 +28,9 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.5.6
+ARG VERSION=0.6.0
 ARG DATA_DIR=/data
+ARG SCHEMA_VERSION=21
 
 # 强制使用 Asia/Shanghai 时区，避免容器默认 UTC 与用户本地时区错位
 # 导致「今日流量」按字符串日期匹配时查不到数据
@@ -42,6 +43,8 @@ ENV NODE_ENV=production \
     PORT=3180 \
     DATA_DIR=${DATA_DIR} \
     TZ=Asia/Shanghai \
+    XNZ_VERSION=${VERSION} \
+    XNZ_SCHEMA_VERSION=${SCHEMA_VERSION} \
     # 优化5：Node.js 生产环境优化
     NODE_OPTIONS="--max-old-space-size=512"
 
@@ -63,6 +66,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && \
 
 # 优化8：使用多阶段复制，并设置正确的权限
 COPY --chown=node:node ecosystem.config.cjs ecosystem.config.cjs
+COPY --chown=node:node scripts/pre-start.sh /usr/local/bin/pre-start.sh
 COPY --from=build --chown=node:node /app/backend/dist backend/dist
 COPY --from=build --chown=node:node /app/frontend/dist frontend/dist
 
@@ -72,8 +76,10 @@ RUN mkdir -p ${DATA_DIR} && chown -R node:node ${DATA_DIR}
 # 优化10：切换到非 root 用户运行
 USER node
 
+RUN chmod +x /usr/local/bin/pre-start.sh
+
 VOLUME ["/data"]
 EXPOSE 3180
 
-# 优化11：使用 PM2 Runtime 守护 Node.js 进程
-CMD ["pm2-runtime", "ecosystem.config.cjs"]
+# 优化11：使用 pre-start.sh 包装 PM2 Runtime，先打印升级横幅再启动 node
+CMD ["/usr/local/bin/pre-start.sh"]

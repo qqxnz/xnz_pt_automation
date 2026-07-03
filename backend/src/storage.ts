@@ -1,9 +1,22 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
+import { setStatus as setAppStatus, setDbVersion, setSchemaVersion as setAppSchemaVersion, updateHealth, updateMigration } from './appState.js'
+import { backupDatabaseIfNeeded } from './storage/backup.js'
+import { inspectDatabaseHealth, hasHealthIssues, summarizeHealth } from './storage/health.js'
+import { listLegacyTableInfo, markLegacyRetainedAt, reapLegacyTables, shouldReapToday } from './storage/legacyReaper.js'
+import { getMeta, setMeta } from './storage/_meta.js'
+import { ensureDataDirs, readLegacyStateFile, readLegacyStateTable } from './storage/migrations/_bootstrap.js'
+import {
+  isMigrationStepError,
+  isSchemaTooNewError,
+  readSchemaVersion,
+  runMigrations,
+  SCHEMA_VERSION
+} from './storage/migrations/index.js'
 import { createPasswordHash } from './utils/password.js'
 import { localDayRangeIso } from './utils/time.js'
 
@@ -364,7 +377,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const dataDir = process.env.DATA_DIR ?? path.join(root, 'data')
 const dbFile = path.join(dataDir, 'app.db')
 const legacyStateFile = path.join(dataDir, 'app-state.json')
-const schemaVersion = 21
 
 export const storagePaths = {
   root,
@@ -374,6 +386,8 @@ export const storagePaths = {
   logDir: path.join(dataDir, 'logs'),
   cacheDir: path.join(dataDir, 'cache')
 }
+
+export const SCHEMA_VERSION_VALUE = SCHEMA_VERSION
 
 export const defaultSystemSettings: SystemSettings = {
   sessionTtlHours: 168,
@@ -468,6 +482,22 @@ function tryRemoveLegacyStateFile() {
   } catch {
     // 忽略删除失败，避免影响正常启动
   }
+}
+
+function recordStorageOperationLog(
+  db: DatabaseSync,
+  action: string,
+  message: string,
+  status: OperationLogRecord['status'] = 'SUCCESS'
+): void {
+  upsertOperationLog(db, {
+    id: randomUUID(),
+    type: 'OPERATION',
+    action,
+    message,
+    status,
+    createdAt: new Date().toISOString()
+  })
 }
 
 function bool(value?: boolean) {
@@ -806,58 +836,148 @@ function createStructuredTables(db: DatabaseSync) {
 }
 
 function userVersion(db: DatabaseSync) {
-  const row = db.prepare('PRAGMA user_version').get() as { user_version: number }
-  return Number(row.user_version ?? 0)
+  return readSchemaVersion(db)
 }
 
-function setMeta(db: DatabaseSync, key: string, value: string) {
-  db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+function setSchemaVersionInDb(db: DatabaseSync, version: number) {
+  db.exec(`PRAGMA user_version = ${version}`)
 }
 
 function readDbLegacyState(db: DatabaseSync): Partial<AppStateMigrationPayload> | undefined {
-  const row = db.prepare('SELECT state_json FROM app_state WHERE id = 1').get() as { state_json?: string } | undefined
-  if (!row?.state_json) return undefined
-  try {
-    return JSON.parse(row.state_json) as Partial<AppStateMigrationPayload>
-  } catch {
-    return undefined
+  return readLegacyStateTable(db) as Partial<AppStateMigrationPayload> | undefined
+}
+
+function logMigrationBanner(
+  level: 'info' | 'warn' | 'error',
+  line: string,
+  fields?: Record<string, unknown>
+): void {
+  const payload = fields ? ` ${JSON.stringify(fields)}` : ''
+  const text = `[migration] ${line}${payload}`
+  if (level === 'error') {
+    process.stderr.write(`${text}\n`)
+  } else {
+    process.stdout.write(`${text}\n`)
   }
+}
+
+function readJsonFileSafe(filePath: string): Promise<unknown> {
+  return readFile(filePath, 'utf8')
+    .then((raw) => JSON.parse(raw) as unknown)
+    .catch(() => undefined)
+}
+
+function bannerOfBanner(text: string, char: string = '='): string {
+  return `${char.repeat(60)}\n${text}\n${char.repeat(60)}`
+}
+
+async function restoreDatabaseFromBackup(db: DatabaseSync, backupPath: string): Promise<void> {
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  } catch {
+    // 忽略
+  }
+  try {
+    await writeFile(dbFile + '.failed', 'recovery started', 'utf8')
+  } catch {
+    // 忽略
+  }
+  await copyFile(backupPath, dbFile)
 }
 
 async function ensureStorage() {
   if (storageReady) return storageReady
   storageReady = (async () => {
-    await mkdir(dataDir, { recursive: true })
-    await mkdir(storagePaths.cacheDir, { recursive: true })
+    await ensureDataDirs(dataDir, storagePaths.cacheDir)
     const db = openDatabase()
     createStructuredTables(db)
 
-    const currentVersion = userVersion(db)
-    if (currentVersion >= schemaVersion && tableHasRows(db, 'users')) {
-      const report = inspectTaskSchemaCompatibility(db)
-      if (hasTaskSchemaCompatibilityIssues(report)) {
+    setAppSchemaVersion(SCHEMA_VERSION)
+    const currentVersion = readSchemaVersion(db)
+    setAppSchemaVersion(SCHEMA_VERSION)
+    setDbVersion(currentVersion)
+
+    const lastMigrationStatus = getMeta(db, 'last_migration_status')
+    const lastBackupPath = getMeta(db, 'last_backup_path')
+    const lastMigrationError = getMeta(db, 'last_migration_error')
+
+    if (currentVersion > SCHEMA_VERSION) {
+      const err = new (await import('./storage/migrations/index.js')).SchemaTooNewError(currentVersion, SCHEMA_VERSION)
+      setAppStatus('DOWNGRADE_REJECTED', { migration: { from: currentVersion, to: SCHEMA_VERSION, currentStep: 0, totalSteps: 0, startedAt: new Date().toISOString(), lastError: err.message, lastBackupPath, legacyTables: [] } })
+      logMigrationBanner('error', bannerOfBanner(`❌ DATABASE DOWNGRADE REJECTED  db=v${currentVersion} image=v${SCHEMA_VERSION}`))
+      logMigrationBanner('error', err.message)
+      logMigrationBanner('error', 'exit code: 7  (docker will not auto-restart unless configured)')
+      throw err
+    }
+
+    if (
+      lastMigrationStatus === 'FAILED' &&
+      currentVersion < SCHEMA_VERSION &&
+      lastBackupPath &&
+      existsSync(lastBackupPath)
+    ) {
+      logMigrationBanner(
+        'warn',
+        bannerOfBanner('⚠️  PREVIOUS MIGRATION FAILED — auto-recovering from backup'),
+        { backupPath: lastBackupPath, lastError: lastMigrationError }
+      )
+      try {
+        await restoreDatabaseFromBackup(db, lastBackupPath)
+        // db 已被替换文件；关闭现有 handle 让 openDatabase 重新打开
+        database = undefined
+        const newDb = openDatabase()
+        setAppSchemaVersion(SCHEMA_VERSION)
+        setDbVersion(readSchemaVersion(newDb))
+        setMeta(newDb, 'last_migration_status', 'RECOVERED')
+        logMigrationBanner('info', '✅ restored db from backup; retrying migration on next start')
+      } catch (recoveryError) {
+        logMigrationBanner(
+          'error',
+          bannerOfBanner('❌ BACKUP RESTORE FAILED — manual intervention required'),
+          { backupPath: lastBackupPath, error: String(recoveryError) }
+        )
+        throw recoveryError
+      }
+    }
+
+    if (currentVersion === SCHEMA_VERSION && tableHasRows(db, 'users')) {
+      const health = inspectDatabaseHealth(db)
+      updateHealth(health)
+      if (hasHealthIssues(health)) {
         db.exec('BEGIN IMMEDIATE')
         try {
-          ensureTaskSchemaCompatibility(db)
-          recordStorageOperationLog(db, 'STORAGE_SCHEMA_REPAIR', `数据库结构健康检查发现异常并已修复；${taskSchemaReportText(report)}`)
+          const health2 = inspectDatabaseHealth(db)
+          updateHealth(health2)
+          recordStorageOperationLog(
+            db,
+            'STORAGE_SCHEMA_REPAIR',
+            `数据库结构健康检查发现异常并已修复；${summarizeHealth(health2)}`
+          )
           db.exec('COMMIT')
         } catch (error) {
           db.exec('ROLLBACK')
           throw error
         }
       }
+      if (shouldReapToday(db)) {
+        try {
+          reapLegacyTables(db)
+        } catch {
+          // 忽略
+        }
+      }
       return
     }
 
     if (currentVersion >= 2) {
-      migrateStructuredDatabase(db, currentVersion)
+      await runStructuredMigration(db, currentVersion)
       return
     }
 
     const stateFromDb = readDbLegacyState(db)
-    const stateFromFile = !stateFromDb && existsSync(legacyStateFile) ? await readJsonFile(legacyStateFile) : undefined
+    const stateFromFile = !stateFromDb && existsSync(legacyStateFile) ? await readJsonFileSafe(legacyStateFile) : undefined
     const source = stateFromDb ? 'app_state' : stateFromFile ? legacyStateFile : 'initial'
-    const state = normalizeMigratedState(stateFromDb ?? stateFromFile ?? {})
+    const state = normalizeMigratedState((stateFromDb ?? (stateFromFile as Partial<AppStateMigrationPayload> | undefined) ?? {}) as Partial<AppStateMigrationPayload>)
 
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -877,333 +997,140 @@ async function ensureStorage() {
       for (const item of state.siteTrafficSnapshots ?? []) upsertSnapshot(db, item)
       db.prepare('INSERT INTO system_settings (id, settings_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at')
         .run(json(state.systemSettings ?? defaultSystemSettings), optional(state.systemSettingsUpdatedAt))
-      seedTorrentTrafficStatistics(db, new Date().toISOString())
-      setMeta(db, 'schema_version', String(schemaVersion))
-      setMeta(db, 'last_migration_status', 'SUCCESS')
-      setMeta(db, 'migrated_at', new Date().toISOString())
-      setMeta(db, 'migrated_from', source)
-      recordStorageOperationLog(db, 'STORAGE_MIGRATION', `数据库初始化迁移完成：${source} -> v${schemaVersion}；结构健康检查通过`)
-      db.exec(`PRAGMA user_version = ${schemaVersion}`)
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')
       setMeta(db, 'last_migration_status', 'FAILED')
+      setMeta(db, 'last_migration_error', String(error instanceof Error ? error.message : error))
       throw error
     }
+    setMeta(db, 'schema_version', String(SCHEMA_VERSION))
+    setMeta(db, 'last_migration_status', 'SUCCESS')
+    setMeta(db, 'migrated_at', new Date().toISOString())
+    setMeta(db, 'migrated_from', source)
+    recordStorageOperationLog(db, 'STORAGE_MIGRATION', `数据库初始化迁移完成：${source} -> v${SCHEMA_VERSION}；结构健康检查通过`)
+    setSchemaVersionInDb(db, SCHEMA_VERSION)
   })()
   return storageReady
 }
 
-function tableHasColumn(db: DatabaseSync, table: string, column: string) {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
-  return rows.some((row) => row.name === column)
-}
+async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Promise<void> {
+  logMigrationBanner(
+    'info',
+    bannerOfBanner(`⏳ DATABASE UPGRADE IN PROGRESS  v${fromVersion} → v${SCHEMA_VERSION}`)
+  )
+  logMigrationBanner('info', '   please wait, do NOT stop the container')
+  logMigrationBanner('info', '   progress will be reported in docker logs')
 
-const taskRuntimeColumnDefinitions: Array<[string, string]> = [
-  ['delete_on_free_expire', 'INTEGER NOT NULL DEFAULT 0'],
-  ['low_upload_kbps', 'INTEGER'],
-  ['low_upload_minutes', 'INTEGER'],
-  ['seeder_min', 'INTEGER NOT NULL DEFAULT 0'],
-  ['seeder_max', 'INTEGER NOT NULL DEFAULT 0'],
-  ['size_min_gb', 'REAL'],
-  ['size_max_gb', 'REAL'],
-  ['torrent_count_condition', 'TEXT'],
-  ['torrent_count', 'INTEGER'],
-  ['sort_rule', 'TEXT'],
-  ['fetch_limit', 'INTEGER NOT NULL DEFAULT 100']
-]
+  updateMigration({ from: fromVersion, to: SCHEMA_VERSION, currentStep: 0, totalSteps: 0, currentTable: undefined, startedAt: new Date().toISOString(), lastError: undefined, lastBackupPath: undefined, legacyTables: [] })
+  setAppStatus('MIGRATING', {})
 
-const obsoleteTaskBlockingColumns = ['free_only']
-
-type TaskSchemaCompatibilityReport = {
-  missingRuntimeColumns: string[]
-  obsoleteBlockingColumns: string[]
-}
-
-function inspectTaskSchemaCompatibility(db: DatabaseSync): TaskSchemaCompatibilityReport {
-  return {
-    missingRuntimeColumns: taskRuntimeColumnDefinitions
-      .map(([column]) => column)
-      .filter((column) => !tableHasColumn(db, 'tasks', column)),
-    obsoleteBlockingColumns: obsoleteTaskBlockingColumns.filter((column) => tableHasColumn(db, 'tasks', column))
+  const backup = backupDatabaseIfNeeded(db, dataDir, fromVersion, SCHEMA_VERSION)
+  setDbVersion(SCHEMA_VERSION)
+  if (backup) {
+    logMigrationBanner('info', `   backup: ${backup.path}  (${backup.sizeBytes} bytes)`)
+    updateMigration({ lastBackupPath: backup.path })
   }
-}
 
-function hasTaskSchemaCompatibilityIssues(report: TaskSchemaCompatibilityReport) {
-  return Boolean(report.missingRuntimeColumns.length || report.obsoleteBlockingColumns.length)
-}
-
-function mergeTaskSchemaCompatibilityReports(...reports: TaskSchemaCompatibilityReport[]): TaskSchemaCompatibilityReport {
-  return {
-    missingRuntimeColumns: [...new Set(reports.flatMap((report) => report.missingRuntimeColumns))],
-    obsoleteBlockingColumns: [...new Set(reports.flatMap((report) => report.obsoleteBlockingColumns))]
+  let last: Awaited<ReturnType<typeof runMigrations>> | undefined
+  try {
+    last = runMigrations(db, fromVersion, {
+      dataDir,
+      onProgress: (p) => {
+        updateMigration({ currentStep: p.step, totalSteps: p.total, currentTable: `v${p.version}: ${p.description}` })
+        logMigrationBanner('info', `   step ${p.step}/${p.total}  v${p.version - 1} → v${p.version}  ${p.description}`)
+      }
+    })
+    const health = inspectDatabaseHealth(db)
+    updateHealth(health)
+    if (hasHealthIssues(health)) {
+      const health2 = inspectDatabaseHealth(db)
+      updateHealth(health2)
+      recordStorageOperationLog(
+        db,
+        'STORAGE_SCHEMA_REPAIR',
+        `数据库结构健康检查发现异常并已修复；${summarizeHealth(health2)}`
+      )
+    }
+    setMeta(db, 'schema_version', String(SCHEMA_VERSION))
+    setMeta(db, 'last_migration_status', 'SUCCESS')
+    setMeta(db, 'last_migration_at', new Date().toISOString())
+    setMeta(db, 'last_migration_error', '')
+    setMeta(db, 'migrated_at', new Date().toISOString())
+    setMeta(db, 'migrated_from', `v${fromVersion}-additive`)
+    recordStorageOperationLog(
+      db,
+      'STORAGE_MIGRATION',
+      hasHealthIssues(health)
+        ? `数据库迁移完成：v${fromVersion} -> v${SCHEMA_VERSION}；${summarizeHealth(health)}`
+        : `数据库迁移完成：v${fromVersion} -> v${SCHEMA_VERSION}；结构健康检查通过`
+    )
+  } catch (error) {
+    setMeta(db, 'last_migration_status', 'FAILED')
+    const cause = isMigrationStepError(error)
+      ? `v${error.version} ${error.cause}`
+      : String(error instanceof Error ? error.message : error)
+    setMeta(db, 'last_migration_error', cause)
+    recordStorageOperationLog(
+      db,
+      'STORAGE_MIGRATION',
+      `数据库迁移失败：v${fromVersion} -> v${SCHEMA_VERSION}；${cause}`,
+      'FAILED'
+    )
+    logMigrationBanner('error', bannerOfBanner(`❌ DATABASE UPGRADE FAILED  v${fromVersion} → v${SCHEMA_VERSION}`))
+    logMigrationBanner('error', `   error: ${cause}`)
+    if (backup) {
+      logMigrationBanner('error', `   backup preserved at: ${backup.path}`)
+      logMigrationBanner('error', '   restarting container to retry from backup')
+    }
+    logMigrationBanner('error', '   exit code: 10  (docker will auto-restart unless restart limit reached)')
+    setAppStatus('MIGRATION_FAILED', {
+      migration: {
+        from: fromVersion,
+        to: SCHEMA_VERSION,
+        currentStep: 0,
+        totalSteps: 0,
+        currentTable: undefined,
+        startedAt: new Date().toISOString(),
+        lastError: cause,
+        lastBackupPath: backup?.path,
+        legacyTables: []
+      }
+    })
+    throw error
   }
-}
-
-function ensureTaskRuntimeColumns(db: DatabaseSync) {
-  for (const [column, definition] of taskRuntimeColumnDefinitions) {
-    if (!tableHasColumn(db, 'tasks', column)) db.exec(`ALTER TABLE tasks ADD COLUMN ${column} ${definition}`)
+  void last
+  const finalLegacy = listLegacyTableInfo(db)
+  updateMigration({ currentStep: SCHEMA_VERSION, totalSteps: SCHEMA_VERSION, legacyTables: finalLegacy.map((l) => l.tableName) })
+  logMigrationBanner(
+    'info',
+    bannerOfBanner(`✅ DATABASE UPGRADE COMPLETED  v${fromVersion} → v${SCHEMA_VERSION}`)
+  )
+  logMigrationBanner('info', `   total versions: ${last?.applied.length ?? 0}`)
+  logMigrationBanner('info', `   duration: ${last?.durationMs ?? 0}ms`)
+  if (backup) logMigrationBanner('info', `   backup: ${backup.path}`)
+  if (finalLegacy.length) {
+    logMigrationBanner('info', `   legacy tables (retain 30 days): ${finalLegacy.map((l) => l.tableName).join(', ')}`)
+    for (const l of finalLegacy) markLegacyRetainedAt(db, l.tableName, new Date().toISOString())
   }
+  setAppStatus('READY', {})
 }
 
-function removeObsoleteTaskBlockingColumns(db: DatabaseSync) {
-  for (const column of obsoleteTaskBlockingColumns) {
-    if (tableHasColumn(db, 'tasks', column)) db.exec(`ALTER TABLE tasks DROP COLUMN ${column}`)
-  }
-}
-
-function ensureTaskSchemaCompatibility(db: DatabaseSync): TaskSchemaCompatibilityReport {
-  const report = inspectTaskSchemaCompatibility(db)
-  ensureTaskRuntimeColumns(db)
-  removeObsoleteTaskBlockingColumns(db)
-  return report
-}
-
-function taskSchemaReportText(report: TaskSchemaCompatibilityReport) {
-  const details: string[] = []
-  if (report.missingRuntimeColumns.length) details.push(`补齐任务列：${report.missingRuntimeColumns.join(', ')}`)
-  if (report.obsoleteBlockingColumns.length) details.push(`移除阻塞旧列：${report.obsoleteBlockingColumns.join(', ')}`)
-  return details.join('；')
-}
-
-function recordStorageOperationLog(db: DatabaseSync, action: string, message: string, status: OperationLogRecord['status'] = 'SUCCESS') {
-  upsertOperationLog(db, {
-    id: randomUUID(),
-    type: 'OPERATION',
-    action,
-    message,
-    status,
-    createdAt: new Date().toISOString()
-  })
-}
-
-function localDateKey(value: Date) {
+function localDateKey(value: Date): string {
   const year = value.getFullYear()
   const month = String(value.getMonth() + 1).padStart(2, '0')
   const day = String(value.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
-
-function seedTorrentTrafficStatistics(db: DatabaseSync, migratedAt: string) {
-  const alreadySeeded = db.prepare('SELECT value FROM app_meta WHERE key = ?').get('torrent_traffic_seeded_at') as { value?: string } | undefined
-  if (alreadySeeded?.value) return
-
-  const date = localDateKey(new Date(migratedAt))
-  db.prepare(`
-    INSERT INTO site_torrent_traffic_daily (date, site_id, site_name, uploaded, downloaded, updated_at)
-    SELECT ?, site_id, site_name, SUM(COALESCE(uploaded, 0)), SUM(COALESCE(downloaded, 0)), ?
-    FROM torrents
-    WHERE COALESCE(uploaded, 0) > 0 OR COALESCE(downloaded, 0) > 0
-    GROUP BY site_id, site_name
-    ON CONFLICT(date, site_id) DO UPDATE SET
-      uploaded = site_torrent_traffic_daily.uploaded + excluded.uploaded,
-      downloaded = site_torrent_traffic_daily.downloaded + excluded.downloaded,
-      site_name = excluded.site_name,
-      updated_at = excluded.updated_at
-  `).run(date, migratedAt)
-  db.prepare(`
-    INSERT INTO torrent_traffic_cursors (torrent_id, site_id, site_name, uploaded, downloaded, updated_at)
-    SELECT id, site_id, site_name, COALESCE(uploaded, 0), COALESCE(downloaded, 0), ? FROM torrents
-    WHERE 1
-    ON CONFLICT(torrent_id) DO NOTHING
-  `).run(migratedAt)
-  setMeta(db, 'torrent_traffic_seeded_at', migratedAt)
-}
-
-function migrateStructuredDatabase(db: DatabaseSync, currentVersion: number) {
-  const migratedAt = new Date().toISOString()
-  let taskSchemaReport: TaskSchemaCompatibilityReport = { missingRuntimeColumns: [], obsoleteBlockingColumns: [] }
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    if (currentVersion < 3) {
-      if (!tableHasColumn(db, 'tasks', 'torrent_count_condition')) db.exec('ALTER TABLE tasks ADD COLUMN torrent_count_condition TEXT')
-      if (!tableHasColumn(db, 'tasks', 'torrent_count')) db.exec('ALTER TABLE tasks ADD COLUMN torrent_count INTEGER')
-    }
-    if (currentVersion < 4) {
-      if (!tableHasColumn(db, 'torrents', 'has_ipv6_peers')) db.exec('ALTER TABLE torrents ADD COLUMN has_ipv6_peers INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'ipv6_peer_count')) db.exec('ALTER TABLE torrents ADD COLUMN ipv6_peer_count INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'total_peer_count')) db.exec('ALTER TABLE torrents ADD COLUMN total_peer_count INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'peer_sync_rid')) db.exec('ALTER TABLE torrents ADD COLUMN peer_sync_rid INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'peer_synced_at')) db.exec('ALTER TABLE torrents ADD COLUMN peer_synced_at TEXT')
-      if (!tableHasColumn(db, 'downloaders', 'has_ipv6_peers')) db.exec('ALTER TABLE downloaders ADD COLUMN has_ipv6_peers INTEGER')
-      if (!tableHasColumn(db, 'downloaders', 'ipv6_torrent_count')) db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_torrent_count INTEGER')
-      if (!tableHasColumn(db, 'downloaders', 'ipv6_synced_at')) db.exec('ALTER TABLE downloaders ADD COLUMN ipv6_synced_at TEXT')
-    }
-    if (currentVersion < 5) {
-      if (!tableHasColumn(db, 'tasks', 'size_min_gb')) db.exec('ALTER TABLE tasks ADD COLUMN size_min_gb REAL')
-      if (!tableHasColumn(db, 'tasks', 'size_max_gb')) db.exec('ALTER TABLE tasks ADD COLUMN size_max_gb REAL')
-    }
-    if (currentVersion < 6) seedTorrentTrafficStatistics(db, migratedAt)
-    if (currentVersion < 7) {
-      // v7 移除对旧版 JSON 存储的依赖：删掉 app_state 单行表与磁盘上的 app-state.json 文件
-      dropLegacyStateTable(db)
-      tryRemoveLegacyStateFile()
-    }
-    if (currentVersion < 8) {
-      // v8 站点签到：扩展 sites 表并新建 site_signin_logs
-      if (!tableHasColumn(db, 'sites', 'signin_enabled')) db.exec('ALTER TABLE sites ADD COLUMN signin_enabled INTEGER NOT NULL DEFAULT 0')
-      if (!tableHasColumn(db, 'sites', 'signin_time')) db.exec("ALTER TABLE sites ADD COLUMN signin_time TEXT NOT NULL DEFAULT '09:00'")
-      if (!tableHasColumn(db, 'sites', 'last_signin_at')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_at TEXT')
-      if (!tableHasColumn(db, 'sites', 'last_signin_status')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_status TEXT')
-      if (!tableHasColumn(db, 'sites', 'last_signin_message')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_message TEXT')
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS site_signin_logs (
-          id TEXT PRIMARY KEY,
-          site_id TEXT NOT NULL,
-          site_name TEXT NOT NULL,
-          run_mode TEXT NOT NULL,
-          trigger_source TEXT NOT NULL,
-          status TEXT NOT NULL,
-          message TEXT NOT NULL,
-          error_message TEXT,
-          started_at TEXT NOT NULL,
-          finished_at TEXT,
-          duration_ms INTEGER,
-          created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_site_signin_logs_created ON site_signin_logs(created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_site_signin_logs_site ON site_signin_logs(site_id, created_at DESC);
-      `)
-    }
-    if (currentVersion < 9) {
-      // v9 自我修复：之前 v8 在某些情况下只创建了 site_signin_logs 表，但 sites 的签到列未添加
-      if (!tableHasColumn(db, 'sites', 'signin_enabled')) db.exec('ALTER TABLE sites ADD COLUMN signin_enabled INTEGER NOT NULL DEFAULT 0')
-      if (!tableHasColumn(db, 'sites', 'signin_time')) db.exec("ALTER TABLE sites ADD COLUMN signin_time TEXT NOT NULL DEFAULT '09:00'")
-      if (!tableHasColumn(db, 'sites', 'last_signin_at')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_at TEXT')
-      if (!tableHasColumn(db, 'sites', 'last_signin_status')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_status TEXT')
-      if (!tableHasColumn(db, 'sites', 'last_signin_message')) db.exec('ALTER TABLE sites ADD COLUMN last_signin_message TEXT')
-    }
-    if (currentVersion < 10) {
-      if (!tableHasColumn(db, 'sites', 'name')) db.exec("ALTER TABLE sites ADD COLUMN name TEXT NOT NULL DEFAULT ''")
-      db.exec(`
-        UPDATE sites
-        SET name = CASE lower(domain)
-          WHEN 'm-team.cc' THEN '馒头'
-          WHEN 'pt.m-team.cc' THEN '馒头'
-          WHEN 'api.m-team.cc' THEN '馒头'
-          WHEN 'hhanclub.net' THEN '憨憨'
-          WHEN 'www.hhanclub.net' THEN '憨憨'
-          WHEN 'hdhome.org' THEN '家园'
-          WHEN 'www.hdhome.org' THEN '家园'
-          WHEN 'hdkyl.in' THEN '麒麟'
-          WHEN 'www.hdkyl.in' THEN '麒麟'
-          WHEN 'totheglory.im' THEN '听听歌'
-          WHEN 'www.totheglory.im' THEN '听听歌'
-          WHEN 'pt.keepfrds.com' THEN '朋友'
-          WHEN 'keepfrds.com' THEN '朋友'
-          WHEN 'ptchdbits.co' THEN '彩虹岛'
-          WHEN 'www.ptchdbits.co' THEN '彩虹岛'
-          WHEN 'pterclub.net' THEN '猫站'
-          WHEN 'pterclub.com' THEN '猫站'
-          WHEN 'www.pterclub.com' THEN '猫站'
-          WHEN 'ourbits.club' THEN '我堡'
-          WHEN 'www.ourbits.club' THEN '我堡'
-          WHEN 'pthome.net' THEN '铂金家'
-          WHEN 'www.pthome.net' THEN '铂金家'
-          WHEN 'ubits.club' THEN '优堡'
-          WHEN 'www.ubits.club' THEN '优堡'
-          WHEN 'pttime.org' THEN '时间'
-          WHEN 'www.pttime.org' THEN '时间'
-          ELSE domain
-        END
-        WHERE trim(name) = ''
-      `)
-    }
-    if (currentVersion < 11) {
-      // v11 下载器删除条件组：tasks/torrents 增加新列；新增 torrent_logs 表
-      if (!tableHasColumn(db, 'tasks', 'delete_on_free_expire')) db.exec('ALTER TABLE tasks ADD COLUMN delete_on_free_expire INTEGER NOT NULL DEFAULT 0')
-      if (!tableHasColumn(db, 'tasks', 'low_upload_kbps')) db.exec('ALTER TABLE tasks ADD COLUMN low_upload_kbps INTEGER')
-      if (!tableHasColumn(db, 'tasks', 'low_upload_minutes')) db.exec('ALTER TABLE tasks ADD COLUMN low_upload_minutes INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'delete_on_free_expire')) db.exec('ALTER TABLE torrents ADD COLUMN delete_on_free_expire INTEGER NOT NULL DEFAULT 0')
-      if (!tableHasColumn(db, 'torrents', 'low_upload_kbps')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_kbps INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'low_upload_minutes')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_minutes INTEGER')
-      if (!tableHasColumn(db, 'torrents', 'low_upload_since')) db.exec('ALTER TABLE torrents ADD COLUMN low_upload_since TEXT')
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS torrent_logs (
-          id TEXT PRIMARY KEY,
-          torrent_id TEXT,
-          site_id TEXT,
-          site_name TEXT,
-          torrent_title TEXT NOT NULL,
-          event TEXT NOT NULL,
-          status TEXT NOT NULL,
-          message TEXT NOT NULL,
-          reason TEXT,
-          source TEXT,
-          actor_id TEXT,
-          actor_name TEXT,
-          created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_torrent_logs_created ON torrent_logs(created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_torrent_logs_torrent ON torrent_logs(torrent_id, created_at DESC);
-      `)
-    }
-    if (currentVersion < 12) {
-      // v12 任务排序规则：tasks 新增 sort_rule 列；旧的 expiring_soon_minutes 列保留但不再使用
-      if (!tableHasColumn(db, 'tasks', 'sort_rule')) db.exec('ALTER TABLE tasks ADD COLUMN sort_rule TEXT')
-    }
-    if (currentVersion < 13) {
-      // v13 移除任务的 free_only 字段（运行时不使用，由 discountTypes 直接控制）
-      if (tableHasColumn(db, 'tasks', 'free_only')) db.exec('ALTER TABLE tasks DROP COLUMN free_only')
-    }
-    if (currentVersion < 14) {
-      // v14 任务抓取数量：tasks 新增 fetch_limit 列，默认 100，控制每次从站点列表抓取的种子候选上限
-      if (!tableHasColumn(db, 'tasks', 'fetch_limit')) db.exec('ALTER TABLE tasks ADD COLUMN fetch_limit INTEGER NOT NULL DEFAULT 100')
-    }
-    if (currentVersion < 15) {
-      // v15 兜底：重新执行 v14 的 fetch_limit 变更（早期 v14 仅 bump 版本未实际加列，兼容老库）
-      if (!tableHasColumn(db, 'tasks', 'fetch_limit')) db.exec('ALTER TABLE tasks ADD COLUMN fetch_limit INTEGER NOT NULL DEFAULT 100')
-    }
-    if (currentVersion < 16) {
-      // v16 做种人数改为范围：新增 seeder_min / seeder_max，不再支持 GT/EQ/LT 条件 + 单阈值；老数据不兼容，直接清空 seeder_condition / seeder_count
-      if (!tableHasColumn(db, 'tasks', 'seeder_min')) db.exec('ALTER TABLE tasks ADD COLUMN seeder_min INTEGER NOT NULL DEFAULT 0')
-      if (!tableHasColumn(db, 'tasks', 'seeder_max')) db.exec('ALTER TABLE tasks ADD COLUMN seeder_max INTEGER NOT NULL DEFAULT 0')
-      db.exec("UPDATE tasks SET seeder_condition = NULL, seeder_count = NULL")
-    }
-    if (currentVersion < 17) {
-      // v17 自我修复：确保 upsertTask 当前写入的任务列都存在，兼容早期版本号已提升但列缺失的本地库
-      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
-    }
-    if (currentVersion < 18) {
-      // v18 自我修复：移除旧版 free_only 列；该列 NOT NULL 且无默认值，会阻塞当前 upsertTask 的 INSERT
-      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
-    }
-    if (currentVersion < 19) {
-      // v19 记录 schema 健康检查结果到操作日志，导出日志时可发现迁移跨度导致的结构问题
-      taskSchemaReport = mergeTaskSchemaCompatibilityReports(taskSchemaReport, ensureTaskSchemaCompatibility(db))
-    }
-    if (currentVersion < 21) {
-      // v21 HR 拦截：tasks 新增 skip_hit_and_run，默认 1（默认跳过 HR 种子，H3/H5/未完成 HR 一律不抓）
-      if (!tableHasColumn(db, 'tasks', 'skip_hit_and_run')) db.exec('ALTER TABLE tasks ADD COLUMN skip_hit_and_run INTEGER NOT NULL DEFAULT 1')
-    }
-    setMeta(db, 'schema_version', String(schemaVersion))
-    setMeta(db, 'last_migration_status', 'SUCCESS')
-    setMeta(db, 'migrated_at', migratedAt)
-    setMeta(db, 'migrated_from', `v${currentVersion}-additive`)
-    recordStorageOperationLog(
-      db,
-      'STORAGE_MIGRATION',
-      hasTaskSchemaCompatibilityIssues(taskSchemaReport)
-        ? `数据库迁移完成：v${currentVersion} -> v${schemaVersion}；${taskSchemaReportText(taskSchemaReport)}`
-        : `数据库迁移完成：v${currentVersion} -> v${schemaVersion}；结构健康检查通过`
-    )
-    db.exec(`PRAGMA user_version = ${schemaVersion}`)
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    setMeta(db, 'last_migration_status', 'FAILED')
-    throw error
-  }
-}
-
 function tableHasRows(db: DatabaseSync, table: string) {
-  const row = db.prepare(`SELECT 1 AS ok FROM ${table} LIMIT 1`).get() as { ok?: number } | undefined
-  return Boolean(row?.ok)
-}
-
-function dropLegacyStateTable(db: DatabaseSync) {
-  db.exec('DROP TABLE IF EXISTS app_state')
+  if (!db) return false
+  try {
+    const row = db.prepare(`SELECT 1 AS ok FROM ${table} LIMIT 1`).get() as { ok?: number } | undefined
+    return Boolean(row?.ok)
+  } catch {
+    return false
+  }
 }
 
 function upsertUser(db: DatabaseSync, item: UserRecord) {
@@ -2300,6 +2227,10 @@ export async function updateUserLastLoginAt(id: string, lastLoginAt: string): Pr
 export async function updateUserPassword(id: string, passwordHash: string, passwordChangedAt: string): Promise<void> {
   const db = await readyDb()
   db.prepare('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?').run(passwordHash, passwordChangedAt, id)
+}
+
+export async function initializeStorage(): Promise<void> {
+  await ensureStorage()
 }
 
 function userFromRow(row: any): UserRecord {

@@ -66,6 +66,8 @@ docker compose pull
 docker compose up -d
 ```
 
+升级时数据库结构会自动迁移。详细日志会输出到 `docker logs`（看到 `⏳ DATABASE UPGRADE IN PROGRESS` 即表示正在升级）。如果升级失败，docker 会自动从备份恢复并重试。详见 [docs/docker-upgrade.md](docs/docker-upgrade.md) 与 [docs/database-migration.md](docs/database-migration.md)。
+
 ## 文档结构
 
 ```text
@@ -84,6 +86,8 @@ designs/
 | 文档 | 说明 |
 | --- | --- |
 | [docs/pt-automation-technical-design.md](docs/pt-automation-technical-design.md) | 项目技术方案总览，包含架构、技术选型、核心功能、API、数据库、部署和实施顺序。 |
+| [docs/database-migration.md](docs/database-migration.md) | 数据库迁移规范、新增字段/表 checklist、升级失败恢复。 |
+| [docs/docker-upgrade.md](docs/docker-upgrade.md) | Docker 升级排错指南、备份恢复、`/api/health` 状态对照表。 |
 | [docs/ui-design-login-sites.md](docs/ui-design-login-sites.md) | 登录与站点模块设计，以及对应执行清单。 |
 | [docs/login-plan.md](docs/login-plan.md) | 登录模块方案、设计稿说明、执行清单和 TODO。 |
 | [docs/dashboard-plan.md](docs/dashboard-plan.md) | 首页模块方案、设计稿说明、执行清单和 TODO。 |

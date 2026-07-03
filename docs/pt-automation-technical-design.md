@@ -871,31 +871,26 @@ DELETE /api/logs                # 按 type 清空
 
 ## 18. 数据库设计
 
-> 实际表结构在 `storage.ts:517-803`；schema 版本 `schemaVersion = 20`；迁移 v3..v19 在 `migrateStructuredDatabase`；v1 / v2 兼容老 JSON 状态与单行 `app_state` 表。
+> 实际表结构以 `backend/src/storage/health.ts` 的 `TABLE_SPECS` 为准；schema 版本 `SCHEMA_VERSION` 常量在 `backend/src/storage/migrations/index.ts`（当前为 21）。每个版本的迁移脚本在 `backend/src/storage/migrations/v{N}.ts`，由 `runMigrations` 串行执行。
+
+迁移文件按版本号递增，完整清单见 `backend/src/storage/migrations/index.ts` 的 `MIGRATIONS` 数组。新增/修改字段的流程见 [docs/database-migration.md](./database-migration.md)。
 
 ```text
-app_meta                       # key/value 元数据
+app_meta                       # key/value 元数据（含 schema_version、last_migration_*、last_backup_*）
 users                          # 单行 admin
-sites                          # 站点（v8 加 signin_*，v10 加 name）
+sites                          # 站点
 proxies                        # 代理
-downloaders                    # 下载器（v4 加 ipv6_*）
-tasks                          # 任务（v3 加 torrentCountCondition/torrentCount，
-                               #      v5 加 sizeMinGb/sizeMaxGb，
-                               #      v11 加 deleteOnFreeExpire/lowUploadKbps/lowUploadMinutes，
-                               #      v12 加 sort_rule，
-                               #      v14/v15 加 fetch_limit，
-                               #      v16 加 seeder_min/seeder_max 并清空旧 GT/EQ/LT，
-                               #      v17/v18/v19 自我修复：补齐运行列、移除 free_only）
-torrents                       # 种子（v4 加 has_ipv6_peers/ipv6_peer_count/total_peer_count/peer_sync_rid/peer_synced_at，
-                               #       v11 加 delete_on_free_expire/low_upload_kbps/low_upload_minutes/low_upload_since）
+downloaders                    # 下载器
+tasks                          # 任务
+torrents                       # 种子
 operation_logs
 task_logs
 schedule_logs
-site_signin_logs               # v8 新建，v9 自我修复（确保 sites.signin_* 列存在）
-torrent_logs                   # v11 新建
-site_traffic_snapshots         # 站点流量历史
-site_torrent_traffic_daily     # v6 新建，按 (date, site_id) 聚合每个种子上传/下载
-torrent_traffic_cursors        # v6 新建，每种子基线
+site_signin_logs
+torrent_logs
+site_traffic_snapshots
+site_torrent_traffic_daily
+torrent_traffic_cursors
 system_settings                # 单行 id=1
 ```
 
