@@ -180,6 +180,12 @@
               </label>
             </div>
             <fieldset class="rule-group">
+              <legend>HR 策略</legend>
+              <label class="inline-check">
+                <input v-model="form.skipHitAndRun" type="checkbox" /> 跳过 HR 种子（H3/H5/未完成 HR，默认勾选）
+              </label>
+            </fieldset>
+            <fieldset class="rule-group">
               <legend>优惠类型（任选其一命中即可）</legend>
               <div class="check-grid">
                 <label v-for="type in discountOptions" :key="type.value" class="inline-check">
@@ -200,12 +206,6 @@
                 <label>最小做种人数<input v-model.number="form.seederMin" min="0" step="1" type="number" /></label>
                 <label>最大做种人数<input v-model.number="form.seederMax" min="0" step="1" type="number" /></label>
               </div>
-            </fieldset>
-            <fieldset class="rule-group">
-              <legend>HR 策略</legend>
-              <label class="inline-check">
-                <input v-model="form.skipHitAndRun" type="checkbox" /> 跳过 HR 种子（H3/H5/未完成 HR，默认勾选）
-              </label>
             </fieldset>
           </section>
 

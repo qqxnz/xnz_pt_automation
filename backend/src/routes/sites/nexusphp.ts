@@ -126,8 +126,15 @@ export async function fetchNexusTraffic(site: SiteRecord, profilePath: string, _
 // 通用 H&R 是其他 NexusPHP 站点的行内文本/图标 alt）。结果以 tag 形式合并到 TorrentListItem.tags。
 function parseHitRunTags(row: string, text: string): string[] {
   const tags: string[] = []
-  const levelMatch = row.match(/<div[^>]*class=["']circle-text["'][^>]*>\s*(h[1-6])\s*<\/div>/i)
+  // 1) CHDBits 行内结构：<div class="circle-text" ...>h3</div>，兼容混排 class/style/单双引号
+  const levelMatch = row.match(/<div\b[^>]*\bclass=["'][^"']*\bcircle-text\b[^"']*["'][^>]*>\s*(h[1-6])\s*<\/div>/i)
   if (levelMatch) tags.push(levelMatch[1].toUpperCase())
+  // 2) 兜底：<img alt="h3"> / <img title="h3"> / <span data-original-title="H3">
+  if (tags.length === 0) {
+    const attrMatch = row.match(/\b(?:alt|title|data-original-title)\s*=\s*["'](h[1-6])["']/i)
+    if (attrMatch) tags.push(attrMatch[1].toUpperCase())
+  }
+  // 3) 通用 H&R 文本/图标（彩虹岛 H3 行内有时也会带 H&R 文字）
   const genericHr = /H&R|hit\.?\s*and\.?\s*run|hit\.?\s*run/i.test(text)
   if (genericHr) {
     if (/未完成|未达标|未做种|未达到|未还种/i.test(text)) tags.push('HR')
