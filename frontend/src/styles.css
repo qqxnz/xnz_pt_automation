@@ -1018,6 +1018,31 @@ a {
   background: #eef6ff;
 }
 
+.secondary-button.outline {
+  min-height: 46px;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  padding: 0 20px;
+  color: #2563eb;
+  background: #fff;
+  font-weight: 800;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.secondary-button.outline:hover:not(:disabled) {
+  border-color: #bfdbfe;
+  background: #eef6ff;
+}
+
+.secondary-button.outline:active:not(:disabled) {
+  background: #dbeafe;
+}
+
+.secondary-button.outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .danger-button {
   color: #b91c1c;
   border-color: #fecaca;
@@ -1874,6 +1899,15 @@ a {
 
 .feature-page .dashboard-head .primary-button {
   flex: 0 0 auto;
+}
+
+.feature-page .dashboard-head .head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .feature-page .site-stats {

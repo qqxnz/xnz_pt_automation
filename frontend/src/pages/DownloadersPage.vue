@@ -6,7 +6,12 @@
           <h1>下载器</h1>
           <p>配置 qBittorrent 连接并测试下载器状态</p>
         </div>
-        <button class="primary-button compact" type="button" @click="openCreate">新增下载器</button>
+        <div class="head-actions">
+          <button class="primary-button compact" type="button" @click="openCreate">新增下载器</button>
+          <button class="secondary-button outline" type="button" @click="handleExport">导出</button>
+          <button class="secondary-button outline" type="button" @click="triggerImport">导入</button>
+          <input ref="importInputRef" type="file" accept=".json" hidden @change="handleImport" />
+        </div>
       </div>
 
       <section class="site-stats">
@@ -26,11 +31,6 @@
             <div class="panel-title-row">
               <h2>下载器列表</h2>
               <span>{{ items.length }} 个下载器</span>
-              <div class="panel-title-actions">
-                <button class="secondary-button" type="button" @click="handleExport">导出</button>
-                <button class="secondary-button" type="button" @click="triggerImport">导入</button>
-                <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
-              </div>
             </div>
 
             <div v-if="loading && !items.length" class="empty-tip">下载器列表加载中...</div>

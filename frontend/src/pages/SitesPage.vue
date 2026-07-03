@@ -6,7 +6,12 @@
           <h1>站点</h1>
           <p>管理 PT 站点域名、API Key、Cookie、连通状态和用户统计</p>
         </div>
-        <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
+        <div class="head-actions">
+          <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
+          <button class="secondary-button outline" type="button" :disabled="loading" @click="handleExport">导出</button>
+          <button class="secondary-button outline" type="button" :disabled="loading" @click="triggerImport">导入</button>
+          <input ref="importInputRef" type="file" accept=".json" hidden @change="handleImport" />
+        </div>
       </div>
 
       <section class="site-stats">
@@ -64,9 +69,6 @@
 <button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
             {{ loading ? '刷新中...' : '刷新' }}
           </button>
-          <button class="secondary-button" type="button" :disabled="loading" @click="handleExport">导出</button>
-          <button class="secondary-button" type="button" :disabled="loading" @click="triggerImport">导入</button>
-          <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
         </section>
 
       <section class="sites-table panel">

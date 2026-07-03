@@ -6,7 +6,12 @@
           <h1>任务</h1>
           <p>打开自动执行开关后开始计时；测试只核对抓取结果，运行会真实写入和推送。</p>
         </div>
-        <button class="primary-button compact" type="button" @click="openCreate">新建任务</button>
+        <div class="head-actions">
+          <button class="primary-button compact" type="button" @click="openCreate">新建任务</button>
+          <button class="secondary-button outline" type="button" :disabled="loading" @click="handleExport">导出</button>
+          <button class="secondary-button outline" type="button" :disabled="loading" @click="triggerImport">导入</button>
+          <input ref="importInputRef" type="file" accept=".json" hidden @change="handleImport" />
+        </div>
       </div>
 
       <section class="site-stats">
@@ -32,9 +37,6 @@
           @change="loadTasks"
         />
 <button class="secondary-button" type="button" :disabled="loading" @click="loadTasks">{{ loading ? '刷新中...' : '刷新' }}</button>
-          <button class="secondary-button" type="button" :disabled="loading" @click="handleExport">导出</button>
-          <button class="secondary-button" type="button" :disabled="loading" @click="triggerImport">导入</button>
-          <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImport" />
         </section>
 
       <section class="panel">
