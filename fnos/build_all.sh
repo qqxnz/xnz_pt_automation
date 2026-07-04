@@ -17,10 +17,50 @@ if [ -z "$VERSION" ]; then
 fi
 
 if ! command -v fnpack >/dev/null 2>&1; then
-  echo "❌ 未检测到 fnpack，请先安装：" >&2
-  echo "   curl -fsSL https://static2.fnnas.com/fnpack/fnpack-1.2.1-\$(uname | tr A-Z a-z)-\$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') -o /usr/local/bin/fnpack" >&2
-  echo "   chmod +x /usr/local/bin/fnpack" >&2
-  exit 1
+  echo "ℹ️  fnpack 未安装，尝试自动安装…"
+
+  OS=$(uname | tr A-Z a-z)
+  RAW_ARCH=$(uname -m)
+  case "$RAW_ARCH" in
+    x86_64) ARCH=amd64 ;;
+    aarch64|arm64) ARCH=arm64 ;;
+    *)
+      echo "❌ 不支持的主机架构: $RAW_ARCH" >&2
+      echo "   请手动安装 fnpack：https://developer.fnnas.com/docs/cli/fnpack" >&2
+      exit 1
+      ;;
+  esac
+
+  FNPACK_URL="https://static2.fnnas.com/fnpack/fnpack-1.2.1-${OS}-${ARCH}.fnpack"
+  FNPACK_URL_FALLBACK="https://static2.fnnas.com/fnpack/fnpack-1.2.1-${OS}-${ARCH}"
+
+  INSTALL_DIR="$HOME/.local/bin"
+  mkdir -p "$INSTALL_DIR"
+  INSTALL_PATH="$INSTALL_DIR/fnpack"
+
+  TMP_FILE=$(mktemp)
+  if curl -fsSL --fail -o "$TMP_FILE" "$FNPACK_URL" 2>/dev/null \
+     || curl -fsSL --fail -o "$TMP_FILE" "$FNPACK_URL_FALLBACK" 2>/dev/null; then
+    mv "$TMP_FILE" "$INSTALL_PATH"
+    chmod +x "$INSTALL_PATH"
+    echo "✅ fnpack 已下载到 $INSTALL_PATH"
+  else
+    rm -f "$TMP_FILE"
+    echo "❌ 自动下载 fnpack 失败" >&2
+    echo "   请手动安装：curl -fsSL $FNPACK_URL_FALLBACK -o $INSTALL_PATH && chmod +x $INSTALL_PATH" >&2
+    exit 1
+  fi
+
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      echo "ℹ️  $INSTALL_DIR 不在 PATH 中，本次执行将用绝对路径调用 fnpack"
+      ;;
+  esac
+
+  FNPACK_CMD="$INSTALL_PATH"
+else
+  FNPACK_CMD="fnpack"
 fi
 
 mkdir -p "$OUT_DIR"
@@ -44,7 +84,7 @@ build_one() {
   sed -i.bak "s/^arch=.*/arch=${arch}/" manifest
   sed -i.bak "s/^version=.*/version=${VERSION}/" manifest
 
-  if ! fnpack build 2>&1; then
+  if ! "$FNPACK_CMD" build 2>&1; then
     echo "⚠️  ${arch} 构建失败（当前 ${CURRENT_ARCH} 主机可能无法交叉编译 ${arch}）"
     echo "   提示：在 ${arch} 主机上重新运行本脚本可补打该包"
     rm -f manifest.bak

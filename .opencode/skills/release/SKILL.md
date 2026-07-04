@@ -24,7 +24,7 @@ description: |
 
 - 当前在 git 仓库根目录
 - 在 `main` 分支（其他分支先 `git checkout main`）
-- `fnpack` 已安装到 `PATH` 中
+- `fnpack` **不需要预装**，脚本会在检测不到时自动从飞牛官方下载到 `~/.local/bin/fnpack`
 - 工作区除本技能将要创建/修改的文件外应保持干净
 
 ## 同步更新的版本号位置（9 处）
@@ -56,7 +56,7 @@ CURRENT=$(node -p "require('./package.json').version")
 - `git status --porcelain` → 仅允许存在 `fnos/`、`fpk/`、要发版的文件
 - `git rev-parse v{NEW}` 不存在（tag 冲突则中止）
 - `git remote get-url origin` 必须指向 `qqxnz/xnz_pt_automation`
-- `command -v fnpack` 必须存在
+- `command -v fnpack` 如不存在，调用 `fnos/build_all.sh` 时会**自动安装**到 `~/.local/bin/fnpack`（不需 sudo）
 
 ### 3. 同步 9 处版本号
 
@@ -73,6 +73,7 @@ bash fnos/build_all.sh {NEW_VERSION}
 - 先用 `arch=x86_64` 调 `fnpack build` → `fpk/qqxnz.xnz-pt-automation-{ver}-x86_64.fpk`
 - 再用 `arch=arm64` 调 `fnpack build` → `fpk/qqxnz.xnz-pt-automation-{ver}-arm64.fpk`
 - 还原 manifest 的 `arch=x86_64`
+- **生成的 fpk 会进入 git**（`fpk/` 不在 `.gitignore` 中）
 
 > 当前主机架构无法运行的某个架构会失败（如 macOS arm64 主机打不出 x86_64 包），脚本会跳过并在汇总中标注。`--dry-run` 时不执行。
 
@@ -118,7 +119,7 @@ git push origin "v{NEW_VERSION}"
 | tag 已存在 | 中止，要求换版本号 |
 | 工作区有非相关 dirty | 中止，要求先 `git stash` / `git commit` |
 | 远端非 `qqxnz/xnz_pt_automation` | 中止，要求确认 |
-| `fnpack` 未安装 | 中止，给出安装命令 |
+| `fnpack` 未安装 | **自动下载**到 `~/.local/bin/fnpack`；下载失败才中止 |
 | `fnpack build` 某架构失败 | 跳过该架构，继续流程，汇总中标注 |
 | `git push` 失败 | 保留本地 commit + tag，提示用户手动 push；不自动 `--force` |
 

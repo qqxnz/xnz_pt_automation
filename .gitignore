@@ -38,6 +38,3 @@ Thumbs.db
 coverage/
 .cache/
 .nyc_output/
-
-# Release artifacts
-fpk/
