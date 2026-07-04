@@ -448,6 +448,20 @@ function buildCacheRecord(item: CandidateTorrent, status: string, pushResult?: s
   }
 }
 
+function localTimeString(iso?: string): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function localTimestamp(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+}
+
 async function saveTaskCache(
   task: TaskRecord,
   site: SiteRecord,
@@ -544,8 +558,8 @@ async function saveTaskCache(
     站点: siteDisplayName(site as Parameters<typeof siteDisplayName>[0]),
     下载器: downloaderName,
     执行模式: runMode === 'AUTO' ? '自动' : '手动',
-    开始时间: startedAt,
-    结束时间: finishedAt ?? null,
+    开始时间: localTimeString(startedAt),
+    结束时间: finishedAt ? localTimeString(finishedAt) : null,
     执行状态: status === 'SUCCESS' ? '成功' : '失败',
     错误信息: error ?? null,
     任务配置: config,
@@ -561,10 +575,10 @@ async function saveTaskCache(
     种子列表: records
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const timestamp = localTimestamp()
   const safeName = task.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
   const fileName = `task-${safeName}-${timestamp}.json`
-  const cacheDir = storagePaths.cacheDir
+  const cacheDir = storagePaths.logDir
   await mkdir(cacheDir, { recursive: true })
   await writeFile(`${cacheDir}/${fileName}`, JSON.stringify(payload, null, 2), 'utf8')
 

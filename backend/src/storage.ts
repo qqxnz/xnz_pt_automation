@@ -528,6 +528,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
 function openDatabase() {
   mkdirSync(dataDir, { recursive: true })
   mkdirSync(storagePaths.cacheDir, { recursive: true })
+  mkdirSync(storagePaths.logDir, { recursive: true })
 
   if (database) return database
 
@@ -897,7 +898,7 @@ export function getCurrentDatabase(): DatabaseSync {
 async function ensureStorage() {
   if (storageReady) return storageReady
   storageReady = (async () => {
-    await ensureDataDirs(dataDir, storagePaths.cacheDir)
+    await ensureDataDirs(dataDir, storagePaths.cacheDir, storagePaths.logDir)
     const db = openDatabase()
     createStructuredTables(db)
 

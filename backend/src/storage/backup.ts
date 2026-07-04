@@ -4,9 +4,13 @@
  * 仅在 user_version < SCHEMA_VERSION 时触发；同版本启动不重复备份。
  * 使用 SQLite 原生 VACUUM INTO 保证一致性（含 WAL/SHM）。
  * 备份路径写到 app_meta.last_backup_path，system-info 暴露给前端。
+ *
+ * 两类备份分开存放：
+ *   - 迁移备份（backupDatabaseIfNeeded）→ data/cache/
+ *   - 手动备份（createManualBackup 等）→ data/backup/
  */
 
-import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { setMeta } from './_meta.js'
@@ -16,6 +20,21 @@ const BACKUP_PREFIX = 'db-'
 const BACKUP_SUFFIX = '.sqlite3'
 const MAX_BACKUPS = 10
 const BACKUP_FILENAME_RE = /^db-[A-Za-z0-9._-]+\.sqlite3$/
+
+function ensureDir(dir: string): string {
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+function getMigrationBackupDir(dataDir: string): string {
+  return ensureDir(path.join(dataDir, 'cache'))
+}
+
+function getManualBackupDir(dataDir: string): string {
+  return ensureDir(path.join(dataDir, 'backup'))
+}
 
 export type BackupResult = {
   path: string
@@ -44,11 +63,11 @@ export function backupDatabaseIfNeeded(
   schemaVersion: number
 ): BackupResult | null {
   if (fromVersion >= schemaVersion) return null
-  if (!existsSync(dataDir)) return null
+  const backupDir = getMigrationBackupDir(dataDir)
 
   const ts = timestampForFilename(new Date())
   const filename = `${BACKUP_PREFIX}${ts}-pre-v${fromVersion}${BACKUP_SUFFIX}`
-  const backupPath = path.join(dataDir, filename)
+  const backupPath = path.join(backupDir, filename)
 
   try {
     db.exec(`VACUUM INTO '${quoteSqlString(backupPath)}'`)
@@ -68,13 +87,13 @@ export function backupDatabaseIfNeeded(
 }
 
 export function pruneOldBackups(dataDir: string, keep: number = MAX_BACKUPS): string[] {
-  if (!existsSync(dataDir)) return []
-  const files = readdirSync(dataDir)
+  const backupDir = getMigrationBackupDir(dataDir)
+  const files = readdirSync(backupDir)
     .filter((name) => name.startsWith(BACKUP_PREFIX) && name.endsWith(BACKUP_SUFFIX))
     .map((name) => ({
       name,
-      full: path.join(dataDir, name),
-      mtime: statSync(path.join(dataDir, name)).mtimeMs
+      full: path.join(backupDir, name),
+      mtime: statSync(path.join(backupDir, name)).mtimeMs
     }))
     .sort((a, b) => b.mtime - a.mtime)
   const removed: string[] = []
@@ -90,11 +109,11 @@ export function pruneOldBackups(dataDir: string, keep: number = MAX_BACKUPS): st
 }
 
 export function listBackups(dataDir: string): BackupItem[] {
-  if (!existsSync(dataDir)) return []
-  return readdirSync(dataDir)
+  const backupDir = getManualBackupDir(dataDir)
+  return readdirSync(backupDir)
     .filter((name) => BACKUP_FILENAME_RE.test(name) && !name.includes('..'))
     .map((name) => {
-      const full = path.join(dataDir, name)
+      const full = path.join(backupDir, name)
       const stat = statSync(full)
       return { name, sizeBytes: stat.size, mtime: stat.mtime.toISOString() }
     })
@@ -106,13 +125,11 @@ export function createManualBackup(
   dataDir: string,
   options: { fromVersion?: number } = {}
 ): BackupResult {
-  if (!existsSync(dataDir)) {
-    throw new Error('数据目录不存在')
-  }
+  const backupDir = getManualBackupDir(dataDir)
   const ts = timestampForFilename(new Date())
   const tag = options.fromVersion !== undefined ? `pre-v${options.fromVersion}` : `pre-restore`
   const filename = `${BACKUP_PREFIX}${ts}-${tag}${BACKUP_SUFFIX}`
-  const backupPath = path.join(dataDir, filename)
+  const backupPath = path.join(backupDir, filename)
   try {
     db.exec(`VACUUM INTO '${quoteSqlString(backupPath)}'`)
   } catch (error) {
@@ -130,9 +147,10 @@ export function deleteBackup(dataDir: string, name: string): void {
   if (!nameLooksSafe(name)) {
     throw new Error('BACKUP_NOT_FOUND')
   }
-  const full = path.join(dataDir, name)
+  const backupDir = getManualBackupDir(dataDir)
+  const full = path.join(backupDir, name)
   const resolved = path.resolve(full)
-  const resolvedDir = path.resolve(dataDir)
+  const resolvedDir = path.resolve(backupDir)
   if (!resolved.startsWith(resolvedDir + path.sep) && resolved !== resolvedDir) {
     throw new Error('BACKUP_NOT_FOUND')
   }
@@ -147,9 +165,10 @@ export function deleteBackup(dataDir: string, name: string): void {
 }
 
 export function resolveBackupPath(dataDir: string, name: string): string {
-  const full = path.join(dataDir, name)
+  const backupDir = getManualBackupDir(dataDir)
+  const full = path.join(backupDir, name)
   const resolved = path.resolve(full)
-  const resolvedDir = path.resolve(dataDir)
+  const resolvedDir = path.resolve(backupDir)
   if (!resolved.startsWith(resolvedDir + path.sep)) {
     throw new Error('INVALID_BACKUP_NAME')
   }

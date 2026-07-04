@@ -62,16 +62,18 @@ test('backup is skipped when fromVersion >= schemaVersion', () => {
 test('pruneOldBackups keeps only 10 most recent', () => {
   const dataDir = path.join('/tmp', `xnz-bk-prune-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dataDir, { recursive: true })
+  const cacheDir = path.join(dataDir, 'cache')
+  mkdirSync(cacheDir, { recursive: true })
   try {
     for (let i = 0; i < 12; i++) {
-      const f = path.join(dataDir, `db-old-${i}.sqlite3`)
+      const f = path.join(cacheDir, `db-old-${i}.sqlite3`)
       writeFileSync(f, 'x')
       const future = new Date(Date.now() + i * 1000)
       utimesSync(f, future, future)
     }
     const removed = pruneOldBackups(dataDir, 10)
     assert.equal(removed.length, 2)
-    const remaining = readdirSync(dataDir).filter((n) => n.endsWith('.sqlite3'))
+    const remaining = readdirSync(cacheDir).filter((n) => n.endsWith('.sqlite3'))
     assert.equal(remaining.length, 10)
   } finally {
     rmSync(dataDir, { recursive: true, force: true })
@@ -81,9 +83,11 @@ test('pruneOldBackups keeps only 10 most recent', () => {
 test('listBackups returns newest-first', () => {
   const dataDir = path.join('/tmp', `xnz-bk-list-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dataDir, { recursive: true })
+  const backupDir = path.join(dataDir, 'backup')
+  mkdirSync(backupDir, { recursive: true })
   try {
     for (let i = 0; i < 3; i++) {
-      const f = path.join(dataDir, `db-test-${i}.sqlite3`)
+      const f = path.join(backupDir, `db-test-${i}.sqlite3`)
       writeFileSync(f, 'x')
       const future = new Date(Date.now() + i * 1000)
       utimesSync(f, future, future)
@@ -109,9 +113,11 @@ test('nameLooksSafe accepts valid filenames and rejects traversal', () => {
 test('resolveBackupPath rejects names that escape dataDir', () => {
   const dataDir = path.join('/tmp', `xnz-bk-resolve-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dataDir, { recursive: true })
+  const backupDir = path.join(dataDir, 'backup')
+  mkdirSync(backupDir, { recursive: true })
   try {
     const safe = resolveBackupPath(dataDir, 'db-ok.sqlite3')
-    assert.equal(safe, path.join(dataDir, 'db-ok.sqlite3'))
+    assert.equal(safe, path.join(backupDir, 'db-ok.sqlite3'))
     assert.throws(() => resolveBackupPath(dataDir, '../escape.sqlite3'))
   } finally {
     rmSync(dataDir, { recursive: true, force: true })
@@ -139,8 +145,10 @@ test('createManualBackup writes a backup file', () => {
 test('deleteBackup removes file and rejects missing', () => {
   const dataDir = path.join('/tmp', `xnz-bk-del-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dataDir, { recursive: true })
+  const backupDir = path.join(dataDir, 'backup')
+  mkdirSync(backupDir, { recursive: true })
   try {
-    const f = path.join(dataDir, 'db-to-delete.sqlite3')
+    const f = path.join(backupDir, 'db-to-delete.sqlite3')
     writeFileSync(f, 'x')
     assert.ok(existsSync(f))
     deleteBackup(dataDir, 'db-to-delete.sqlite3')
@@ -155,11 +163,13 @@ test('deleteBackup removes file and rejects missing', () => {
 test('listBackups ignores non-matching filenames', () => {
   const dataDir = path.join('/tmp', `xnz-bk-filter-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   mkdirSync(dataDir, { recursive: true })
+  const backupDir = path.join(dataDir, 'backup')
+  mkdirSync(backupDir, { recursive: true })
   try {
-    writeFileSync(path.join(dataDir, 'db-good-1.sqlite3'), 'x')
-    writeFileSync(path.join(dataDir, 'db-good-2.sqlite3'), 'x')
-    writeFileSync(path.join(dataDir, 'something-else.txt'), 'x')
-    writeFileSync(path.join(dataDir, 'db-bad.exe'), 'x')
+    writeFileSync(path.join(backupDir, 'db-good-1.sqlite3'), 'x')
+    writeFileSync(path.join(backupDir, 'db-good-2.sqlite3'), 'x')
+    writeFileSync(path.join(backupDir, 'something-else.txt'), 'x')
+    writeFileSync(path.join(backupDir, 'db-bad.exe'), 'x')
     const list = listBackups(dataDir)
     assert.equal(list.length, 2)
     for (const item of list) {

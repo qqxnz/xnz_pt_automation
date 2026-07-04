@@ -63,7 +63,8 @@ export function tryRemoveLegacyStateFile(dataDir: string): void {
   }
 }
 
-export async function ensureDataDirs(dataDir: string, cacheDir: string): Promise<void> {
+export async function ensureDataDirs(dataDir: string, cacheDir: string, logDir: string): Promise<void> {
   await mkdir(dataDir, { recursive: true })
   await mkdir(cacheDir, { recursive: true })
+  await mkdir(logDir, { recursive: true })
 }
