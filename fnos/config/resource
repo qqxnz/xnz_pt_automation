@@ -1,0 +1,10 @@
+{
+  "docker-project": {
+    "projects": [
+      {
+        "name": "xnz-pt-automation",
+        "path": "docker"
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+#!/bin/bash
+# 升级后钩子：提示用户升级结果
+{
+  echo "✅ xnz-pt-automation 已升级到 ${wizard_image_tag:-0.6.2}"
+  echo "   容器会自动重启，等待约 30 秒后即可访问"
+} >> "$TRIM_TEMP_LOGFILE"
+exit 0

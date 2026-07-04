@@ -529,7 +529,7 @@ a {
 }
 
 .scheduler-overview-table .dashboard-table-row {
-  grid-template-columns: minmax(140px, 1.5fr) 80px 80px 110px 110px;
+  grid-template-columns: minmax(130px, 1.3fr) 72px 64px minmax(145px, 1fr) minmax(145px, 1fr);
 }
 
 .scheduler-overview-table .dashboard-table-row > * {
@@ -3330,6 +3330,10 @@ a {
   }
 
   .downloader-overview-table .dashboard-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduler-overview-table .dashboard-table-row {
     grid-template-columns: 1fr;
   }
 

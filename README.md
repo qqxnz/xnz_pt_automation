@@ -42,7 +42,25 @@ http://localhost:3180
 密码：123456
 ```
 
-也可以直接用 `docker run`：
+## 飞牛 (fnOS) NAS 部署
+
+本项目已封装为飞牛 (fnOS) 原生应用，可在「应用中心」一键安装。封装源在 `fnos/` 目录，输出 `.fpk` 包。
+
+```bash
+# 在 fnos/ 目录下
+./build.sh 0.6.2
+# 得到 ../qqxnz.xnz-pt-automation-0.6.2.fpk
+```
+
+安装方式：
+- **应用中心 GUI**：「应用中心 → 手动安装 → 上传 .fpk」
+- **SSH 安装**：`appcenter-cli install-fpk qqxnz.xnz-pt-automation-0.6.2.fpk`
+
+镜像从阿里云容器镜像服务拉取（`crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation`），如需更换仓库地址编辑 `fnos/app/docker/docker-compose.yaml`。
+
+详细文档、数据迁移说明和故障排查见 [fnos/README.md](fnos/README.md)。
+
+## Docker 部署（也可以直接用 `docker run`）：
 
 ```bash
 docker run -d \
@@ -88,6 +106,8 @@ designs/
 | [docs/pt-automation-technical-design.md](docs/pt-automation-technical-design.md) | 项目技术方案总览，包含架构、技术选型、核心功能、API、数据库、部署和实施顺序。 |
 | [docs/database-migration.md](docs/database-migration.md) | 数据库迁移规范、新增字段/表 checklist、升级失败恢复。 |
 | [docs/docker-upgrade.md](docs/docker-upgrade.md) | Docker 升级排错指南、备份恢复、`/api/health` 状态对照表。 |
+| [fnos/README.md](fnos/README.md) | 飞牛 (fnOS) NAS 封装说明、`.fpk` 打包、数据迁移、故障排查。 |
+| [.opencode/skills/release/SKILL.md](.opencode/skills/release/SKILL.md) | `release` 技能：自动更新版本号、生成 fpk、打 tag 并推送到 GitHub。 |
 | [docs/ui-design-login-sites.md](docs/ui-design-login-sites.md) | 登录与站点模块设计，以及对应执行清单。 |
 | [docs/login-plan.md](docs/login-plan.md) | 登录模块方案、设计稿说明、执行清单和 TODO。 |
 | [docs/dashboard-plan.md](docs/dashboard-plan.md) | 首页模块方案、设计稿说明、执行清单和 TODO。 |

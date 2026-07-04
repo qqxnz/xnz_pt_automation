@@ -1,0 +1,43 @@
+#!/bin/bash
+# xnz-pt-automation fnos cmd/main
+# Docker 应用的 start/stop 由 appcenter 自动执行 docker compose 处理
+# status 通过检测 container_name 判断容器运行状态
+# 退出码：
+#   0 - 运行中 / 启动成功
+#   3 - 未运行
+#   1 - 参数错误
+
+set -u
+
+FILE_PATH="${TRIM_APPDEST}/docker/docker-compose.yaml"
+
+is_docker_running() {
+    local NAME=""
+    if [ -f "$FILE_PATH" ]; then
+        NAME=$(grep "container_name" "$FILE_PATH" | awk -F ':' '{print $2}' | xargs)
+    fi
+    if [ -n "$NAME" ]; then
+        docker inspect "$NAME" 2>/dev/null | grep -q '"Status": "running",'
+    else
+        return 1
+    fi
+}
+
+case "$1" in
+    start)
+        exit 0
+        ;;
+    stop)
+        exit 0
+        ;;
+    status)
+        if is_docker_running; then
+            exit 0
+        else
+            exit 3
+        fi
+        ;;
+    *)
+        exit 1
+        ;;
+esac

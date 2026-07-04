@@ -1,0 +1,11 @@
+#!/bin/bash
+# 安装后钩子：向用户展示访问信息
+{
+  echo "✅ xnz-pt-automation 安装完成"
+  echo "   统一网关访问: http://NAS_IP:5666/app/xnz-pt-automation"
+  echo "   直接端口访问: http://NAS_IP:${wizard_service_port:-3180}"
+  echo "   默认账号: admin / ${wizard_admin_password:-123456}"
+  echo "   数据目录: /vol*/@appdata/xnz-pt-automation/var/app/"
+  echo "   首次启动需要拉取镜像，请耐心等待 1-2 分钟"
+} >> "$TRIM_TEMP_LOGFILE"
+exit 0

@@ -1,0 +1,7 @@
+{
+  "defaults": {
+    "run-as": "package"
+  },
+  "username": "xnz-pt-automation",
+  "groupname": "xnz-pt-automation"
+}

@@ -1,0 +1,7 @@
+#!/bin/bash
+# 卸载后钩子：根据用户选择清理数据
+if [ "${wizard_delete_data:-false}" = "true" ]; then
+  rm -rf "$TRIM_PKGVAR" 2>/dev/null
+  echo "已清理应用数据目录 $TRIM_PKGVAR" >> "$TRIM_TEMP_LOGFILE"
+fi
+exit 0

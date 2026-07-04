@@ -1,0 +1,6 @@
+#!/bin/bash
+# 配置变更后钩子：提示用户配置已更新
+{
+  echo "✅ xnz-pt-automation 配置已更新，容器会自动重启"
+} >> "$TRIM_TEMP_LOGFILE"
+exit 0

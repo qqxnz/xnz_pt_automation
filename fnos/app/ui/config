@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "qqxnz.xnz-pt-automation.Application": {
+            "title": "PT 自动化",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "3180",
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

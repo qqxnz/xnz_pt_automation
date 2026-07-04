@@ -1,0 +1,24 @@
+[manifest]
+desc="面向 NAS 的 PT 自动化系统：按规则抓取 PT 站点种子、推送到 qBittorrent 下载器、检查免费时间并按规则删除，统计各站点上传/下载/分享率。<br/>内置 Vue 前端与 Express API，开箱即用。<br/><a target=\"_blank\" href=\"https://github.com/qqxnz/xnz_pt_automation\">项目主页</a>"
+
+[install]
+step_port_title="端口设置"
+label_service_port="Web 端口"
+service_port_required="请输入端口"
+service_port_pattern="端口必须为 2-5 位数字"
+
+step_account_title="账户与镜像"
+label_admin_password="默认管理员密码（admin）"
+password_required="请输入密码"
+label_image_tag="镜像版本"
+image_tag_required="请输入镜像版本"
+help_image_tag="默认 0.6.3，可前往阿里云容器镜像服务查看最新版本"
+
+[uninstall]
+step_data_title="数据清理"
+label_delete_data="同时删除所有数据（数据库、日志、用户配置）"
+
+[upgrade]
+step_version_title="升级版本"
+label_image_tag="升级到的镜像版本"
+image_tag_required="请输入镜像版本"
