@@ -313,26 +313,31 @@ downloadersRouter.get('/:id/status', requireAuth, async (req, res) => {
   const id = String(req.params.id)
   const downloader = await getDownloaderFromDb(id)
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
+  const skipWrite = req.query.skipWrite === 'true'
   try {
     const result = await getQbStatus(downloader)
-    downloader.status = 'ONLINE'
-    downloader.statusMessage = undefined
-    downloader.lastSyncedAt = result.lastSyncedAt
-    downloader.updatedAt = result.lastSyncedAt
-    await updateDownloaderInDb(downloader)
+    if (!skipWrite) {
+      downloader.status = 'ONLINE'
+      downloader.statusMessage = undefined
+      downloader.lastSyncedAt = result.lastSyncedAt
+      downloader.updatedAt = result.lastSyncedAt
+      await updateDownloaderInDb(downloader)
+    }
     return res.json(result)
   } catch (error) {
     const now = new Date().toISOString()
-    downloader.status = statusFromError(error)
-    downloader.statusMessage = errorMessage(error)
-    downloader.updatedAt = now
-    await updateDownloaderInDb(downloader)
+    if (!skipWrite) {
+      downloader.status = statusFromError(error)
+      downloader.statusMessage = errorMessage(error)
+      downloader.updatedAt = now
+      await updateDownloaderInDb(downloader)
+    }
     return res.status(400).json({
       downloaderId: downloader.id,
       uploadSpeed: 0,
       downloadSpeed: 0,
-      status: downloader.status,
-      message: downloader.statusMessage,
+      status: skipWrite ? downloader.status : statusFromError(error),
+      message: skipWrite ? undefined : errorMessage(error),
       lastSyncedAt: now
     })
   }

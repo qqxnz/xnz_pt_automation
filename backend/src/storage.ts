@@ -885,6 +885,15 @@ async function restoreDatabaseFromBackup(db: DatabaseSync, backupPath: string): 
   await copyFile(backupPath, dbFile)
 }
 
+export async function restoreDatabaseFile(backupPath: string): Promise<void> {
+  const db = openDatabase()
+  await restoreDatabaseFromBackup(db, backupPath)
+}
+
+export function getCurrentDatabase(): DatabaseSync {
+  return openDatabase()
+}
+
 async function ensureStorage() {
   if (storageReady) return storageReady
   storageReady = (async () => {

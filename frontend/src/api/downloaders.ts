@@ -136,8 +136,9 @@ export function testDownloader(id: string) {
   return apiRequest<DownloaderTestResult>(`/api/downloaders/${id}/test`, { method: 'POST' })
 }
 
-export function getDownloaderStatus(id: string) {
-  return apiRequest<DownloaderStatus>(`/api/downloaders/${id}/status`)
+export function getDownloaderStatus(id: string, skipWrite = false) {
+  const query = skipWrite ? '?skipWrite=true' : ''
+  return apiRequest<DownloaderStatus>(`/api/downloaders/${id}/status${query}`)
 }
 
 export function getDownloaderTorrents(id: string) {

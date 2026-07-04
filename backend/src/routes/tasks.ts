@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { Router } from 'express'
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises'
 import { requireAuth } from '../middleware/auth.js'
 import {
   deleteTaskFromDb,
@@ -11,6 +12,7 @@ import {
   listSitesFromDb,
   listTasksFromDb,
   queryLogs,
+  storagePaths,
   type SiteRecord,
   type TaskRecord,
   type TaskSortRule,
@@ -356,6 +358,232 @@ function readableTorrentTitle(title: string) {
   return normalized.length > 80 ? `${normalized.slice(0, 80)}...` : normalized || '未知种子'
 }
 
+const CACHE_MAX_FILES_PER_TASK = 5
+
+function discountTypeLabel(type: CandidateTorrent['discountType']) {
+  const map: Record<string, string> = { FREE: '免费', TWO_X_FREE: '2x免费', HALF_FREE: '半价', NORMAL: '普通' }
+  return map[type] ?? type
+}
+
+function sortRuleLabel(rule?: TaskSortRule) {
+  const map: Record<string, string> = {
+    SEEDERS_ASC: '做种数升序',
+    SEEDERS_DESC: '做种数降序',
+    CREATED_DESC: '发布时间降序',
+    CREATED_ASC: '发布时间升序',
+    SIZE_DESC: '体积降序',
+    SIZE_ASC: '体积升序'
+  }
+  return rule ? map[rule] ?? rule : null
+}
+
+function formatSizeRange(sizeMinGb?: number, sizeMaxGb?: number) {
+  const min = sizeMinGb ?? 0
+  const max = sizeMaxGb ?? 0
+  if (!min && !max) return '不限'
+  if (min && max) return `${min} ~ ${max}`
+  if (min) return `≥ ${min}`
+  return `≤ ${max}`
+}
+
+function formatSeederRange(seederMin?: number, seederMax?: number) {
+  const min = seederMin ?? 0
+  const max = seederMax ?? 0
+  if (!min && !max) return '不限'
+  if (min && max) return `${min} ~ ${max}`
+  if (min) return `≥ ${min}`
+  return `≤ ${max}`
+}
+
+function formatCountCondition(condition?: string, count?: number) {
+  if (!condition || count === undefined) return null
+  const map: Record<string, string> = { GT: `> ${count}`, EQ: `= ${count}`, LT: `< ${count}` }
+  return map[condition] ?? `${condition} ${count}`
+}
+
+type CacheRecord = {
+  种子名称: string
+  种子ID: string
+  体积: number
+  体积单位: string
+  做种数: number
+  下载数: number
+  优惠类型: string
+  免费截止: string | null
+  标签: string[]
+  状态: string
+  推送结果: string | null
+  详情链接: string | null
+}
+
+type TaskCachePayload = {
+  任务名称: string
+  任务ID: string
+  站点: string
+  下载器: string
+  执行模式: string
+  开始时间: string
+  结束时间: string | null
+  执行状态: string
+  错误信息: string | null
+  任务配置: Record<string, unknown>
+  统计: Record<string, number>
+  种子列表: CacheRecord[]
+}
+
+function buildCacheRecord(item: CandidateTorrent, status: string, pushResult?: string): CacheRecord {
+  return {
+    种子名称: item.title,
+    种子ID: item.torrentId,
+    体积: item.size ? parseFloat((item.size / (1024 * 1024 * 1024)).toFixed(2)) : 0,
+    体积单位: 'GB',
+    做种数: item.seeders,
+    下载数: item.leechers,
+    优惠类型: discountTypeLabel(item.discountType),
+    免费截止: item.freeEndAt ?? null,
+    标签: item.tags,
+    状态: status,
+    推送结果: pushResult ?? null,
+    详情链接: item.detailUrl ?? null
+  }
+}
+
+async function saveTaskCache(
+  task: TaskRecord,
+  site: SiteRecord,
+  downloaderName: string,
+  runMode: TaskRunMode,
+  startedAt: string,
+  fetched: CandidateTorrent[],
+  deduped: CandidateTorrent[],
+  matched: CandidateTorrent[],
+  excludedByHitAndRun: CandidateTorrent[],
+  pushable: CandidateTorrent[],
+  pushStatusMap: Map<string, { pushed: boolean; error?: string }>,
+  status: 'SUCCESS' | 'FAILED',
+  error?: string,
+  finishedAt?: string
+) {
+  const records: CacheRecord[] = []
+  const dedupedIds = new Set(deduped.map((i) => i.torrentId))
+  const matchedIds = new Set(matched.map((i) => i.torrentId))
+  const hrExcludedIds = new Set(excludedByHitAndRun.map((i) => i.torrentId))
+  const pushableIds = new Set(pushable.map((i) => i.torrentId))
+
+  for (const item of fetched) {
+    if (!dedupedIds.has(item.torrentId)) {
+      records.push(buildCacheRecord(item, '重复'))
+    } else if (hrExcludedIds.has(item.torrentId)) {
+      records.push(buildCacheRecord(item, 'H&R排除'))
+    } else if (!matchedIds.has(item.torrentId)) {
+      records.push(buildCacheRecord(item, '未命中'))
+    } else if (!pushableIds.has(item.torrentId)) {
+      records.push(buildCacheRecord(item, '命中'))
+    } else {
+      const ps = pushStatusMap.get(item.torrentId)
+      if (ps?.pushed) {
+        records.push(buildCacheRecord(item, '已推送', '成功'))
+      } else if (ps?.error) {
+        records.push(buildCacheRecord(item, '推送失败', ps.error))
+      } else {
+        records.push(buildCacheRecord(item, '命中'))
+      }
+    }
+  }
+
+  const dedupedCount = fetched.length - deduped.length
+  const notMatchedCount = deduped.length - matched.length - excludedByHitAndRun.length
+  let pushedCount = 0
+  let pushFailedCount = 0
+  for (const ps of pushStatusMap.values()) {
+    if (ps.pushed) pushedCount += 1
+    else if (ps.error) pushFailedCount += 1
+  }
+  const matchedButNotPushable = matched.length - pushable.length
+
+  const configLabelMap: Record<string, string> = {
+    自动运行: 'autoRunEnabled',
+    执行间隔_分钟: 'intervalMinutes',
+    自动推送: 'autoPush',
+    仅免费下载: 'onlyFreeDownload',
+    免费到期删除: 'deleteOnFreeExpire',
+    跳过HR: 'skipHitAndRun',
+    优惠类型: 'discountTypes',
+    体积范围_GB: 'sizeRange',
+    做种数范围: 'seederRange',
+    排序规则: 'sortRule',
+    抓取数量: 'fetchLimit',
+    种子个数条件: 'countCondition',
+    低速删除阈值_KB_s: 'lowUploadKbps',
+    低速删除持续_分钟: 'lowUploadMinutes',
+    保存路径: 'savePathOverride',
+    分类: 'categoryOverride',
+    标签: 'tagsOverride'
+  }
+
+  const config: Record<string, unknown> = {}
+  for (const [label, key] of Object.entries(configLabelMap)) {
+    if (key === 'discountTypes') {
+      config[label] = (task.discountTypes ?? []).map((t) => discountTypeLabel(t))
+    } else if (key === 'sizeRange') {
+      config[label] = formatSizeRange(task.sizeMinGb, task.sizeMaxGb)
+    } else if (key === 'seederRange') {
+      config[label] = formatSeederRange(task.seederMin, task.seederMax)
+    } else if (key === 'sortRule') {
+      config[label] = sortRuleLabel(task.sortRule)
+    } else if (key === 'countCondition') {
+      config[label] = formatCountCondition(task.torrentCountCondition, task.torrentCount)
+    } else {
+      config[label] = (task as Record<string, unknown>)[key] ?? null
+    }
+  }
+
+  const payload: TaskCachePayload = {
+    任务名称: task.name,
+    任务ID: task.id,
+    站点: siteDisplayName(site as Parameters<typeof siteDisplayName>[0]),
+    下载器: downloaderName,
+    执行模式: runMode === 'AUTO' ? '自动' : '手动',
+    开始时间: startedAt,
+    结束时间: finishedAt ?? null,
+    执行状态: status === 'SUCCESS' ? '成功' : '失败',
+    错误信息: error ?? null,
+    任务配置: config,
+    统计: {
+      抓取: fetched.length,
+      重复: dedupedCount,
+      'H&R排除': excludedByHitAndRun.length,
+      未命中: Math.max(0, notMatchedCount),
+      命中: matchedButNotPushable + (pushable.length - pushedCount - pushFailedCount),
+      已推送: pushedCount,
+      推送失败: pushFailedCount
+    },
+    种子列表: records
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const safeName = task.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
+  const fileName = `task-${safeName}-${timestamp}.json`
+  const cacheDir = storagePaths.cacheDir
+  await mkdir(cacheDir, { recursive: true })
+  await writeFile(`${cacheDir}/${fileName}`, JSON.stringify(payload, null, 2), 'utf8')
+
+  try {
+    const files = await readdir(cacheDir)
+    const prefix = `task-${safeName}-`
+    const taskFiles = files
+      .filter((f) => f.startsWith(prefix) && f.endsWith('.json'))
+      .sort()
+      .reverse()
+    const toDelete = taskFiles.slice(CACHE_MAX_FILES_PER_TASK)
+    for (const f of toDelete) {
+      await unlink(`${cacheDir}/${f}`)
+    }
+  } catch {
+    // 清理失败不影响主流程
+  }
+}
+
 type TaskRunResult = {
   task: TaskRecord
   fetchedCount: number
@@ -470,9 +698,14 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
   }
 
   let pushedTorrentRecords: TorrentRecord[] = []
+  let fetched: CandidateTorrent[] = []
+  let deduped: CandidateTorrent[] = []
+  let matched: CandidateTorrent[] = []
+  let excludedByHitAndRun: CandidateTorrent[] = []
+  let pushable: CandidateTorrent[] = []
+  let pushStatusMap = new Map<string, { pushed: boolean; error?: string }>()
   try {
     if (!site || !site.enabled) throw new Error(!site ? '任务绑定站点不存在' : '站点已禁用')
-    let fetched: CandidateTorrent[]
     try {
       fetched = await candidatesForTask(site, { includeDownloadUrl: true, fetchLimit: task.fetchLimit ?? DEFAULT_FETCH_LIMIT })
     } catch (error) {
@@ -481,15 +714,16 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     fetched = sortCandidatesByRule(task.sortRule, fetched)
     const existingTorrents = await listAllTorrents({ siteId: site.id })
     const existingKeys = new Set(existingTorrents.map((torrent) => `${torrent.siteId}:${torrent.torrentId ?? ''}`).filter((key) => !key.endsWith(':')))
-    const deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
+    deduped = fetched.filter((item) => !existingKeys.has(`${site.id}:${item.torrentId}`))
     const dedupedCount = fetched.length - deduped.length
-    const { matched, excludedByHitAndRun } = matchedCandidates(task, deduped)
+    ;({ matched, excludedByHitAndRun } = matchedCandidates(task, deduped))
     const excludedByHitAndRunCount = excludedByHitAndRun.length
-    const pushable = applyTorrentCountCondition(task, matched)
+    pushable = applyTorrentCountCondition(task, matched)
     const now = new Date().toISOString()
     let pushedCount = 0
     let pushFailedCount = 0
     const pushErrorMessages: string[] = []
+    pushStatusMap = new Map<string, { pushed: boolean; error?: string }>()
     for (const item of pushable) {
       let pushed: Awaited<ReturnType<typeof addTorrentUrlToQb>> | undefined
       let pushError: string | undefined
@@ -516,6 +750,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         }
       }
       const failedPush = Boolean(pushError)
+      pushStatusMap.set(item.torrentId, { pushed: Boolean(pushed), error: pushError })
       const record: TorrentRecord = {
         id: randomUUID(),
         siteId: site.id,
@@ -603,6 +838,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastError = undefined
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
+    await saveTaskCache(task, site, downloader?.name ?? '未知下载器', runMode, startedAt, fetched, deduped, matched, excludedByHitAndRun, pushable, pushStatusMap, 'SUCCESS', undefined, finishedAt)
     await persistTaskUpdate(task)
     await recordTaskLog({
       taskId: task.id,
@@ -668,6 +904,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
     task.lastSummary = message
     task.nextRunAt = task.autoRunEnabled ? addMinutes(finishedAt, task.intervalMinutes) : undefined
     task.updatedAt = finishedAt
+    await saveTaskCache(task, site ?? { id: task.siteId, domain: task.siteId } as SiteRecord, downloader?.name ?? '未知下载器', runMode, startedAt, fetched, deduped, matched, excludedByHitAndRun, pushable, pushStatusMap, 'FAILED', message, finishedAt)
     await persistTaskUpdate(task)
     await recordTaskLog({
       taskId: task.id,

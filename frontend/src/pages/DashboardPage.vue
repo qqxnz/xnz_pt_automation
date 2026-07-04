@@ -48,9 +48,9 @@
           <div v-for="downloader in overview.downloaders.items" :key="downloader.id" class="dashboard-table-row">
             <strong>{{ downloader.name }}</strong>
             <span>{{ downloaderTypeText(downloader.type) }}</span>
-            <span class="chip" :class="downloaderStatusMeta(downloader.status).className">{{ downloaderStatusMeta(downloader.status).label }}</span>
-            <span class="success">{{ formatBytes(downloader.uploadSpeed, '/s') }}</span>
-            <span>{{ formatBytes(downloader.downloadSpeed, '/s') }}</span>
+            <span class="chip" :class="downloaderStatusMeta(displayStatus(downloader)).className">{{ downloaderStatusMeta(displayStatus(downloader)).label }}</span>
+            <span class="success">{{ formatBytes(statusById[downloader.id]?.uploadSpeed, '/s') }}</span>
+            <span>{{ formatBytes(statusById[downloader.id]?.downloadSpeed, '/s') }}</span>
           </div>
         </div>
         <div v-else class="empty-tip">暂无下载器。</div>
@@ -130,14 +130,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import { getDashboardOverview, type DashboardOverview, type SchedulerJobStatus } from '../api/dashboard'
+import { getDownloaderStatus, type DownloaderStatus } from '../api/downloaders'
 
 const overview = ref<DashboardOverview>()
 const loading = ref(false)
 const error = ref('')
 const lastUpdatedAt = ref('')
+const statusById = ref<Record<string, DownloaderStatus | undefined>>({})
+let statusTimer: number | undefined
 
 function formatBytes(value?: number, suffix = '') {
   if (value === undefined || value === null) return '--'
@@ -164,6 +167,10 @@ function downloaderStatusMeta(status: DashboardOverview['downloaders']['items'][
     UNKNOWN: { label: '未检测', className: 'unknown-chip' }
   }
   return map[status]
+}
+
+function displayStatus(downloader: DashboardOverview['downloaders']['items'][number]) {
+  return statusById.value[downloader.id]?.status ?? downloader.status
 }
 
 function jobStatusText(status: DashboardOverview['tasks']['recent'][number]['status']) {
@@ -229,5 +236,52 @@ async function loadOverview() {
   }
 }
 
-onMounted(loadOverview)
+async function refreshDownloaderStatus(downloader: DashboardOverview['downloaders']['items'][number]) {
+  if (document.hidden) return
+  try {
+    const status = await getDownloaderStatus(downloader.id, true)
+    statusById.value = { ...statusById.value, [downloader.id]: status }
+  } catch {
+    // skipWrite 轮询静默忽略错误
+  }
+}
+
+async function refreshAllStatuses() {
+  if (!overview.value?.downloaders.items.length) return
+  for (const downloader of overview.value.downloaders.items) {
+    await refreshDownloaderStatus(downloader)
+  }
+}
+
+function stopStatusPolling() {
+  if (statusTimer !== undefined) window.clearInterval(statusTimer)
+  statusTimer = undefined
+}
+
+function startStatusPolling() {
+  stopStatusPolling()
+  if (!overview.value?.downloaders.items.length) return
+  statusTimer = window.setInterval(refreshAllStatuses, 1000)
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    stopStatusPolling()
+  } else {
+    refreshAllStatuses()
+    startStatusPolling()
+  }
+}
+
+onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  await loadOverview()
+  await refreshAllStatuses()
+  startStatusPolling()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  stopStatusPolling()
+})
 </script>

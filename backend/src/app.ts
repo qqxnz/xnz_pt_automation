@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { getAppState, migrationPercent } from './appState.js'
 import { authRouter } from './routes/auth.js'
+import { backupRouter } from './routes/backup.js'
 import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
 import { settingsRouter } from './routes/settings.js'
@@ -78,6 +79,7 @@ app.use((req, res, next) => {
 })
 
 app.use('/api/auth', authRouter)
+app.use('/api/backup', backupRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/settings', settingsRouter)

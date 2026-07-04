@@ -78,15 +78,85 @@
           </section>
         </div>
       </section>
+
+      <section class="panel settings-card" ref="backupSection">
+        <div class="panel-title-row">
+          <h2>数据库备份</h2>
+          <span>{{ loadingBackups ? '加载中...' : '读取 dataDir 目录' }}</span>
+        </div>
+
+        <div class="settings-info-grid backup-summary">
+          <article>
+            <span>数据目录</span>
+            <strong>{{ backupDataDir || '-' }}</strong>
+          </article>
+          <article>
+            <span>最近一次备份</span>
+            <strong>{{ lastBackupAtText }}</strong>
+          </article>
+          <article>
+            <span>备份文件数量</span>
+            <strong>{{ backups.length }}</strong>
+          </article>
+        </div>
+
+        <div class="backup-tip">
+          备份文件可直接移出本目录以节省空间，再点击"刷新"即可从列表中隐藏；移回 dataDir 会自动重新出现。本系统不会自动生成定时备份，请通过 NAS 计划任务或外部脚本定期触发「立即备份」。
+        </div>
+
+        <div class="backup-actions">
+          <button class="primary-button compact" type="button" :disabled="creatingBackup || !!restoringName" @click="runBackupNow">
+            {{ creatingBackup ? '生成中...' : '立即备份' }}
+          </button>
+          <button class="secondary-button" type="button" :disabled="loadingBackups || creatingBackup" @click="loadBackups">
+            刷新列表
+          </button>
+          <span v-if="backupError" class="backup-error">{{ backupError }}</span>
+        </div>
+
+        <div v-if="backups.length" class="backup-table">
+          <div class="backup-table-head">
+            <span>文件名</span>
+            <span>大小</span>
+            <span>修改时间</span>
+            <span>操作</span>
+          </div>
+          <div v-for="item in backups" :key="item.name" class="backup-table-row">
+            <span class="backup-name" :title="item.name">{{ item.name }}</span>
+            <span>{{ formatBytes(item.sizeBytes) }}</span>
+            <span :title="item.mtime">{{ formatDate(item.mtime) }}</span>
+            <span class="backup-row-actions">
+              <button class="text-button" type="button" :disabled="downloadingName === item.name" @click="downloadBackup(item.name)">
+                {{ downloadingName === item.name ? '下载中...' : '下载' }}
+              </button>
+              <button class="text-button danger" type="button" :disabled="!!restoringName || deletingName === item.name" @click="confirmRestore(item.name)">
+                {{ restoringName === item.name ? '恢复中...' : '恢复' }}
+              </button>
+              <button class="text-button" type="button" :disabled="!!restoringName || deletingName === item.name" @click="removeBackup(item.name)">
+                {{ deletingName === item.name ? '删除中...' : '删除' }}
+              </button>
+            </span>
+          </div>
+        </div>
+        <div v-else class="empty-tip backup-empty">暂无备份文件，将 db-*.sqlite3 放入 dataDir 后点击「刷新」即可显示。</div>
+      </section>
     </section>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { Snackbar } from '@varlet/ui'
+import { Dialog, Snackbar } from '@varlet/ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
+import {
+  deleteBackup as apiDeleteBackup,
+  listBackups as apiListBackups,
+  restoreBackup as apiRestoreBackup,
+  runBackup as apiRunBackup,
+  triggerBrowserDownload,
+  type BackupItem
+} from '../api/backup'
 import {
   changePassword,
   getSystemInfo,
@@ -111,6 +181,16 @@ const passwordSection = ref<HTMLElement>()
 const settingsSection = ref<HTMLElement>()
 const sessionSection = ref<HTMLElement>()
 const networkSection = ref<HTMLElement>()
+const backupSection = ref<HTMLElement>()
+const backups = ref<BackupItem[]>([])
+const backupDataDir = ref('')
+const backupLastAt = ref<string>()
+const loadingBackups = ref(false)
+const backupError = ref('')
+const creatingBackup = ref(false)
+const downloadingName = ref<string>()
+const deletingName = ref<string>()
+const restoringName = ref<string>()
 
 
 const passwordForm = reactive({
@@ -199,7 +279,91 @@ async function loadSettings() {
 }
 
 async function loadAll() {
-  await Promise.all([loadInfo(), loadSettings()])
+  await Promise.all([loadInfo(), loadSettings(), loadBackups()])
+}
+
+async function loadBackups() {
+  loadingBackups.value = true
+  backupError.value = ''
+  try {
+    const result = await apiListBackups()
+    backups.value = result.backups
+    backupDataDir.value = result.dataDir
+    backupLastAt.value = result.lastBackupAt
+  } catch (err) {
+    backupError.value = err instanceof Error ? err.message : '备份列表加载失败'
+  } finally {
+    loadingBackups.value = false
+  }
+}
+
+const lastBackupAtText = computed(() => (backupLastAt.value ? formatDate(backupLastAt.value) : '尚未生成'))
+
+async function runBackupNow() {
+  creatingBackup.value = true
+  try {
+    const result = await apiRunBackup()
+    Snackbar.success(`已生成备份：${result.backup.name}`)
+    await loadBackups()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '备份失败')
+  } finally {
+    creatingBackup.value = false
+  }
+}
+
+async function downloadBackup(name: string) {
+  downloadingName.value = name
+  try {
+    await triggerBrowserDownload(name)
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '下载失败')
+  } finally {
+    downloadingName.value = undefined
+  }
+}
+
+async function removeBackup(name: string) {
+  const confirmed = window.confirm(`确认删除备份 ${name} 吗？此操作不可撤销。`)
+  if (!confirmed) return
+  deletingName.value = name
+  try {
+    await apiDeleteBackup(name)
+    Snackbar.success(`已删除：${name}`)
+    await loadBackups()
+  } catch (err) {
+    Snackbar.error(err instanceof Error ? err.message : '删除失败')
+  } finally {
+    deletingName.value = undefined
+  }
+}
+
+function confirmRestore(name: string) {
+  Dialog({
+    title: '确认恢复数据库',
+    message: `将把当前数据库替换为备份 ${name}，并自动重启 PM2 / Docker 实例（检测到哪种就哪种）。恢复前会先在 dataDir 生成一份新的安全备份。继续吗？`,
+    onConfirm: async () => {
+      restoringName.value = name
+      try {
+        const result = await apiRestoreBackup(name)
+        Dialog({
+          title: '恢复成功',
+          message: `${result.message}（运行时：${result.runtime}），约 1-2 秒后会自动重新加载页面…`,
+          onClose: () => undefined
+        })
+        setTimeout(() => window.location.reload(), 2000)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '恢复失败'
+        if (message.includes('已被移走') || message.includes('BACKUP_NOT_FOUND')) {
+          await loadBackups()
+          Snackbar.warning('备份文件已不在数据目录，恢复已取消。')
+        } else {
+          Snackbar.error(message)
+        }
+        restoringName.value = undefined
+      }
+    }
+  })
 }
 
 function validatePasswordForm() {
@@ -272,7 +436,9 @@ async function focusSection() {
       ? networkSection.value
       : section === 'session'
         ? sessionSection.value
-        : settingsSection.value
+        : section === 'backup'
+          ? backupSection.value
+          : settingsSection.value
   target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -291,3 +457,92 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
+
+<style scoped>
+.backup-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.backup-tip {
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.backup-error {
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.backup-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.backup-table-head,
+.backup-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+  gap: 12px;
+  padding: 12px 14px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.backup-table-head {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+}
+
+.backup-table-row + .backup-table-row {
+  border-top: 1px solid #e2e8f0;
+}
+
+.backup-table-row:hover {
+  background: #f8fafc;
+}
+
+.backup-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.backup-empty {
+  border-style: dashed;
+  border-width: 1px;
+  border-color: #cbd5e1;
+  border-radius: 12px;
+  padding: 18px;
+  color: #64748b;
+}
+
+.backup-row-actions .text-button.danger {
+  color: #b91c1c;
+}
+</style>
