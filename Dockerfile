@@ -28,7 +28,7 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.6.5
+ARG VERSION=0.6.6
 ARG DATA_DIR=/data
 ARG SCHEMA_VERSION=21
 
