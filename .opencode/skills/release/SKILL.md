@@ -72,6 +72,7 @@ bash fnos/build_all.sh {NEW_VERSION}
 - 创建 `fpk/` 目录
 - 先用 `arch=x86_64` 调 `fnpack build` → `fpk/qqxnz.xnz-pt-automation-{ver}-x86_64.fpk`
 - 再用 `arch=arm64` 调 `fnpack build` → `fpk/qqxnz.xnz-pt-automation-{ver}-arm64.fpk`
+- **清理旧版本 fpk**：删除 `fpk/` 下所有 `qqxnz.xnz-pt-automation-*.fpk`，仅保留本次新生成的 `{ver}` 两个
 - 还原 manifest 的 `arch=x86_64`
 - **生成的 fpk 会进入 git**（`fpk/` 不在 `.gitignore` 中）
 

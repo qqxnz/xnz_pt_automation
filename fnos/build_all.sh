@@ -122,6 +122,26 @@ ARM_RESULT=$?
 sed -i.bak "s/^arch=.*/arch=x86_64/" manifest 2>/dev/null || true
 rm -f manifest.bak
 
+# 清理旧版本 fpk（保留本次生成的 {VERSION} 相关文件）
+echo "── 清理旧版本 fpk ──"
+if [ -d "$OUT_DIR" ]; then
+  REMOVED=0
+  while IFS= read -r -d '' old_fpk; do
+    if [ "$old_fpk" != "${OUT_DIR}/${APP_NAME}-${VERSION}-x86_64.fpk" ] \
+       && [ "$old_fpk" != "${OUT_DIR}/${APP_NAME}-${VERSION}-arm64.fpk" ]; then
+      rm -f "$old_fpk"
+      echo "  🗑  $(basename "$old_fpk")"
+      REMOVED=$((REMOVED + 1))
+    fi
+  done < <(find "$OUT_DIR" -maxdepth 1 -name "${APP_NAME}-*.fpk" -print0 2>/dev/null)
+  if [ "$REMOVED" -eq 0 ]; then
+    echo "  (无旧版本)"
+  else
+    echo "  共删除 $REMOVED 个旧版本 fpk"
+  fi
+fi
+echo ""
+
 echo "── 汇总 ──"
 ls -la "$OUT_DIR" 2>/dev/null | tail -n +2 || true
 
