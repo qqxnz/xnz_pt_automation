@@ -14,7 +14,7 @@ fnos/
 │
 ├── app/
 │   └── docker/
-│       ├── docker-compose.yaml   # 核心：复用项目根目录 docker-compose，变量化端口/密码，内置当前镜像版本
+│       ├── docker-compose.yaml   # 核心：host 网络，变量化端口/密码，内置当前镜像版本
 │       └── .env.template
 │
 ├── cmd/                       # 8 个生命周期钩子
@@ -62,8 +62,8 @@ sudo chmod +x /usr/local/bin/fnpack
 
 ```bash
 cd fnos
-./build.sh 0.6.11
-# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.11.fpk
+./build.sh 0.6.12
+# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.12.fpk
 ```
 
 ## 飞牛上安装
@@ -76,7 +76,7 @@ cd fnos
 # 先开启手动安装
 appcenter-cli manual-install enable
 # 安装
-appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.11.fpk
+appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.12.fpk
 # 安装后关闭
 appcenter-cli manual-install disable
 ```
@@ -94,6 +94,8 @@ appcenter-cli install-local
 3. 飞牛应用中心 → 找到「PTA」→ 重新安装/升级
 
 安装和升级向导不再提供镜像版本输入框；应用会使用 fpk 内置的当前版本镜像 tag。如需回滚，请安装对应旧版本 fpk。
+
+飞牛版容器使用 host 网络，便于连接同机 host 网络模式的 qBittorrent 等下载器。Web 端口会直接占用宿主机端口；如果 `3180` 已被占用，请在安装向导中改为其他端口。
 
 ## 卸载
 

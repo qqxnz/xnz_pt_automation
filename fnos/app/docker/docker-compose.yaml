@@ -1,19 +1,18 @@
 services:
   xnz-pt-automation:
-    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.11}
+    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.12}
     container_name: xnz-pt-automation
     restart: unless-stopped
-    ports:
-      - "${wizard_service_port:-3180}:3180"
+    network_mode: host
     environment:
-      PORT: "3180"
+      PORT: "${wizard_service_port:-3180}"
       DATA_DIR: /data
       DEFAULT_ADMIN_PASSWORD: "${wizard_admin_password:-123456}"
       TZ: ${TRIM_SYS_LANGUAGE:-Asia/Shanghai}
     volumes:
       - ../var/app:/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3180/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${wizard_service_port:-3180}/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
