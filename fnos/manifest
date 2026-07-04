@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.5
+version=0.6.7
 display_name=PT 自动化
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.Application
-changelog=0.6.5<br/>飞牛封装版本<br/>基于阿里云容器镜像服务
+changelog=0.6.7<br/>备份目录分离（迁移→cache/，手动→backup/），任务缓存改存 logDir 并使用本地时间格式；新增数据库备份管理 API；Dashboard 下载器状态实时轮询；调度器间隔优化降低资源占用。
