@@ -904,9 +904,9 @@ async function ensureStorage() {
     if (currentVersion > SCHEMA_VERSION) {
       const err = new (await import('./storage/migrations/index.js')).SchemaTooNewError(currentVersion, SCHEMA_VERSION)
       setAppStatus('DOWNGRADE_REJECTED', { migration: { from: currentVersion, to: SCHEMA_VERSION, currentStep: 0, totalSteps: 0, startedAt: new Date().toISOString(), lastError: err.message, lastBackupPath, legacyTables: [] } })
-      logMigrationBanner('error', bannerOfBanner(`❌ DATABASE DOWNGRADE REJECTED  db=v${currentVersion} image=v${SCHEMA_VERSION}`))
+      logMigrationBanner('error', bannerOfBanner(`❌ 拒绝降级：数据库版本 v${currentVersion} 高于镜像版本 v${SCHEMA_VERSION}`))
       logMigrationBanner('error', err.message)
-      logMigrationBanner('error', 'exit code: 7  (docker will not auto-restart unless configured)')
+      logMigrationBanner('error', '退出码 7（除非另行配置，否则 docker 不会自动重启）')
       throw err
     }
 
@@ -918,7 +918,7 @@ async function ensureStorage() {
     ) {
       logMigrationBanner(
         'warn',
-        bannerOfBanner('⚠️  PREVIOUS MIGRATION FAILED — auto-recovering from backup'),
+        bannerOfBanner('⚠️  上一次迁移失败，正在从备份自动恢复'),
         { backupPath: lastBackupPath, lastError: lastMigrationError }
       )
       try {
@@ -929,11 +929,11 @@ async function ensureStorage() {
         setAppSchemaVersion(SCHEMA_VERSION)
         setDbVersion(readSchemaVersion(newDb))
         setMeta(newDb, 'last_migration_status', 'RECOVERED')
-        logMigrationBanner('info', '✅ restored db from backup; retrying migration on next start')
+        logMigrationBanner('info', '✅ 已从备份恢复数据库，下次启动时将重新尝试迁移')
       } catch (recoveryError) {
         logMigrationBanner(
           'error',
-          bannerOfBanner('❌ BACKUP RESTORE FAILED — manual intervention required'),
+          bannerOfBanner('❌ 备份恢复失败 — 需要人工介入'),
           { backupPath: lastBackupPath, error: String(recoveryError) }
         )
         throw recoveryError
@@ -1017,10 +1017,10 @@ async function ensureStorage() {
 async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Promise<void> {
   logMigrationBanner(
     'info',
-    bannerOfBanner(`⏳ DATABASE UPGRADE IN PROGRESS  v${fromVersion} → v${SCHEMA_VERSION}`)
+    bannerOfBanner(`⏳ 数据库正在升级：v${fromVersion} → v${SCHEMA_VERSION}`)
   )
-  logMigrationBanner('info', '   please wait, do NOT stop the container')
-  logMigrationBanner('info', '   progress will be reported in docker logs')
+  logMigrationBanner('info', '   请耐心等待，升级期间请勿停止容器')
+  logMigrationBanner('info', '   升级进度会持续输出到 docker logs')
 
   updateMigration({ from: fromVersion, to: SCHEMA_VERSION, currentStep: 0, totalSteps: 0, currentTable: undefined, startedAt: new Date().toISOString(), lastError: undefined, lastBackupPath: undefined, legacyTables: [] })
   setAppStatus('MIGRATING', {})
@@ -1028,7 +1028,7 @@ async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Pr
   const backup = backupDatabaseIfNeeded(db, dataDir, fromVersion, SCHEMA_VERSION)
   setDbVersion(SCHEMA_VERSION)
   if (backup) {
-    logMigrationBanner('info', `   backup: ${backup.path}  (${backup.sizeBytes} bytes)`)
+    logMigrationBanner('info', `   已生成备份：${backup.path}  （${backup.sizeBytes} 字节）`)
     updateMigration({ lastBackupPath: backup.path })
   }
 
@@ -1038,7 +1038,7 @@ async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Pr
       dataDir,
       onProgress: (p) => {
         updateMigration({ currentStep: p.step, totalSteps: p.total, currentTable: `v${p.version}: ${p.description}` })
-        logMigrationBanner('info', `   step ${p.step}/${p.total}  v${p.version - 1} → v${p.version}  ${p.description}`)
+        logMigrationBanner('info', `   进度 ${p.step}/${p.total}：v${p.version - 1} → v${p.version}  ${p.description}`)
       }
     })
     const health = inspectDatabaseHealth(db)
@@ -1077,13 +1077,13 @@ async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Pr
       `数据库迁移失败：v${fromVersion} -> v${SCHEMA_VERSION}；${cause}`,
       'FAILED'
     )
-    logMigrationBanner('error', bannerOfBanner(`❌ DATABASE UPGRADE FAILED  v${fromVersion} → v${SCHEMA_VERSION}`))
-    logMigrationBanner('error', `   error: ${cause}`)
+    logMigrationBanner('error', bannerOfBanner(`❌ 数据库升级失败：v${fromVersion} → v${SCHEMA_VERSION}`))
+    logMigrationBanner('error', `   错误：${cause}`)
     if (backup) {
-      logMigrationBanner('error', `   backup preserved at: ${backup.path}`)
-      logMigrationBanner('error', '   restarting container to retry from backup')
+      logMigrationBanner('error', `   备份保留在：${backup.path}`)
+      logMigrationBanner('error', '   即将重启容器，从备份重新尝试')
     }
-    logMigrationBanner('error', '   exit code: 10  (docker will auto-restart unless restart limit reached)')
+    logMigrationBanner('error', '   退出码 10（达到重启上限前，docker 会自动重启）')
     setAppStatus('MIGRATION_FAILED', {
       migration: {
         from: fromVersion,
@@ -1104,13 +1104,13 @@ async function runStructuredMigration(db: DatabaseSync, fromVersion: number): Pr
   updateMigration({ currentStep: SCHEMA_VERSION, totalSteps: SCHEMA_VERSION, legacyTables: finalLegacy.map((l) => l.tableName) })
   logMigrationBanner(
     'info',
-    bannerOfBanner(`✅ DATABASE UPGRADE COMPLETED  v${fromVersion} → v${SCHEMA_VERSION}`)
+    bannerOfBanner(`✅ 数据库升级完成：v${fromVersion} → v${SCHEMA_VERSION}`)
   )
-  logMigrationBanner('info', `   total versions: ${last?.applied.length ?? 0}`)
-  logMigrationBanner('info', `   duration: ${last?.durationMs ?? 0}ms`)
-  if (backup) logMigrationBanner('info', `   backup: ${backup.path}`)
+  logMigrationBanner('info', `   本次升级版本数：${last?.applied.length ?? 0}`)
+  logMigrationBanner('info', `   耗时：${last?.durationMs ?? 0} 毫秒`)
+  if (backup) logMigrationBanner('info', `   备份位置：${backup.path}`)
   if (finalLegacy.length) {
-    logMigrationBanner('info', `   legacy tables (retain 30 days): ${finalLegacy.map((l) => l.tableName).join(', ')}`)
+    logMigrationBanner('info', `   残留旧表（保留 30 天）：${finalLegacy.map((l) => l.tableName).join(', ')}`)
     for (const l of finalLegacy) markLegacyRetainedAt(db, l.tableName, new Date().toISOString())
   }
   setAppStatus('READY', {})

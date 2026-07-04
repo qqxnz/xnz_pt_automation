@@ -53,7 +53,7 @@ function validateSettings(payload: unknown, allowInternalKeys = false): { settin
   }
   try {
     const url = new URL(String(settings.proxyTestUrl))
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid protocol')
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('协议无效，仅支持 http / https')
   } catch {
     return { message: '代理测试目标 URL 不正确', code: 'INVALID_PROXY_TEST_URL' }
   }

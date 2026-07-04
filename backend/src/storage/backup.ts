@@ -43,7 +43,7 @@ export function backupDatabaseIfNeeded(
     db.exec(`VACUUM INTO '${quoteSqlString(backupPath)}'`)
   } catch (error) {
     throw new Error(
-      `backupDatabaseIfNeeded: VACUUM INTO failed: ${error instanceof Error ? error.message : String(error)}`
+      `backupDatabaseIfNeeded：VACUUM INTO 备份失败：${error instanceof Error ? error.message : String(error)}`
     )
   }
 

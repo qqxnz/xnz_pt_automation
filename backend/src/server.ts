@@ -10,7 +10,7 @@ const migrationFailureExitCode = 10
 const downgradeRejectionExitCode = 7
 
 app.listen(port, async () => {
-  logger.info('server', `PT Automation API listening on http://localhost:${port} (waiting for storage)`)
+  logger.info('server', `PT Automation API 已启动，监听 http://localhost:${port}（等待存储初始化）`)
   try {
     await initializeStorage()
   } catch (error) {
@@ -26,7 +26,7 @@ app.listen(port, async () => {
       })
       process.exit(migrationFailureExitCode)
     }
-    logger.error('server', 'storage initialization failed', {
+    logger.error('server', '存储初始化失败', {
       error: error instanceof Error ? error.message : String(error)
     })
     process.exit(1)
@@ -54,5 +54,5 @@ app.listen(port, async () => {
     })
   }
   startScheduler()
-  logger.info('server', `PT Automation ready (schema v${getAppState().schemaVersion}, db v${getAppState().dbVersion})`)
+  logger.info('server', `PT Automation 启动就绪（镜像 schema v${getAppState().schemaVersion}，数据库 v${getAppState().dbVersion}）`)
 })

@@ -22,53 +22,61 @@ docker compose logs -f xnz-pt-automation
 [pre-start] DB user_version: 15
 [pre-start] Image schema version: 21
 ============================================================
-DATABASE UPGRADE REQUIRED
+需要升级数据库
 ============================================================
-[pre-start] Detected upgrade: v15 -> v21
-[pre-start] Progress will be reported in docker logs
-[pre-start] DO NOT stop the container during upgrade
-[pre-start] If upgrade fails, docker will auto-restart and recover from backup
+[pre-start] 检测到升级：v15 -> v21
+[pre-start] 升级进度会持续输出到 docker logs
+[pre-start] 升级期间请勿停止容器
+[pre-start] 如果升级失败，docker 会自动重启并从备份恢复
+```
+
+启动阶段最终以中文 banner 收尾：
+
+```
+============================================================
+前置检查通过 - 即将启动 node 进程
+============================================================
 ```
 
 ### 1.2 升级进行中
 
 ```
 ============================================================
-⏳ DATABASE UPGRADE IN PROGRESS  v15 → v21
+⏳ 数据库正在升级：v15 → v21
 ============================================================
-   please wait, do NOT stop the container
-   progress will be reported in docker logs
-   backup: /data/db-20260703-100001-pre-v15.sqlite3  (314572 bytes)
-   step 1/5  v15 → v16  做种人数改为范围：seeder_min / seeder_max
-   step 2/5  v16 → v17  自我修复：补齐 tasks 运行时列（兼容老库）
-   step 3/5  v17 → v18  自我修复：移除阻塞旧列 free_only
-   step 4/5  v18 → v19  自我修复：补齐所有 tasks 运行时列
-   step 5/5  v20 → v21  HR 拦截：tasks.skip_hit_and_run
+   请耐心等待，升级期间请勿停止容器
+   升级进度会持续输出到 docker logs
+   已生成备份：/data/db-20260703-100001-pre-v15.sqlite3  （314572 字节）
+   进度 1/5：v15 → v16  做种人数改为范围：seeder_min / seeder_max
+   进度 2/5：v16 → v17  自我修复：补齐 tasks 运行时列（兼容老库）
+   进度 3/5：v17 → v18  自我修复：移除阻塞旧列 free_only
+   进度 4/5：v18 → v19  自我修复：补齐所有 tasks 运行时列
+   进度 5/5：v20 → v21  HR 拦截：tasks.skip_hit_and_run
 ```
 
 ### 1.3 升级完成
 
 ```
 ============================================================
-✅ DATABASE UPGRADE COMPLETED  v15 → v21
+✅ 数据库升级完成：v15 → v21
 ============================================================
-   total versions: 5
-   duration: 2ms
-   backup: /data/db-20260703-100001-pre-v15.sqlite3
-   legacy tables (retain 30 days): sites_legacy_v15, tasks_legacy_v15, torrents_legacy_v15
-[server] PT Automation ready (schema v21, db v15)
+   本次升级版本数：5
+   耗时：2 毫秒
+   备份位置：/data/db-20260703-100001-pre-v15.sqlite3
+   残留旧表（保留 30 天）：sites_legacy_v15, tasks_legacy_v15, torrents_legacy_v15
+[server] PT Automation 启动就绪（镜像 schema v21，数据库 v15）
 ```
 
 ## 2. 升级失败的日志
 
 ```
 ============================================================
-❌ DATABASE UPGRADE FAILED  v15 → v21
+❌ 数据库升级失败：v15 → v21
 ============================================================
-   error: v17 addColumnIfMissing: ...
-   backup preserved at: /data/db-20260703-100001-pre-v15.sqlite3
-   restarting container to retry from backup
-   exit code: 10  (docker will auto-restart unless restart limit reached)
+   错误：v17 addColumnIfMissing: ...
+   备份保留在：/data/db-20260703-100001-pre-v15.sqlite3
+   即将重启容器，从备份重新尝试
+   退出码 10（达到重启上限前，docker 会自动重启）
 ```
 
 **含义**：v17 步骤抛错。docker 会在几秒后自动重启容器；下次启动会自动用备份恢复并重试。
@@ -78,13 +86,22 @@ DATABASE UPGRADE REQUIRED
 ## 3. 降级拒绝的日志
 
 ```
-[pre-start][ERROR] ============================================================
-DOWNGRADE REJECTED
-============================================================
-[pre-start][ERROR] Database is v22 but image expects v21
-[pre-start][ERROR] Please pull a newer image (>= v22) and restart
-[pre-start][ERROR] exit code: 7 (docker will not auto-restart)
+[pre-start] ============================================================
+[pre-start] 拒绝降级
+[pre-start] ============================================================
+[pre-start][ERROR] 数据库版本 v22 高于当前镜像版本 v21
+[pre-start][ERROR] 请重新拉取 >= v22 的镜像后重启
+[pre-start][ERROR] 退出码 7（除非另行配置，否则 docker 不会自动重启）
 ```
+
+> 如果数据库在 Node 端启动（`storage.ts` 的二次校验）才被发现，banner 会变成：
+>
+> ```
+> ============================================================
+> ❌ 拒绝降级：数据库版本 v22 高于镜像版本 v21
+> ============================================================
+>    退出码 7（除非另行配置，否则 docker 不会自动重启）
+> ```
 
 **含义**：你拉了新版本（v22+）启动后，又想回退到 v21 旧版本。`exit 7` 表示 docker 不会自动重启。
 

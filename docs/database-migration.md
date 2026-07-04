@@ -58,16 +58,16 @@ export const vN: Migration = {
    ↓
 2. pre-start.sh 检测 /data 可写、读 user_version
    ↓ (发现需要升级)
-3. [migration] ⏳ DATABASE UPGRADE IN PROGRESS  v15 → v21
-4. [migration]    backup: /data/db-...-pre-v15.sqlite3
-5. [migration]    step 1/5  v15 → v16  描述...
-6. [migration]    step 2/5  v16 → v17  描述...
+3. [migration] ⏳ 数据库正在升级：v15 → v21
+4. [migration]    已生成备份：/data/db-...-pre-v15.sqlite3  （xxxxxx 字节）
+5. [migration]    进度 1/5：v15 → v16  描述...
+6. [migration]    进度 2/5：v16 → v17  描述...
 7. ...
    ↓ (如果某步失败)
-8. [migration] ❌ DATABASE UPGRADE FAILED
-9. [migration]    error: v17 addColumnIfMissing: no such column: x
-10. [migration]    backup preserved at: /data/db-...-pre-v15.sqlite3
-11. [migration]    exit code: 10  (docker will auto-restart)
+8. [migration] ❌ 数据库升级失败：v15 → v21
+9. [migration]    错误：v17 addColumnIfMissing: no such column: x
+10. [migration]    备份保留在：/data/db-...-pre-v15.sqlite3
+11. [migration]    退出码 10（达到重启上限前，docker 会自动重启）
    ↓
 12. 容器退出 10，docker 自动重启
    ↓ (下次启动)

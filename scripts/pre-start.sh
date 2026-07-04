@@ -73,22 +73,22 @@ info "Image schema version: ${SCHEMA_VERSION}"
 # 5) 降级检测：仅在 DB_VERSION 与 SCHEMA_VERSION 都是数字时做严格比较
 if [ "${DB_VERSION}" != "0" ] && [ "${SCHEMA_VERSION}" != "unknown" ] && [ "${DB_VERSION}" != "${SCHEMA_VERSION}" ]; then
   if [ "${DB_VERSION}" -gt "${SCHEMA_VERSION}" ] 2>/dev/null; then
-    banner "DOWNGRADE REJECTED"
-    err "Database is v${DB_VERSION} but image expects v${SCHEMA_VERSION}"
-    err "Please pull a newer image (>= v${DB_VERSION}) and restart"
-    err "exit code: 7 (docker will not auto-restart)"
+    banner "拒绝降级"
+    err "数据库版本 v${DB_VERSION} 高于当前镜像版本 v${SCHEMA_VERSION}"
+    err "请重新拉取 >= v${DB_VERSION} 的镜像后重启"
+    err "退出码 7（除非另行配置，否则 docker 不会自动重启）"
     exit 7
   fi
   if [ "${DB_VERSION}" -lt "${SCHEMA_VERSION}" ] 2>/dev/null; then
-    banner "DATABASE UPGRADE REQUIRED"
-    info "Detected upgrade: v${DB_VERSION} -> v${SCHEMA_VERSION}"
-    info "Progress will be reported in docker logs"
-    info "DO NOT stop the container during upgrade"
-    info "If upgrade fails, docker will auto-restart and recover from backup"
+    banner "需要升级数据库"
+    info "检测到升级：v${DB_VERSION} -> v${SCHEMA_VERSION}"
+    info "升级进度会持续输出到 docker logs"
+    info "升级期间请勿停止容器"
+    info "如果升级失败，docker 会自动重启并从备份恢复"
   fi
 fi
 
-banner "PRE-START OK - launching node process"
+banner "前置检查通过 - 即将启动 node 进程"
 if command -v pm2-runtime >/dev/null 2>&1; then
   exec pm2-runtime ecosystem.config.cjs
 else

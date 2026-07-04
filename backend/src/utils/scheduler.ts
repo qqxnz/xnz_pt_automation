@@ -162,7 +162,7 @@ async function runJob(job: SchedulerJob, scheduledAt: number) {
   job.running = true
   if (job.logStart !== false) {
     const message = `定时任务【${readableJobName(job.name)}】开始执行`
-    logger.info('scheduler', `${job.name} started`, {
+    logger.info('scheduler', `定时任务【${readableJobName(job.name)}】开始执行`, {
       job: job.name,
       scheduledAt: iso(scheduledAt),
       triggeredAt: iso(startedAt)
@@ -184,7 +184,7 @@ async function runJob(job: SchedulerJob, scheduledAt: number) {
     if (job.shouldLogSuccess?.(result) ?? true) {
       const status = job.resultStatus?.(result) ?? 'SUCCESS'
       const message = `定时任务【${readableJobName(job.name)}】${status === 'SUCCESS' ? '执行成功' : '执行失败'}`
-      logger[status === 'SUCCESS' ? 'info' : 'error']('scheduler', `${job.name} ${status === 'SUCCESS' ? 'succeeded' : 'failed'}`, {
+      logger[status === 'SUCCESS' ? 'info' : 'error']('scheduler', `定时任务【${readableJobName(job.name)}】${status === 'SUCCESS' ? '执行成功' : '执行失败'}`, {
         job: job.name,
         durationMs: finishedAt - startedAt,
         nextRunAt: iso(job.nextRunAt),
@@ -207,7 +207,7 @@ async function runJob(job: SchedulerJob, scheduledAt: number) {
     const finishedAt = Date.now()
     job.nextRunAt = finishedAt + job.intervalMs
     const message = `定时任务【${readableJobName(job.name)}】执行失败`
-    logger.error('scheduler', `${job.name} failed`, {
+    logger.error('scheduler', `定时任务【${readableJobName(job.name)}】执行失败`, {
       job: job.name,
       durationMs: finishedAt - startedAt,
       nextRunAt: iso(job.nextRunAt),
@@ -279,7 +279,7 @@ export async function runDueSignins() {
       })
       backfilledCount += 1
     } catch (error) {
-      logger.warn('scheduler', 'signin log backfill failed', {
+      logger.warn('scheduler', '签到日志补写失败', {
         siteId: site.id,
         siteName: siteDisplayName(site),
         error: error instanceof Error ? error.message : String(error)
@@ -349,7 +349,7 @@ export function getSchedulerJobs(): SchedulerJobStatus[] {
 export function startScheduler() {
   if (schedulerTimer) return
   schedulerTimer = setInterval(tick, SCHEDULER_TICK_INTERVAL_MS)
-  logger.info('scheduler', 'central scheduler started', {
+  logger.info('scheduler', '中央调度器已启动', {
     tickIntervalMs: SCHEDULER_TICK_INTERVAL_MS,
     jobs: jobs.map((job) => ({
       name: job.name,

@@ -37,8 +37,8 @@ class DownloaderError extends Error {
 function normalizeHost(value: string) {
   const trimmed = value.trim().replace(/\/+$/, '')
   const url = new URL(trimmed)
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid protocol')
-  if (url.username || url.password) throw new Error('credentials in url')
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('协议无效，仅支持 http / https')
+  if (url.username || url.password) throw new Error('URL 中不允许携带用户名密码，请到对应字段填写')
   return url.toString().replace(/\/+$/, '')
 }
 

@@ -8,7 +8,7 @@ export function localDateKey(value: Date = new Date()): string {
 export function localDayRangeIso(dateKey: string): { startIso: string; endIso: string } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
   if (!match) {
-    throw new Error(`Invalid dateKey: ${dateKey}`)
+    throw new Error(`日期键无效（应为 YYYY-MM-DD）：${dateKey}`)
   }
   const year = Number(match[1])
   const month = Number(match[2]) - 1

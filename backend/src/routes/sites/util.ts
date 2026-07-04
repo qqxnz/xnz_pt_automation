@@ -55,19 +55,19 @@ export async function fetchWithCookie(site: SiteRecord, path: string): Promise<{
         redirect: 'follow',
         signal: controller.signal
       })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok) throw new Error(`HTTP 响应异常：HTTP ${response.status}`)
       return { text: await response.text(), finalUrl: response.url, httpStatus: response.status }
     } catch (error) {
       const msg = error instanceof Error
         ? (error.name === 'AbortError' ? `请求超时（${SITE_FETCH_TIMEOUT_MS / 1000}s）` : error.message)
-        : 'fetch failed'
+        : '网络请求失败'
       errors.push(msg)
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
     } finally {
       clearTimeout(timer)
     }
   }
-  throw new Error(`Cookie 访问失败：${errors.at(-1) ?? 'fetch failed'}`)
+  throw new Error(`Cookie 访问失败：${errors.at(-1) ?? '网络请求失败'}`)
 }
 
 export function looksLikeAuthPage(html: string): boolean {

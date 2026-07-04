@@ -48,7 +48,7 @@ export function dropColumnIfExists(db: DatabaseSync, table: string, column: stri
 
 export function createTableIfMissing(db: DatabaseSync, ddl: string): boolean {
   const match = /CREATE TABLE(?:\s+IF NOT EXISTS)?\s+(\w+)/i.exec(ddl)
-  if (!match) throw new Error('createTableIfMissing: cannot parse table name from DDL')
+  if (!match) throw new Error('createTableIfMissing：无法从 DDL 中解析表名')
   const table = match[1]
   if (tableExists(db, table)) return false
   db.exec(ddl)
@@ -57,7 +57,7 @@ export function createTableIfMissing(db: DatabaseSync, ddl: string): boolean {
 
 export function createIndexIfMissing(db: DatabaseSync, ddl: string): boolean {
   const match = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF NOT EXISTS\s+(\w+)/i.exec(ddl)
-  if (!match) throw new Error('createIndexIfMissing: cannot parse index name from DDL')
+  if (!match) throw new Error('createIndexIfMissing：无法从 DDL 中解析索引名')
   const index = match[1]
   if (indexExists(db, index)) return false
   db.exec(ddl)
@@ -80,10 +80,10 @@ export function renameToLegacy(db: DatabaseSync, table: string, previousVersion:
 /** 把临时表升级为正式主表 */
 export function promoteTable(db: DatabaseSync, tempTable: string, targetTable: string): void {
   if (!tableExists(db, tempTable)) {
-    throw new Error(`promoteTable: source table ${tempTable} does not exist`)
+    throw new Error(`promoteTable：源表 ${tempTable} 不存在`)
   }
   if (tableExists(db, targetTable)) {
-    throw new Error(`promoteTable: target table ${targetTable} already exists`)
+    throw new Error(`promoteTable：目标表 ${targetTable} 已存在`)
   }
   db.exec(`ALTER TABLE ${tempTable} RENAME TO ${targetTable}`)
 }

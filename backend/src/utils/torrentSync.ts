@@ -149,7 +149,7 @@ export async function syncTorrentDownloadStats(downloaderId?: string): Promise<T
       void syncTorrentIpv6Peers(id).catch((err) => {
         // 静默失败：定时任务每 30 秒会兜底
         // eslint-disable-next-line no-console
-        console.warn('[torrentSync] recovered downloader ipv6 sync failed', id, err)
+        console.warn('[torrentSync] 恢复下载器的 IPv6 peer 同步失败', id, err)
       })
     }
   }

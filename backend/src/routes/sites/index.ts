@@ -758,7 +758,7 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : '签到失败'
-    logger.error('site', 'manual signin failed', { siteId, error: message })
+    logger.error('site', '手动签到失败', { siteId, error: message })
     await recordOperationLog({
       action: '站点签到',
       message: `${siteDisplayName(site)} 手动签到失败：${message}`,

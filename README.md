@@ -66,7 +66,7 @@ docker compose pull
 docker compose up -d
 ```
 
-升级时数据库结构会自动迁移。详细日志会输出到 `docker logs`（看到 `⏳ DATABASE UPGRADE IN PROGRESS` 即表示正在升级）。如果升级失败，docker 会自动从备份恢复并重试。详见 [docs/docker-upgrade.md](docs/docker-upgrade.md) 与 [docs/database-migration.md](docs/database-migration.md)。
+升级时数据库结构会自动迁移。详细日志会输出到 `docker logs`（看到 `⏳ 数据库正在升级` 即表示正在升级）。如果升级失败，docker 会自动从备份恢复并重试。详见 [docs/docker-upgrade.md](docs/docker-upgrade.md) 与 [docs/database-migration.md](docs/database-migration.md)。
 
 ## 文档结构
 
