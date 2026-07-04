@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { setStatus as setAppStatus, setDbVersion, setSchemaVersion as setAppSchemaVersion, updateHealth, updateMigration } from './appState.js'
-import { backupDatabaseIfNeeded } from './storage/backup.js'
+import { backupDatabaseIfNeeded, replaceDatabaseWithBackup } from './storage/backup.js'
 import { inspectDatabaseHealth, hasHealthIssues, summarizeHealth } from './storage/health.js'
 import { listLegacyTableInfo, markLegacyRetainedAt, reapLegacyTables, shouldReapToday } from './storage/legacyReaper.js'
 import { getMeta, setMeta } from './storage/_meta.js'
@@ -873,17 +873,14 @@ function bannerOfBanner(text: string, char: string = '='): string {
 }
 
 async function restoreDatabaseFromBackup(db: DatabaseSync, backupPath: string): Promise<void> {
-  try {
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-  } catch {
-    // 忽略
-  }
-  try {
-    await writeFile(dbFile + '.failed', 'recovery started', 'utf8')
-  } catch {
-    // 忽略
-  }
-  await copyFile(backupPath, dbFile)
+  await replaceDatabaseWithBackup({
+    currentDb: db,
+    backupPath,
+    dbFile,
+    onClosed: () => {
+      database = undefined
+    }
+  })
 }
 
 export async function restoreDatabaseFile(backupPath: string): Promise<void> {

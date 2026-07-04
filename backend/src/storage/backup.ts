@@ -11,8 +11,9 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { copyFile, rename, unlink } from 'node:fs/promises'
 import path from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import { setMeta } from './_meta.js'
 import { timestampForFilename } from './migrations/_helpers.js'
 
@@ -173,6 +174,88 @@ export function resolveBackupPath(dataDir: string, name: string): string {
     throw new Error('INVALID_BACKUP_NAME')
   }
   return resolved
+}
+
+function sqliteIntegrityCheck(file: string): string {
+  let db: DatabaseSync | undefined
+  try {
+    db = new DatabaseSync(file, { readOnly: true })
+    const row = db.prepare('PRAGMA integrity_check').get() as { integrity_check?: string } | undefined
+    return row?.integrity_check ?? ''
+  } finally {
+    db?.close()
+  }
+}
+
+export function assertValidSqliteBackup(file: string): void {
+  if (!existsSync(file)) {
+    throw new Error('备份文件不存在')
+  }
+  let result: string
+  try {
+    result = sqliteIntegrityCheck(file)
+  } catch (error) {
+    throw new Error(`备份文件无法打开或不是有效 SQLite：${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (result !== 'ok') {
+    throw new Error(`备份完整性检查失败：${result || 'unknown'}`)
+  }
+}
+
+async function unlinkIfExists(file: string): Promise<void> {
+  try {
+    await unlink(file)
+  } catch {
+    // 文件不存在或已被清理时忽略
+  }
+}
+
+async function removeSqliteSidecars(dbFile: string): Promise<void> {
+  await Promise.all([
+    unlinkIfExists(`${dbFile}-wal`),
+    unlinkIfExists(`${dbFile}-shm`)
+  ])
+}
+
+export async function replaceDatabaseWithBackup(options: {
+  currentDb?: DatabaseSync
+  backupPath: string
+  dbFile: string
+  onClosed?: () => void
+}): Promise<void> {
+  const { currentDb, backupPath, dbFile, onClosed } = options
+  assertValidSqliteBackup(backupPath)
+
+  const tmpFile = path.join(
+    path.dirname(dbFile),
+    `.restore-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
+  )
+  let renamed = false
+
+  try {
+    await copyFile(backupPath, tmpFile)
+    assertValidSqliteBackup(tmpFile)
+
+    try {
+      currentDb?.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    } catch {
+      // checkpoint 失败不阻止恢复；关闭连接后会清理 sidecar
+    }
+    try {
+      currentDb?.close()
+    } finally {
+      onClosed?.()
+    }
+
+    await removeSqliteSidecars(dbFile)
+    await rename(tmpFile, dbFile)
+    renamed = true
+    await removeSqliteSidecars(dbFile)
+  } finally {
+    if (!renamed) {
+      await unlinkIfExists(tmpFile)
+    }
+  }
 }
 
 export { MAX_BACKUPS, BACKUP_PREFIX, BACKUP_SUFFIX, BACKUP_FILENAME_RE }

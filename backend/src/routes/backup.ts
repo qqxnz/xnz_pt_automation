@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { getMeta, setMeta } from '../storage/_meta.js'
+import { getMeta } from '../storage/_meta.js'
 import {
   createManualBackup,
   deleteBackup as deleteBackupFile,
@@ -191,23 +191,9 @@ backupRouter.post('/:name/restore', requireAuth, async (req, res) => {
     return
   }
 
-  try {
-    const db = getCurrentDatabase()
-    setMeta(db, 'last_restore_path', abs)
-    setMeta(db, 'last_restore_at', new Date().toISOString())
-    setMeta(db, 'restored_pending', '1')
-  } catch {
-    // 标记失败不影响主流程
-  }
-
-  await recordOperationLog({
-    action: 'BACKUP_RESTORE',
-    message: `从备份 ${name} 恢复成功（安全备份：${safetyBackup.name}）；即将重启 (${detectRuntime()})`,
-    actorId: res.locals.user.id,
+  logger.info('backup', `从备份 ${name} 恢复成功（安全备份：${safetyBackup.name}）；即将重启 (${detectRuntime()})`, {
     actorName: res.locals.user.username,
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
-    status: 'SUCCESS'
+    ip: req.ip
   })
 
   res.json({

@@ -11,6 +11,7 @@ import {
   listBackups,
   nameLooksSafe,
   pruneOldBackups,
+  replaceDatabaseWithBackup,
   resolveBackupPath
 } from '../src/storage/backup.js'
 import { setMeta, getMeta } from '../src/storage/_meta.js'
@@ -177,6 +178,71 @@ test('listBackups ignores non-matching filenames', () => {
       assert.ok(item.name.endsWith('.sqlite3'))
     }
   } finally {
+    rmSync(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('replaceDatabaseWithBackup restores a valid sqlite backup and removes WAL sidecars', async () => {
+  const dataDir = path.join('/tmp', `xnz-bk-restore-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  mkdirSync(dataDir, { recursive: true })
+  const dbFile = path.join(dataDir, 'app.db')
+  const backupFile = path.join(dataDir, 'backup.sqlite3')
+  const db = openFreshDb(dbFile)
+  try {
+    db.exec('PRAGMA journal_mode = WAL')
+    createTableIfMissing(db, `CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
+    db.exec(`CREATE TABLE t (id TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+    db.prepare('INSERT INTO t VALUES (?, ?)').run('a', 'current')
+    const safetyBackup = createManualBackup(db, dataDir)
+    assert.ok(existsSync(safetyBackup.path))
+
+    const backup = openFreshDb(backupFile)
+    backup.exec(`CREATE TABLE t (id TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+    backup.prepare('INSERT INTO t VALUES (?, ?)').run('a', 'restored')
+    backup.close()
+
+    writeFileSync(dbFile + '-wal', 'stale wal')
+    writeFileSync(dbFile + '-shm', 'stale shm')
+
+    await replaceDatabaseWithBackup({ currentDb: db, backupPath: backupFile, dbFile })
+
+    assert.equal(existsSync(dbFile + '-wal'), false)
+    assert.equal(existsSync(dbFile + '-shm'), false)
+
+    const restored = new DatabaseSync(dbFile)
+    try {
+      const integrity = restored.prepare('PRAGMA integrity_check').get() as { integrity_check: string }
+      assert.equal(integrity.integrity_check, 'ok')
+      const row = restored.prepare('SELECT v FROM t WHERE id = ?').get('a') as { v: string }
+      assert.equal(row.v, 'restored')
+    } finally {
+      restored.close()
+    }
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('replaceDatabaseWithBackup rejects malformed backups without overwriting current database', async () => {
+  const dataDir = path.join('/tmp', `xnz-bk-bad-restore-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  mkdirSync(dataDir, { recursive: true })
+  const dbFile = path.join(dataDir, 'app.db')
+  const badBackupFile = path.join(dataDir, 'bad.sqlite3')
+  const db = openFreshDb(dbFile)
+  try {
+    db.exec(`CREATE TABLE t (id TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+    db.prepare('INSERT INTO t VALUES (?, ?)').run('a', 'current')
+    writeFileSync(badBackupFile, 'not a sqlite database')
+
+    await assert.rejects(
+      () => replaceDatabaseWithBackup({ currentDb: db, backupPath: badBackupFile, dbFile }),
+      /备份文件无法打开|备份完整性检查失败/
+    )
+
+    const row = db.prepare('SELECT v FROM t WHERE id = ?').get('a') as { v: string }
+    assert.equal(row.v, 'current')
+  } finally {
+    db.close()
     rmSync(dataDir, { recursive: true, force: true })
   }
 })
