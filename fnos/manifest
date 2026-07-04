@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.13
+version=0.6.14
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.13<br/>修复飞牛应用部署后系统时区识别为空的问题；飞牛容器固定使用 Asia/Shanghai，并为系统信息接口增加时区兜底。
+changelog=0.6.14<br/>修正飞牛安装提示和文档中的实际数据目录为 @appcenter/qqxnz.xnz-pt-automation/var/app，并补充升级后排查旧数据库位置的说明。
