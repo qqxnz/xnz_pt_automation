@@ -99,6 +99,25 @@ function changedKeys(before: SystemSettings, after: SystemSettings) {
   return settingsKeys.filter((key) => before[key] !== after[key])
 }
 
+function isValidTimezone(timezone: string) {
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function resolveSystemTimezone() {
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+  if (detected) return detected
+
+  const envTimezone = process.env.TZ?.trim()
+  if (envTimezone && isValidTimezone(envTimezone)) return envTimezone
+
+  return 'Asia/Shanghai'
+}
+
 settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
   const admin = await findUserByUsername('admin')
   const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
@@ -108,7 +127,7 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
     runtimeEnv: process.env.NODE_ENV || 'development',
     nodeVersion: process.version,
     startedAt,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezone: resolveSystemTimezone(),
     database: {
       type: 'sqlite',
       path: storagePaths.dbFile,
