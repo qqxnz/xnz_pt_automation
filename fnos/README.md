@@ -62,8 +62,8 @@ sudo chmod +x /usr/local/bin/fnpack
 
 ```bash
 cd fnos
-./build.sh 0.6.15
-# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.15.fpk
+./build.sh 0.6.16
+# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.16.fpk
 ```
 
 ## 飞牛上安装
@@ -76,7 +76,7 @@ cd fnos
 # 先开启手动安装
 appcenter-cli manual-install enable
 # 安装
-appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.15.fpk
+appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.16.fpk
 # 安装后关闭
 appcenter-cli manual-install disable
 ```

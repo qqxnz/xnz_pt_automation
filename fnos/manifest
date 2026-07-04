@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.15
+version=0.6.16
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.15<br/>飞牛版宿主机数据目录改为 @appcenter/qqxnz.xnz-pt-automation/data，安装提示和文档同步更新为新的 data 目录。
+changelog=0.6.16<br/>发布升级测试版本，保持飞牛版宿主机数据目录为 @appcenter/qqxnz.xnz-pt-automation/data。
