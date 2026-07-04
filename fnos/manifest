@@ -1,6 +1,6 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.10
-display_name=PT 自动化
+version=0.6.11
+display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
 platform=all
@@ -15,5 +15,5 @@ checkport=false
 service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
-desktop_applaunchname=qqxnz.xnz-pt-automation.Application
-changelog=0.6.10<br/>修复数据库备份恢复流程，恢复前校验 SQLite 完整性，替换数据库时关闭旧连接并清理 WAL/SHM，避免恢复后 app.db 损坏。
+desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
+changelog=0.6.11<br/>桌面入口名称更新为 PTA，并更换桌面入口 ID 以刷新飞牛桌面图标缓存；保留安装/升级不再填写镜像版本的优化。

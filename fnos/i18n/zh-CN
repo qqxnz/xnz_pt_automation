@@ -7,12 +7,9 @@ label_service_port="Web 端口"
 service_port_required="请输入端口"
 service_port_pattern="端口必须为 2-5 位数字"
 
-step_account_title="账户与镜像"
+step_account_title="账户"
 label_admin_password="默认管理员密码（admin）"
 password_required="请输入密码"
-label_image_tag="镜像版本"
-image_tag_required="请输入镜像版本"
-help_image_tag="默认 0.6.10，可前往阿里云容器镜像服务查看最新版本"
 
 [uninstall]
 step_data_title="数据清理"
@@ -20,5 +17,4 @@ label_delete_data="同时删除所有数据（数据库、日志、用户配置�
 
 [upgrade]
 step_version_title="升级版本"
-label_image_tag="升级到的镜像版本"
-image_tag_required="请输入镜像版本"
+version_tip="将使用当前 fpk 内置的镜像版本进行升级，无需手动填写版本号。如需回滚，请安装对应旧版本 fpk。"

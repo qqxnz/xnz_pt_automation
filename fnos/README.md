@@ -14,7 +14,7 @@ fnos/
 │
 ├── app/
 │   └── docker/
-│       ├── docker-compose.yaml   # 核心：复用项目根目录 docker-compose，变量化端口/密码/版本
+│       ├── docker-compose.yaml   # 核心：复用项目根目录 docker-compose，变量化端口/密码，内置当前镜像版本
 │       └── .env.template
 │
 ├── cmd/                       # 8 个生命周期钩子
@@ -33,9 +33,9 @@ fnos/
 │   └── resource               # docker-project 声明
 │
 ├── wizard/
-│   ├── install                # 端口 / 密码 / 镜像版本
+│   ├── install                # 端口 / 密码
 │   ├── uninstall              # 是否删除数据
-│   └── upgrade                # 升级镜像版本
+│   └── upgrade                # 仅提示说明，使用 fpk 内置镜像版本
 │
 └── i18n/
     └── zh-CN                  # 简体中文
@@ -46,7 +46,7 @@ fnos/
 - **阿里云容器镜像服务** 仓库已建好
   - 当前默认地址：`crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation`
   - 如需修改，编辑 `app/docker/docker-compose.yaml` 中 `image:` 字段
-- **镜像已推送**：至少推送 `0.6.2` tag（与 `manifest` 中 `version` 一致）
+- **镜像已推送**：推送与 `manifest` 中 `version` 一致的 tag
 - 镜像仓库设为**公开**（私有仓库需 fnOS 端额外配置登录）
 
 ## 本地打包 .fpk
@@ -62,8 +62,8 @@ sudo chmod +x /usr/local/bin/fnpack
 
 ```bash
 cd fnos
-./build.sh 0.6.2
-# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.2.fpk
+./build.sh 0.6.11
+# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.11.fpk
 ```
 
 ## 飞牛上安装
@@ -76,7 +76,7 @@ cd fnos
 # 先开启手动安装
 appcenter-cli manual-install enable
 # 安装
-appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.2.fpk
+appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.11.fpk
 # 安装后关闭
 appcenter-cli manual-install disable
 ```
@@ -89,9 +89,11 @@ appcenter-cli install-local
 
 ## 升级
 
-1. 推送新镜像到阿里云：`docker push crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:0.6.3`
-2. 重新打包：`./build.sh 0.6.3`
-3. 飞牛应用中心 → 找到「PT 自动化」→ 重新安装/升级
+1. 推送新镜像到阿里云：`docker push crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:<version>`
+2. 重新打包：`./build.sh <version>`
+3. 飞牛应用中心 → 找到「PTA」→ 重新安装/升级
+
+安装和升级向导不再提供镜像版本输入框；应用会使用 fpk 内置的当前版本镜像 tag。如需回滚，请安装对应旧版本 fpk。
 
 ## 卸载
 

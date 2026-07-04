@@ -1,7 +1,7 @@
 ---
 name: release
 description: |
-  发布新版本。同步更新 9 处版本号、生成 x86_64 和 arm64 两个 fnOS fpk 包到 fpk/ 目录（仅保留最新版本）、git 提交、打 annotated tag、推送 main 分支和 tag 到 origin。
+  发布新版本。同步更新版本号、生成 x86_64 和 arm64 两个 fnOS fpk 包到 fpk/ 目录（仅保留最新版本）、git 提交、打 annotated tag、推送 main 分支和 tag 到 origin。
   当用户说「发版」「发布版本」「release」「打 tag」「bump version」「升级到 X.Y.Z」「发新版本」时使用。
 ---
 
@@ -36,7 +36,7 @@ description: |
 - 仓库中 fpk 文件始终只有 2 个：当前最新版
 - 历史 commit 中的旧 fpk 可用 `git rm` 一次性清理（见末尾「历史清理」）
 
-## 同步更新的版本号位置（9 处）
+## 同步更新的版本号位置
 
 | # | 文件 | 字段 / 说明 |
 |---|---|---|
@@ -47,11 +47,9 @@ description: |
 | 5 | `docker-compose.yml` | `image: qqxnz/xnz-pt-automation:X.Y.Z` |
 | 6 | `fnos/manifest` | `version=` + `changelog=`（写本次发版摘要） |
 | 7 | `fnos/app/docker/docker-compose.yaml` | `${wizard_image_tag:-X.Y.Z}` 默认镜像 tag |
-| 8 | `fnos/wizard/install` | JSON `"initValue": "X.Y.Z"` |
-| 9 | `fnos/wizard/upgrade` | JSON `"initValue": "X.Y.Z"` |
-| 10 | `fnos/i18n/zh-CN` | `help_image_tag="默认 X.Y.Z…"` 文案 |
+| 8 | `package-lock.json` | workspace/package 版本 |
 
-> 第 10 项常被遗忘，发版后**必须检查**：用户首次安装时看到的提示文本会带版本号。
+> `fnos/wizard/install` 和 `fnos/wizard/upgrade` 不再暴露镜像版本输入框；发版时不要往 wizard 写版本号。飞牛安装/升级会使用 `fnos/app/docker/docker-compose.yaml` 里的 fpk 内置默认镜像 tag。
 
 ## 流程
 
@@ -70,13 +68,13 @@ CURRENT=$(node -p "require('./package.json').version")
 - `git remote get-url origin` 必须指向 `qqxnz/xnz_pt_automation`
 - `command -v fnpack` 如不存在，调用 `fnos/build_all.sh` 时会**自动安装**到 `~/.local/bin/fnpack`（不需 sudo）
 
-### 3. 同步 9 处版本号
+### 3. 同步版本号
 
 对每个文件用 `sed -i ''`（macOS）或 `sed -i`（Linux）替换旧版本号为新版本号。打印每个文件的 diff 摘要。
 
 特别关注：
 - `fnos/manifest` 的 `changelog=` 必须人工写出**本次发版的变更摘要**（不是简单复制旧版），用户升级时第一时间看到
-- `fnos/i18n/zh-CN` 的 `help_image_tag` 文案别漏
+- 不要恢复 `fnos/wizard/install` / `fnos/wizard/upgrade` 中的 `wizard_image_tag` 字段
 
 ### 4. 编译双架构 fpk（必须在 commit 前执行）
 
@@ -103,7 +101,7 @@ git commit -m "release: v{NEW_VERSION}"
 ```
 
 `git add -A` 会同时捕获：
-- 9 处版本号改动
+- 版本号改动
 - 新 fpk 文件
 - 旧 fpk 删除
 

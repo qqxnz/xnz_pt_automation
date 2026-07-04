@@ -3,13 +3,8 @@
     "stepTitle": "${upgrade.step_version_title}",
     "items": [
       {
-        "type": "text",
-        "field": "wizard_image_tag",
-        "label": "${upgrade.label_image_tag}",
-        "initValue": "0.6.10",
-        "rules": [
-          { "required": true, "message": "${upgrade.image_tag_required}" }
-        ]
+        "type": "tips",
+        "helpText": "${upgrade.version_tip}"
       }
     ]
   }

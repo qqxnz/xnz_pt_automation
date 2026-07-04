@@ -25,15 +25,6 @@
         "rules": [
           { "required": true, "message": "${install.password_required}" }
         ]
-      },
-      {
-        "type": "text",
-        "field": "wizard_image_tag",
-        "label": "${install.label_image_tag}",
-        "initValue": "0.6.10",
-        "rules": [
-          { "required": true, "message": "${install.image_tag_required}" }
-        ]
       }
     ]
   }

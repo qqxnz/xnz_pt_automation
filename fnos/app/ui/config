@@ -1,7 +1,7 @@
 {
     ".url": {
-        "qqxnz.xnz-pt-automation.Application": {
-            "title": "PT 自动化",
+        "qqxnz.xnz-pt-automation.PTA": {
+            "title": "PTA",
             "icon": "images/icon_{0}.png",
             "type": "url",
             "protocol": "http",
