@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.8
+version=0.6.9
 display_name=PT 自动化
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.Application
-changelog=0.6.8<br/>重新构建 fpk 包并完善 release skill 文档（明确「fpk 仅保留最新版」策略）。
+changelog=0.6.9<br/>更新 PTA 应用图标，统一前端与飞牛封装 icon，并迁移 release skill 到 Codex 可识别目录。

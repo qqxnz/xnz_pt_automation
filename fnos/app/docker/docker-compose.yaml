@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.8}
+    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.9}
     container_name: xnz-pt-automation
     restart: unless-stopped
     ports:

@@ -68,10 +68,17 @@ a {
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  background: #3f7cff;
-  color: #fff;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  overflow: hidden;
+  background: #0b1220;
+  box-shadow: 0 14px 28px rgb(17 24 39 / 14%);
+}
+
+.logo-box img,
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .hero-tags {
@@ -231,7 +238,7 @@ a {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  font-size: 13px;
+  box-shadow: 0 8px 18px rgb(17 24 39 / 12%);
 }
 
 .brand-title {

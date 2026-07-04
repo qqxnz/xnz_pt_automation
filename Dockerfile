@@ -18,6 +18,7 @@ COPY backend/src backend/src
 COPY frontend/tsconfig*.json frontend/
 COPY frontend/index.html frontend/
 COPY frontend/vite.config.ts frontend/
+COPY frontend/public frontend/public
 COPY frontend/src frontend/src
 
 # 优化4：构建时设置环境变量，确保生产构建
@@ -28,7 +29,7 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.6.8
+ARG VERSION=0.6.9
 ARG DATA_DIR=/data
 ARG SCHEMA_VERSION=21
 

@@ -1,7 +1,9 @@
 <template>
   <div class="login-page">
     <section class="login-hero">
-      <div class="logo-box">PT</div>
+      <div class="logo-box">
+        <img src="/pta-icon.png" alt="PTA" />
+      </div>
       <h1>PT Automation</h1>
       <p>Free torrent monitor for NAS</p>
       <p class="hero-desc">按任务抓取 PT 站点种子，推送到下载器，并持续追踪站点健康状态。</p>

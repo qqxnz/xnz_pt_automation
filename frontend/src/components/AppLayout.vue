@@ -13,7 +13,9 @@
         <span />
         <span />
       </button>
-      <div class="brand-mark">PT</div>
+      <div class="brand-mark">
+        <img src="/pta-icon.png" alt="PTA" />
+      </div>
       <div class="brand-title">PT Automation</div>
       <div class="topbar-spacer" />
       <span class="username">{{ auth.user?.username }}</span>
