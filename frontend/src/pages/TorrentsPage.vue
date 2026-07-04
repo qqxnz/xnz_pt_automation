@@ -946,7 +946,7 @@ function startRealtimeRefresh() {
   stopRealtimeRefresh()
   if (document.hidden) return
   loadTorrents()
-  refreshTimer = window.setInterval(() => loadTorrents(), 3000)
+  refreshTimer = window.setInterval(() => loadTorrents(), 1000)
 }
 
 function handleVisibilityChange() {

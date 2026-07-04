@@ -441,6 +441,18 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
   const updateBuffer: TorrentRecord[] = []
   let successCount = 0
   const failed: Array<{ id: string; message: string }> = []
+
+  const affectedDownloaderIds = new Set<string>()
+  for (const id of ids) {
+    const t = await getTorrentById(id)
+    if (t?.downloaderId && downloaderById.has(t.downloaderId)) {
+      affectedDownloaderIds.add(t.downloaderId)
+    }
+  }
+  for (const did of affectedDownloaderIds) {
+    await syncTorrentDownloadStats(did).catch(() => undefined)
+  }
+
   for (const id of ids) {
     const torrent = await getTorrentById(id)
     if (!torrent) {
@@ -612,6 +624,7 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
   if (!downloader) return res.status(400).json({ message: '种子绑定下载器不存在' })
   if (!downloader.enabled) return res.status(400).json({ message: '下载器已禁用' })
   if (!torrent.torrentHash) return res.status(400).json({ message: '缺少下载器任务 Hash，无法删除' })
+  await syncTorrentDownloadStats(downloader.id).catch(() => undefined)
   let deleteResult: Awaited<ReturnType<typeof deleteTorrentFromQb>>
   try {
     deleteResult = await deleteTorrentFromQb(downloader, torrent.torrentHash, true)

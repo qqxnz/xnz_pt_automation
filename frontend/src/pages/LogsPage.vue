@@ -142,6 +142,20 @@ function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
 }
 
+function formatDuration(ms?: number) {
+  if (ms === undefined) return ''
+  if (ms < 1000) return `${ms}毫秒`
+  const totalSeconds = Math.floor(ms / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours}小时`)
+  if (minutes > 0) parts.push(`${minutes}分`)
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}秒`)
+  return parts.join('')
+}
+
 function statusText(status: OperationLog['status'] | TaskLog['status'] | ScheduleLog['status'] | SigninLog['status']) {
   const map = {
     SUCCESS: '成功',
@@ -176,7 +190,7 @@ function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog | 
     return [
       item.startedAt ? `开始：${formatTime(item.startedAt)}` : '',
       item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : '',
-      item.durationMs === undefined ? '' : `耗时：${item.durationMs}ms`,
+      item.durationMs === undefined ? '' : `耗时：${formatDuration(item.durationMs)}`,
       item.summary ? `摘要：${item.summary}` : '',
       item.errorMessage ? `错误：${item.errorMessage}` : ''
     ]
@@ -189,7 +203,7 @@ function secondaryText(item: OperationLog | TaskLog | ScheduleLog | SigninLog | 
       item.triggerSource === 'manual-button' ? '触发：手动按钮' : '触发：调度器',
       `开始：${formatTime(item.startedAt)}`,
       item.finishedAt ? `结束：${formatTime(item.finishedAt)}` : '',
-      item.durationMs === undefined ? '' : `耗时：${item.durationMs}ms`,
+      item.durationMs === undefined ? '' : `耗时：${formatDuration(item.durationMs)}`,
       item.errorMessage ? `错误：${item.errorMessage}` : ''
     ]
       .filter(Boolean)

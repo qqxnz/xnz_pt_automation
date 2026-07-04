@@ -440,7 +440,7 @@ function stopStatusPolling() {
 function startStatusPolling() {
   stopStatusPolling()
   if (!items.value.length) return
-  statusTimer = window.setInterval(refreshAllStatuses, 5000)
+  statusTimer = window.setInterval(refreshAllStatuses, 1000)
 }
 
 function handleVisibilityChange() {

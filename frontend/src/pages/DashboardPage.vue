@@ -101,6 +101,7 @@
               <small>{{ job.summary }}</small>
             </div>
             <span class="status-badge" :class="job.status.toLowerCase()">{{ jobStatusText(job.status) }}</span>
+            <time>{{ formatTime(job.createdAt) }}</time>
           </article>
         </div>
         <div v-else class="empty-tip">暂无最近任务记录。</div>
@@ -117,7 +118,7 @@
           </div>
           <div v-for="job in overview?.scheduler.jobs" :key="job.name" class="dashboard-table-row">
             <strong>{{ job.readableName }}</strong>
-            <span>{{ job.intervalMs }}秒</span>
+            <span>{{ formatInterval(job.intervalMs) }}</span>
             <span class="status-badge" :class="schedulerStatusClass(job)">{{ schedulerStatusText(job) }}</span>
             <span>{{ formatTime(job.lastRunAt) }}</span>
             <span>{{ formatTime(job.nextRunAt) }}</span>
@@ -188,19 +189,31 @@ function schedulerStatusText(job: SchedulerJobStatus) {
   return '等待中'
 }
 
+function formatInterval(ms: number) {
+  if (ms >= 86400000) return `${Math.floor(ms / 86400000)} 天`
+  if (ms >= 3600000) return `${Math.floor(ms / 3600000)} 小时`
+  if (ms >= 60000) return `${Math.floor(ms / 60000)} 分钟`
+  return `${Math.floor(ms / 1000)} 秒`
+}
+
 function formatTime(value?: string) {
   if (!value) return '-'
   const diff = Date.now() - new Date(value).getTime()
-  if (diff < 0) {
-    const remain = Math.abs(diff)
-    if (remain < 60000) return `${Math.floor(remain / 1000)}秒后`
-    if (remain < 3600000) return `${Math.floor(remain / 60000)}分钟后`
-    return `${Math.floor(remain / 3600000)}小时后`
-  }
-  if (diff < 60000) return `${Math.floor(diff / 1000)}秒前`
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-  return `${Math.floor(diff / 86400000)}天前`
+  const abs = Math.abs(diff)
+  const sign = diff < 0 ? '后' : '前'
+
+  const days = Math.floor(abs / 86400000)
+  const hours = Math.floor((abs % 86400000) / 3600000)
+  const minutes = Math.floor((abs % 3600000) / 60000)
+  const seconds = Math.floor((abs % 60000) / 1000)
+
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}天`)
+  if (hours > 0) parts.push(`${hours}小时`)
+  if (minutes > 0) parts.push(`${minutes}分钟`)
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}秒`)
+
+  return parts.join('') + sign
 }
 
 async function loadOverview() {

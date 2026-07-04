@@ -32,19 +32,35 @@ function applySnapshot(torrent: TorrentRecord, item: QbTorrentItem, syncedAt: st
   changed = assignIfChanged(torrent, 'downloadState', item.state) || changed
   changed = assignIfChanged(torrent, 'downloaderState', item.state) || changed
   changed = assignIfChanged(torrent, 'ratio', item.ratio) || changed
-  changed = assignIfChanged(torrent, 'uploadSpeed', item.uploadSpeed ?? 0) || changed
-  changed = assignIfChanged(torrent, 'downloadSpeed', item.downloadSpeed ?? 0) || changed
-  changed = assignIfChanged(torrent, 'uploaded', item.uploaded ?? 0) || changed
-  changed = assignIfChanged(torrent, 'downloaded', item.downloaded ?? 0) || changed
+
+  const prevSyncedAt = torrent.downloadStatsSyncedAt ? new Date(torrent.downloadStatsSyncedAt).getTime() : 0
+  const nowMs = new Date(syncedAt).getTime()
+  const elapsedSeconds = prevSyncedAt > 0 ? Math.max((nowMs - prevSyncedAt) / 1000, 1) : 0
+
+  const newUploaded = item.uploaded ?? 0
+  const prevUploaded = torrent.uploaded ?? 0
+  const newDownloaded = item.downloaded ?? 0
+  const prevDownloaded = torrent.downloaded ?? 0
+
+  const avgUploadSpeed = prevSyncedAt > 0
+    ? Math.max(0, Math.round((newUploaded - prevUploaded) / elapsedSeconds))
+    : (item.uploadSpeed ?? 0)
+  const avgDownloadSpeed = prevSyncedAt > 0
+    ? Math.max(0, Math.round((newDownloaded - prevDownloaded) / elapsedSeconds))
+    : (item.downloadSpeed ?? 0)
+
+  changed = assignIfChanged(torrent, 'uploadSpeed', avgUploadSpeed) || changed
+  changed = assignIfChanged(torrent, 'downloadSpeed', avgDownloadSpeed) || changed
+  changed = assignIfChanged(torrent, 'uploaded', newUploaded) || changed
+  changed = assignIfChanged(torrent, 'downloaded', newDownloaded) || changed
   changed = assignIfChanged(torrent, 'downloaderSavePath', item.savePath?.trim() || undefined) || changed
   changed = assignIfChanged(torrent, 'downloadStatsSyncedAt', syncedAt) || changed
-  // 维护低速删除窗口起点（每 3 秒同步时一同维护，避免与 guard 写入产生竞态）
+
   const kbps = torrent.lowUploadKbps
   const minutes = torrent.lowUploadMinutes
   if (kbps && kbps > 0 && minutes && minutes >= 1) {
     const threshold = kbps * 1024
-    const speed = item.uploadSpeed ?? 0
-    if (speed < threshold) {
+    if (avgUploadSpeed < threshold) {
       if (!torrent.lowUploadSince) {
         changed = assignIfChanged(torrent, 'lowUploadSince', syncedAt) || changed
       }
