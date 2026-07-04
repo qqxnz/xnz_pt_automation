@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.4
+version=0.6.5
 display_name=PT 自动化
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.Application
-changelog=0.6.4<br/>飞牛封装版本<br/>基于阿里云容器镜像服务
+changelog=0.6.5<br/>飞牛封装版本<br/>基于阿里云容器镜像服务

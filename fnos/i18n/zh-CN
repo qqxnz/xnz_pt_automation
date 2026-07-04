@@ -12,7 +12,7 @@ label_admin_password="默认管理员密码（admin）"
 password_required="请输入密码"
 label_image_tag="镜像版本"
 image_tag_required="请输入镜像版本"
-help_image_tag="默认 0.6.4，可前往阿里云容器镜像服务查看最新版本"
+help_image_tag="默认 0.6.5，可前往阿里云容器镜像服务查看最新版本"
 
 [uninstall]
 step_data_title="数据清理"

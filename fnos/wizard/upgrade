@@ -6,7 +6,7 @@
         "type": "text",
         "field": "wizard_image_tag",
         "label": "${upgrade.label_image_tag}",
-        "initValue": "0.6.4",
+        "initValue": "0.6.5",
         "rules": [
           { "required": true, "message": "${upgrade.image_tag_required}" }
         ]
