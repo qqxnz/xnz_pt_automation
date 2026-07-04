@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.14}
+    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.15}
     container_name: xnz-pt-automation
     restart: unless-stopped
     network_mode: host
@@ -10,7 +10,7 @@ services:
       DEFAULT_ADMIN_PASSWORD: "${wizard_admin_password:-123456}"
       TZ: Asia/Shanghai
     volumes:
-      - ../var/app:/data
+      - ../data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${wizard_service_port:-3180}/api/health"]
       interval: 30s
