@@ -62,8 +62,8 @@ sudo chmod +x /usr/local/bin/fnpack
 
 ```bash
 cd fnos
-./build.sh 0.6.16
-# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.16.fpk
+./build.sh 0.6.17
+# 产物在仓库根目录：qqxnz.xnz-pt-automation-0.6.17.fpk
 ```
 
 ## 飞牛上安装
@@ -76,7 +76,7 @@ cd fnos
 # 先开启手动安装
 appcenter-cli manual-install enable
 # 安装
-appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.16.fpk
+appcenter-cli install-fpk /path/to/qqxnz.xnz-pt-automation-0.6.17.fpk
 # 安装后关闭
 appcenter-cli manual-install disable
 ```
@@ -99,17 +99,17 @@ appcenter-cli install-local
 
 ## 卸载
 
-- 默认保留 `var/`（数据库、日志、用户配置）
+- 默认保留 fnOS 托管的 `$TRIM_PKGVAR/data`（数据库、备份、日志、用户配置）
 - 卸载向导中勾选「同时删除所有数据」才会彻底清理
-- 当前飞牛实际数据目录为 `/volX/@appcenter/qqxnz.xnz-pt-automation/data/`
+- 当前飞牛 Docker 挂载为 `$TRIM_PKGVAR/data:/data`，实际宿主机路径可用 `docker inspect` 查看
 
 ## 数据迁移（从 Docker compose 部署迁移到飞牛）
 
-旧版部署在 `./data/`，飞牛封装使用 `/volX/@appcenter/qqxnz.xnz-pt-automation/data/`，迁移方法：
+旧版部署在 `./data/`，飞牛封装使用 fnOS 托管的 `$TRIM_PKGVAR/data`，迁移方法：
 
 ```bash
 # 在飞牛 SSH 中
-APP_DATA="/vol1/@appcenter/qqxnz.xnz-pt-automation/data"
+APP_DATA="$(docker inspect xnz-pt-automation --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}')"
 # 把旧 ./data 整个目录拷贝过去
 scp -r user@old-host:/path/to/old/data/* "$APP_DATA/"
 # 重启应用
@@ -121,6 +121,8 @@ scp -r user@old-host:/path/to/old/data/* "$APP_DATA/"
 docker inspect xnz-pt-automation --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
 find /vol* -path '*xnz-pt-automation*' -name app.db -print
 ```
+
+0.6.15/0.6.16 曾使用应用安装目录下的 `data`，该目录可能在升级时被 fnOS 重建；如果搜索不到旧 `app.db`，需要依赖 NAS 快照、回收站或外部备份恢复。
 
 ## 访问地址
 
