@@ -13,19 +13,5 @@
         ]
       }
     ]
-  },
-  {
-    "stepTitle": "${install.step_account_title}",
-    "items": [
-      {
-        "type": "text",
-        "field": "wizard_admin_password",
-        "label": "${install.label_admin_password}",
-        "initValue": "123456",
-        "rules": [
-          { "required": true, "message": "${install.password_required}" }
-        ]
-      }
-    ]
   }
 ]

@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.17
+version=0.6.19
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.17<br/>修复飞牛升级后数据目录被重建的问题，改用 fnOS 托管的 TRIM_PKGVAR/data 持久化目录挂载到容器 /data。
+changelog=0.6.19<br/>初始密码逻辑优化：取消 Docker 环境变量默认密码，首次启动未设置密码时强制进入密码设置页面，不设置不可访问任何模块。

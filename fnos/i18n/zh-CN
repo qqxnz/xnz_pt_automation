@@ -7,10 +7,6 @@ label_service_port="Web 端口"
 service_port_required="请输入端口"
 service_port_pattern="端口必须为 2-5 位数字"
 
-step_account_title="账户"
-label_admin_password="默认管理员密码（admin）"
-password_required="请输入密码"
-
 [uninstall]
 step_data_title="数据清理"
 label_delete_data="同时删除所有数据（数据库、日志、用户配置）"
