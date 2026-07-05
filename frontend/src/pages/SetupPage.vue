@@ -14,6 +14,11 @@
       <p>密码需 8-64 位，至少包含字母和数字</p>
 
       <label>
+        用户名
+        <input value="admin" disabled />
+      </label>
+
+      <label>
         新密码
         <div class="password-input">
           <input
@@ -53,6 +58,7 @@
 import { reactive, ref } from 'vue'
 import { Snackbar } from '@varlet/ui'
 import { useRouter } from 'vue-router'
+import { markSetupComplete } from '../router'
 import { setupPassword } from '../api/auth'
 
 const router = useRouter()
@@ -78,6 +84,7 @@ async function handleSubmit() {
   submitting.value = true
   try {
     await setupPassword(form.password)
+    markSetupComplete()
     Snackbar.success('密码设置成功，请登录')
     await router.replace('/login')
   } catch (error) {

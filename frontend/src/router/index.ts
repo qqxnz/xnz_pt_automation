@@ -16,6 +16,10 @@ import { getSetupStatus } from '../api/auth'
 let setupChecked = false
 let setupRequired = false
 
+export function markSetupComplete() {
+  setupRequired = false
+}
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
