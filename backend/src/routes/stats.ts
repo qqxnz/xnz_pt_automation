@@ -1,15 +1,14 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserByUsername, getLatestScheduleLogPerJob, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
+import { getLatestScheduleLogPerJob, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
 import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
-import { verifyPassword } from '../utils/password.js'
 import { getSchedulerJobs } from '../utils/scheduler.js'
 import { isoOnLocalDate, localDateKey } from '../utils/time.js'
 
 export const statsRouter = Router()
 
 type DashboardRisk = {
-  type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
+  type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DOWNLOADER_NOT_CONFIGURED'
   message: string
   actionText: string
   actionPath: string
@@ -70,17 +69,6 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     todaySigninPending: sites.filter((site, index) => site.signinEnabled && !signinJudgments[index].signed).length
   }
   const risks: DashboardRisk[] = []
-  const admin = await findUserByUsername('admin')
-  const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
-
-  if (admin && await verifyPassword(defaultPassword, admin.passwordHash)) {
-    risks.push({
-      type: 'DEFAULT_PASSWORD',
-      message: '首次部署后建议尽快修改默认密码',
-      actionText: '前往设置',
-      actionPath: '/settings'
-    })
-  }
 
   if (downloaders.length === 0) {
     risks.push({

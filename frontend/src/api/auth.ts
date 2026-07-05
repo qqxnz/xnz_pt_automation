@@ -7,6 +7,17 @@ export type User = {
   lastLoginAt?: string
 }
 
+export function getSetupStatus() {
+  return apiRequest<{ setupRequired: boolean }>('/api/auth/setup-status')
+}
+
+export function setupPassword(password: string) {
+  return apiRequest<{ success: boolean }>('/api/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify({ password })
+  })
+}
+
 export function login(payload: { username: string; password: string }) {
   return apiRequest<{ user: User; sessionToken: string }>('/api/auth/login', {
     method: 'POST',

@@ -402,7 +402,7 @@ async function initialAdminUser(): Promise<UserRecord> {
   return {
     id: 'admin',
     username: 'admin',
-    passwordHash: await createPasswordHash(process.env.DEFAULT_ADMIN_PASSWORD ?? '123456')
+    passwordHash: await createPasswordHash('')
   }
 }
 

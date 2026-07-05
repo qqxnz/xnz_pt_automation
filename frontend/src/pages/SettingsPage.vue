@@ -19,11 +19,6 @@
         <button type="button" @click="loadAll">重试</button>
       </div>
 
-      <section v-if="systemInfo?.security.defaultPasswordInUse" class="security-alert" ref="securitySection">
-        <strong>当前仍在使用默认管理员密码</strong>
-        <span>请尽快修改密码，避免部署到 NAS 或公网环境后产生安全风险。</span>
-      </section>
-
       <div class="settings-grid">
         <section class="panel settings-card" ref="passwordSection">
           <div class="panel-title-row">
@@ -176,7 +171,6 @@ const settingsError = ref('')
 const systemInfo = ref<SystemInfo>()
 const savedSettings = ref<SystemSettings>()
 const settingsUpdatedAt = ref<string>()
-const securitySection = ref<HTMLElement>()
 const passwordSection = ref<HTMLElement>()
 const settingsSection = ref<HTMLElement>()
 const sessionSection = ref<HTMLElement>()
@@ -431,7 +425,7 @@ async function focusSection() {
   await nextTick()
   const section = String(route.query.section ?? '')
   const target = section === 'password'
-    ? passwordSection.value || securitySection.value
+    ? passwordSection.value
     : section === 'network'
       ? networkSection.value
       : section === 'session'

@@ -16,7 +16,58 @@ function toSafeUser(user: UserRecord) {
   }
 }
 
+authRouter.get('/setup-status', async (_req, res) => {
+  const admin = await findUserByUsername('admin')
+  if (!admin) {
+    res.json({ setupRequired: false })
+    return
+  }
+  res.json({ setupRequired: !admin.passwordChangedAt })
+})
+
+authRouter.post('/setup', async (req, res) => {
+  const admin = await findUserByUsername('admin')
+  if (!admin) {
+    res.status(500).json({ message: '管理员账号不存在', code: 'ADMIN_NOT_FOUND' })
+    return
+  }
+  if (admin.passwordChangedAt) {
+    res.status(400).json({ message: '密码已设置，请使用登录接口', code: 'ALREADY_SETUP' })
+    return
+  }
+
+  const password = String(req.body?.password ?? '')
+  if (!/^(?=.*[A-Za-z])(?=.*\d).{8,64}$/.test(password)) {
+    res.status(400).json({ message: '密码需为 8-64 位，且至少包含字母和数字', code: 'PASSWORD_WEAK' })
+    return
+  }
+
+  const passwordHash = await createPasswordHash(password)
+  const passwordChangedAt = new Date().toISOString()
+  await updateUserPassword(admin.id, passwordHash, passwordChangedAt)
+  admin.passwordHash = passwordHash
+  admin.passwordChangedAt = passwordChangedAt
+
+  await recordOperationLog({
+    action: 'AUTH_SETUP_PASSWORD',
+    message: '管理员首次设置密码',
+    actorId: admin.id,
+    actorName: admin.username,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    status: 'SUCCESS'
+  })
+
+  res.json({ success: true })
+})
+
 authRouter.post('/login', async (req, res) => {
+  const admin = await findUserByUsername('admin')
+  if (admin && !admin.passwordChangedAt) {
+    res.status(403).json({ message: '请先设置管理员密码', setupRequired: true })
+    return
+  }
+
   const username = String(req.body?.username ?? '').trim()
   const password = String(req.body?.password ?? '')
 

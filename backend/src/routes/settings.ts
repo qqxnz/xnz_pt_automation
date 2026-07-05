@@ -5,7 +5,6 @@ import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import {
   defaultSystemSettings,
-  findUserByUsername,
   readStorageMigrationStatus,
   readStorageSchemaVersion,
   readSystemSettings,
@@ -15,7 +14,6 @@ import {
   writeSystemSettings
 } from '../storage.js'
 import { recordOperationLog } from '../utils/logger.js'
-import { verifyPassword } from '../utils/password.js'
 
 export const settingsRouter = Router()
 
@@ -119,9 +117,6 @@ export function resolveSystemTimezone() {
 }
 
 settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
-  const admin = await findUserByUsername('admin')
-  const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD ?? '123456'
-
   res.json({
     version: await packageVersion(),
     runtimeEnv: process.env.NODE_ENV || 'development',
@@ -139,9 +134,6 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
       dataDir: storagePaths.dataDir,
       logDir: storagePaths.logDir,
       cacheDir: storagePaths.cacheDir
-    },
-    security: {
-      defaultPasswordInUse: admin ? await verifyPassword(defaultPassword, admin.passwordHash) : false
     }
   })
 })

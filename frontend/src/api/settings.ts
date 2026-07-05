@@ -27,9 +27,6 @@ export type SystemInfo = {
     logDir?: string
     cacheDir?: string
   }
-  security: {
-    defaultPasswordInUse: boolean
-  }
 }
 
 export function getSystemInfo() {

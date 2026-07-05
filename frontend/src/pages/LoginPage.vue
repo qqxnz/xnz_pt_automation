@@ -11,10 +11,6 @@
         <span>NAS Ready</span>
         <span>Vue 3 + Varlet</span>
       </div>
-      <div class="deploy-tip">
-        <strong>首次部署提示</strong>
-        <span>默认账号：admin。默认密码不在页面展示。</span>
-      </div>
     </section>
 
     <form class="login-card" @submit.prevent="handleSubmit">

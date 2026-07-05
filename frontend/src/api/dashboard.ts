@@ -75,7 +75,7 @@ export type DashboardOverview = {
     jobs: SchedulerJobStatus[]
   }
   risks: Array<{
-    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DEFAULT_PASSWORD' | 'DOWNLOADER_NOT_CONFIGURED'
+    type: 'AUTH_FAILED' | 'ALL_OFFLINE' | 'DOWNLOADER_NOT_CONFIGURED'
     message: string
     actionText?: string
     actionPath?: string

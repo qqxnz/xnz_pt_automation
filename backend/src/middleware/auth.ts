@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-import { findUserById } from '../storage.js'
+import { findUserById, findUserByUsername } from '../storage.js'
 import { getSessionUserId } from '../utils/session.js'
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -16,5 +16,21 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   res.locals.user = user
+  next()
+}
+
+const SETUP_ALLOWED = ['/api/auth/setup-status', '/api/auth/setup', '/api/health']
+
+export async function requireSetup(req: Request, res: Response, next: NextFunction) {
+  if (SETUP_ALLOWED.includes(req.path)) return next()
+
+  if (req.path.startsWith('/api/')) {
+    const admin = await findUserByUsername('admin')
+    if (admin && !admin.passwordChangedAt) {
+      res.status(403).json({ message: '请先设置管理员密码', setupRequired: true })
+      return
+    }
+  }
+
   next()
 }

@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.6.17
+    image: qqxnz/xnz-pt-automation:0.6.19
     container_name: xnz-pt-automation
     restart: on-failure:5
     ports:
@@ -8,7 +8,6 @@ services:
     environment:
       PORT: "3180"
       DATA_DIR: /data
-      DEFAULT_ADMIN_PASSWORD: "123456"
       TZ: Asia/Shanghai
     volumes:
       - ./data:/data

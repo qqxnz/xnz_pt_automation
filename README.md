@@ -23,7 +23,6 @@ services:
     environment:
       PORT: "3180"
       DATA_DIR: /data
-      DEFAULT_ADMIN_PASSWORD: "123456"
       TZ: Asia/Shanghai
     volumes:
       - ./data:/data
@@ -67,7 +66,6 @@ docker run -d \
   --name xnz-pt-automation \
   --restart unless-stopped \
   -p 3180:3180 \
-  -e DEFAULT_ADMIN_PASSWORD=123456 \
   -v "$(pwd)/data:/data" \
   qqxnz/xnz-pt-automation:0.5.0
 ```

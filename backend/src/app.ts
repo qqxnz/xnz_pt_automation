@@ -15,6 +15,7 @@ import { statsRouter } from './routes/stats.js'
 import { tasksRouter } from './routes/tasks.js'
 import { torrentsRouter } from './routes/torrents.js'
 import { requestLogger } from './utils/logger.js'
+import { requireSetup } from './middleware/auth.js'
 
 export const app = express()
 
@@ -22,6 +23,8 @@ app.set('trust proxy', 1)
 app.use(express.json())
 app.use(cookieParser())
 app.use(requestLogger)
+
+app.use('/api', requireSetup)
 
 app.get('/api/health', (_req, res) => {
   const state = getAppState()
