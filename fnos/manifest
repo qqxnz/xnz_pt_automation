@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.19
+version=0.6.20
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.19<br/>初始密码逻辑优化：取消 Docker 环境变量默认密码，首次启动未设置密码时强制进入密码设置页面，不设置不可访问任何模块。
+changelog=0.6.20<br/>站点导入后自动触发流量同步；设置密码页显示用户名；推送种子时若下载器已存在同名任务自动回填 hash。
