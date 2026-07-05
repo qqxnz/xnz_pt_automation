@@ -341,7 +341,7 @@ async function removeBackup(name: string) {
 function confirmRestore(name: string) {
   Dialog({
     title: '确认恢复数据库',
-    message: `将把当前数据库替换为备份 ${name}，并自动重启 PM2 / Docker 实例（检测到哪种就哪种）。恢复前会先在 dataDir 生成一份新的安全备份。继续吗？`,
+    message: `将把当前数据库替换为备份 ${name}，并自动重启 PM2 / Docker 实例（检测到哪种就哪种）。继续吗？`,
     onConfirm: async () => {
       restoringName.value = name
       try {

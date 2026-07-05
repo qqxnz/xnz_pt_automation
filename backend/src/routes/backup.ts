@@ -148,31 +148,6 @@ backupRouter.post('/:name/restore', requireAuth, async (req, res) => {
     return
   }
 
-  let safetyBackup: BackupItem | undefined
-  try {
-    const db = getCurrentDatabase()
-    const result = createManualBackup(db, storagePaths.dataDir)
-    safetyBackup = {
-      name: path.basename(result.path),
-      sizeBytes: result.sizeBytes,
-      mtime: new Date().toISOString()
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    logger.error('backup', '恢复前安全备份失败，已中止恢复', { error: message })
-    await recordOperationLog({
-      action: 'BACKUP_RESTORE',
-      message: `恢复 ${name} 失败：恢复前安全备份出错 ${message}`,
-      actorId: res.locals.user.id,
-      actorName: res.locals.user.username,
-      ip: req.ip,
-      userAgent: req.get('user-agent'),
-      status: 'FAILED'
-    })
-    res.status(500).json({ code: 'BACKUP_RESTORE_FAILED', message: `恢复前安全备份失败：${message}` })
-    return
-  }
-
   try {
     await restoreDatabaseFile(abs)
   } catch (error) {
@@ -191,7 +166,7 @@ backupRouter.post('/:name/restore', requireAuth, async (req, res) => {
     return
   }
 
-  logger.info('backup', `从备份 ${name} 恢复成功（安全备份：${safetyBackup.name}）；即将重启 (${detectRuntime()})`, {
+  logger.info('backup', `从备份 ${name} 恢复成功；即将重启 (${detectRuntime()})`, {
     actorName: res.locals.user.username,
     ip: req.ip
   })
@@ -199,7 +174,6 @@ backupRouter.post('/:name/restore', requireAuth, async (req, res) => {
   res.json({
     restartRequired: true,
     runtime: detectRuntime(),
-    safetyBackup,
     message: '恢复成功，应用即将重启'
   })
 

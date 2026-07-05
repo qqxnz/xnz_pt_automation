@@ -15,7 +15,6 @@ export type BackupListResult = {
 export type RestoreResult = {
   restartRequired: boolean
   runtime: 'pm2' | 'docker' | 'unknown'
-  safetyBackup?: BackupItem
   message: string
 }
 
