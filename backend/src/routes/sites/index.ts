@@ -578,6 +578,7 @@ sitesRouter.post('/import', requireAuth, async (req, res) => {
   let imported = 0
   let failed = 0
   const errors: string[] = []
+  const newlyImportedEnabledIds: string[] = []
 
   for (const item of data) {
     if (!item?.domain) {
@@ -602,6 +603,7 @@ sitesRouter.post('/import', requireAuth, async (req, res) => {
       }
       await insertSiteToDb(site)
       imported += 1
+      if (site.enabled) newlyImportedEnabledIds.push(site.id)
     } catch (error) {
       failed += 1
       errors.push(`${item.name || item.domain}: ${error instanceof Error ? error.message : '导入失败'}`)
@@ -617,7 +619,17 @@ sitesRouter.post('/import', requireAuth, async (req, res) => {
     ip: req.ip,
     userAgent: req.get('user-agent')
   })
+
   res.json({ imported, failed, errors })
+
+  if (newlyImportedEnabledIds.length > 0) {
+    void syncSiteTrafficStats().catch((error) => {
+      logger.error('sites', '导入后触发站点流量同步失败', {
+        error: error instanceof Error ? error.message : String(error),
+        newlyImportedCount: newlyImportedEnabledIds.length
+      })
+    })
+  }
 })
 
 sitesRouter.get('/:id', requireAuth, async (req, res) => {
