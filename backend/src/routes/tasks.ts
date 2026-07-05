@@ -20,7 +20,7 @@ import {
   updateTaskFieldsInDb
 } from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog, recordTorrentLog } from '../utils/logger.js'
-import { addTorrentUrlToQb } from '../utils/qbittorrent.js'
+import { addTorrentUrlToQb, QbittorrentError } from '../utils/qbittorrent.js'
 import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites/index.js'
 
 export const tasksRouter = Router()
@@ -755,7 +755,12 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
             })
             pushedCount += 1
           } catch (error) {
-            pushError = errorMessage(error, '推送到下载器失败')
+            if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
+              pushed = { hash: '', name: item.title, state: 'added', unconfirmed: true }
+              pushedCount += 1
+            } else {
+              pushError = errorMessage(error, '推送到下载器失败')
+            }
           }
         }
         if (pushError) {
@@ -799,7 +804,8 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         lastSeenAt: now,
         pushedAt: pushed ? now : undefined,
         downloadUrlHash: torrentHash(site, item),
-        downloadUrl: item.downloadUrl
+        downloadUrl: item.downloadUrl,
+        pushUnconfirmed: pushed?.unconfirmed
       }
       pushedTorrentRecords.push(record)
       await recordTorrentLog({
@@ -814,6 +820,9 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       })
       if (task.autoPush) {
         if (pushed) {
+          const taskPushLogMessage = pushed.unconfirmed
+            ? `任务自动推送种子「${readableTorrentTitle(record.title)}」到「${downloader?.name ?? '下载器'}」（下载器未返回任务详情）`
+            : `任务自动推送种子「${readableTorrentTitle(record.title)}」到「${downloader?.name ?? '下载器'}」`
           await recordTorrentLog({
             torrentId: record.id,
             siteId: record.siteId,
@@ -822,7 +831,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
             event: 'PUSHED',
             status: 'SUCCESS',
             source: 'TASK',
-            message: `任务自动推送种子「${readableTorrentTitle(record.title)}」到「${downloader?.name ?? '下载器'}」`
+            message: taskPushLogMessage
           })
         } else if (failedPush) {
           await recordTorrentLog({

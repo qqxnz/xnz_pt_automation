@@ -47,6 +47,7 @@ export type TorrentItem = {
   ipv6PeerCount?: number
   totalPeerCount?: number
   peerSyncedAt?: string
+  pushUnconfirmed?: boolean
 }
 
 export type TorrentStats = {

@@ -3,10 +3,18 @@ import type { DownloaderRecord, SiteRecord } from '../storage.js'
 export class QbittorrentError extends Error {
   constructor(
     message: string,
-    public code: 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT' = 'NETWORK_ERROR'
+    public code: 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT' | 'REJECTED' | 'NOT_CONFIRMED' = 'NETWORK_ERROR'
   ) {
     super(message)
   }
+}
+
+export type AddTorrentResult = {
+  hash: string
+  name: string
+  state?: string
+  alreadyAdded?: boolean
+  unconfirmed?: boolean
 }
 
 export type QbAddOptions = {
@@ -294,12 +302,19 @@ export async function fetchTorrentFile(site: Pick<SiteRecord, 'apiKey' | 'cookie
   return bytes
 }
 
+function parseAddResponse(text: string): 'ok' | 'fail' | 'unknown' {
+  const normalized = text.trim().replace(/\.+$/, '').toLowerCase()
+  if (normalized === 'ok') return 'ok'
+  if (normalized === 'fail' || normalized === 'failed') return 'fail'
+  return 'unknown'
+}
+
 export async function addTorrentFileToQb(
   downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>,
   torrentFile: Uint8Array,
   filename: string,
   options: QbAddOptions = {}
-) {
+): Promise<AddTorrentResult> {
   const cookie = await loginQb(downloader)
   const before = await listQbTorrents(downloader, cookie)
   const beforeHashes = new Set(before.map((item) => item.hash).filter(Boolean))
@@ -324,6 +339,48 @@ export async function addTorrentFileToQb(
   if (response.status === 403) throw new QbittorrentError('下载器认证失败', 'AUTH_FAILED')
   if (!response.ok && response.status !== 409) throw new QbittorrentError(`下载器添加任务失败：HTTP ${response.status}`)
 
+  const responseText = await response.text()
+  const verdict = parseAddResponse(responseText)
+
+  if (verdict === 'fail') {
+    throw new QbittorrentError('下载器拒绝接受种子，请检查种子文件是否损坏', 'REJECTED')
+  }
+
+  if (verdict === 'ok') {
+    let added: QbTorrent | undefined
+    let unconfirmed = false
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const after = await listQbTorrents(downloader, cookie)
+      const filenameKey = normalizeTorrentName(filename)
+      added =
+        after.find((item) => item.hash && !beforeHashes.has(item.hash)) ??
+        after.find((item) => {
+          const itemKey = normalizeTorrentName(item.name)
+          return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
+        })
+      if (!added) unconfirmed = true
+    } catch (diffError) {
+      unconfirmed = true
+    }
+    const preexisting =
+      !added && before.find((item) => {
+        const itemKey = normalizeTorrentName(item.name)
+        const filenameKey = normalizeTorrentName(filename)
+        return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
+      })
+    if (added && added.state && /^paused/i.test(added.state)) {
+      throw new QbittorrentError('种子已添加但处于暂停状态')
+    }
+    return {
+      hash: added?.hash ?? '',
+      name: added?.name ?? filename,
+      state: added?.state ?? 'added',
+      alreadyAdded: Boolean(preexisting) && !added,
+      unconfirmed
+    }
+  }
+
   await new Promise((resolve) => setTimeout(resolve, 1000))
   const after = await listQbTorrents(downloader, cookie)
   const filenameKey = normalizeTorrentName(filename)
@@ -339,11 +396,11 @@ export async function addTorrentFileToQb(
       const itemKey = normalizeTorrentName(item.name)
       return itemKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
     })
-  if (!added) throw new QbittorrentError('下载器未返回新增任务，请检查是否已存在相同种子')
+  if (!added) throw new QbittorrentError('下载器未返回新增任务，请检查是否已存在相同种子', 'NOT_CONFIRMED')
   if (added.state && /^paused/i.test(added.state)) throw new QbittorrentError('种子已添加但处于暂停状态')
   return {
-    hash: added.hash,
-    name: added.name,
+    hash: added.hash ?? '',
+    name: added.name ?? filename,
     state: added.state,
     alreadyAdded: Boolean(preexisting) && !after.some((item) => item.hash && !beforeHashes.has(item.hash))
   }
@@ -355,7 +412,7 @@ export async function addTorrentUrlToQb(
   downloadUrl: string | undefined,
   filename: string,
   options: QbAddOptions = {}
-) {
+): Promise<AddTorrentResult> {
   const torrentFile = await fetchTorrentFile(site, downloadUrl)
   return addTorrentFileToQb(downloader, torrentFile, filename, options)
 }

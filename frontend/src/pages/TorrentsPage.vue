@@ -672,8 +672,12 @@ async function pushOne(torrent: TorrentItem) {
   if (!canPushTorrent(torrent)) return
   pushingIds.value = [...pushingIds.value, torrent.id]
   try {
-    await pushTorrent(torrent.id)
-    Snackbar.success('种子已推送')
+    const result = await pushTorrent(torrent.id)
+    if (result.pushUnconfirmed) {
+      Snackbar.warning('种子已推送（下载器未返回任务详情，请到下载器查看）')
+    } else {
+      Snackbar.success('种子已推送')
+    }
     await loadTorrents()
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : '推送失败')

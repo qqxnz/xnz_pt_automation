@@ -31,6 +31,7 @@ import { v17 } from './v17.js'
 import { v18 } from './v18.js'
 import { v19 } from './v19.js'
 import { v21 } from './v21.js'
+import { v22 } from './v22.js'
 
 export type MigrationContext = {
   dataDir: string
@@ -47,10 +48,10 @@ export type Migration = {
  * 当前镜像对应的最新 schema 版本
  * 新增 v{N} 时务必同步更新此常量 + 下方数组 + test fixture
  */
-export const SCHEMA_VERSION = 21
+export const SCHEMA_VERSION = 22
 
 export const MIGRATIONS: Migration[] = [
-  v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v21
+  v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v21, v22
 ]
 
 export type MigrationStepError = {

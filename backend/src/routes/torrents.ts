@@ -13,7 +13,7 @@ import {
 } from '../storage.js'
 import type { DownloaderRecord, SiteRecord, TorrentRecord } from '../storage.js'
 import { recordOperationLog, recordTorrentLog } from '../utils/logger.js'
-import { addTorrentUrlToQb, deleteTorrentFromQb } from '../utils/qbittorrent.js'
+import { addTorrentUrlToQb, deleteTorrentFromQb, QbittorrentError } from '../utils/qbittorrent.js'
 import { syncTorrentDownloadStats } from '../utils/torrentSync.js'
 
 export const torrentsRouter = Router()
@@ -243,28 +243,35 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
       savePath: resolvePushSavePath(torrent, downloader),
       category: torrent.sourceTaskName
     })
-    torrent.torrentHash = pushed.hash
+    torrent.torrentHash = pushed.hash || torrent.torrentHash
     torrent.downloaderState = pushed.state ?? 'added'
+    torrent.pushUnconfirmed = pushed.unconfirmed
   } catch (error) {
-    torrent.pushStatus = 'PUSH_FAILED'
-    torrent.currentState = 'PUSH_FAILED'
-    torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
-    torrent.torrentHash = undefined
-    torrent.downloaderState = undefined
-    await updateTorrent(torrent)
-    await recordTorrentLog({
-      torrentId: torrent.id,
-      siteId: torrent.siteId,
-      siteName: torrent.siteName,
-      torrentTitle: torrent.title,
-      event: 'PUSH_FAILED',
-      status: 'FAILED',
-      source: 'MANUAL',
-      actorId: res.locals.user?.id,
-      actorName: res.locals.user?.username,
-      message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
-    })
-    return res.status(400).json({ message: torrent.errorMessage })
+    if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
+      torrent.torrentHash = torrent.torrentHash || ''
+      torrent.downloaderState = torrent.downloaderState ?? 'added'
+      torrent.pushUnconfirmed = true
+    } else {
+      torrent.pushStatus = 'PUSH_FAILED'
+      torrent.currentState = 'PUSH_FAILED'
+      torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
+      torrent.torrentHash = undefined
+      torrent.downloaderState = undefined
+      await updateTorrent(torrent)
+      await recordTorrentLog({
+        torrentId: torrent.id,
+        siteId: torrent.siteId,
+        siteName: torrent.siteName,
+        torrentTitle: torrent.title,
+        event: 'PUSH_FAILED',
+        status: 'FAILED',
+        source: 'MANUAL',
+        actorId: res.locals.user?.id,
+        actorName: res.locals.user?.username,
+        message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+      })
+      return res.status(400).json({ message: torrent.errorMessage })
+    }
   }
   const now = new Date().toISOString()
   torrent.downloaderId = downloader.id
@@ -278,9 +285,12 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   await updateTorrent(torrent)
   await syncTorrentDownloadStats(downloader.id).catch(() => undefined)
   const syncedTorrent = (await getTorrentById(id)) ?? torrent
+  const pushLogMessage = torrent.pushUnconfirmed
+    ? `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}（下载器未返回任务详情）`
+    : `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`
   await recordOperationLog({
     action: '推送种子',
-    message: `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`,
+    message: pushLogMessage,
     status: 'SUCCESS',
     ...operationActor(res, req)
   })
@@ -294,7 +304,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     source: 'MANUAL',
     actorId: res.locals.user?.id,
     actorName: res.locals.user?.username,
-    message: `推送种子「${torrent.title}」到「${downloader.name}」${torrent.taskSavePath ? `，保存位置：${torrent.taskSavePath}` : ''}`
+    message: pushLogMessage
   })
   res.json(safeTorrent(syncedTorrent))
 })
@@ -343,27 +353,34 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
         savePath: resolvePushSavePath(torrent, downloader),
         category: torrent.sourceTaskName
       })
-      torrent.torrentHash = pushed.hash
+      torrent.torrentHash = pushed.hash || torrent.torrentHash
       torrent.downloaderState = pushed.state ?? 'added'
+      torrent.pushUnconfirmed = pushed.unconfirmed
     } catch (error) {
-      torrent.pushStatus = 'PUSH_FAILED'
-      torrent.currentState = 'PUSH_FAILED'
-      torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
-      updateBuffer.push(torrent)
-      failed.push({ id: torrent.id, message: torrent.errorMessage })
-      await recordTorrentLog({
-        torrentId: torrent.id,
-        siteId: torrent.siteId,
-        siteName: torrent.siteName,
-        torrentTitle: torrent.title,
-        event: 'PUSH_FAILED',
-        status: 'FAILED',
-        source: 'MANUAL',
-        actorId: res.locals.user?.id,
-        actorName: res.locals.user?.username,
-        message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
-      })
-      continue
+      if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
+        torrent.torrentHash = torrent.torrentHash || ''
+        torrent.downloaderState = torrent.downloaderState ?? 'added'
+        torrent.pushUnconfirmed = true
+      } else {
+        torrent.pushStatus = 'PUSH_FAILED'
+        torrent.currentState = 'PUSH_FAILED'
+        torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
+        updateBuffer.push(torrent)
+        failed.push({ id: torrent.id, message: torrent.errorMessage })
+        await recordTorrentLog({
+          torrentId: torrent.id,
+          siteId: torrent.siteId,
+          siteName: torrent.siteName,
+          torrentTitle: torrent.title,
+          event: 'PUSH_FAILED',
+          status: 'FAILED',
+          source: 'MANUAL',
+          actorId: res.locals.user?.id,
+          actorName: res.locals.user?.username,
+          message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
+        })
+        continue
+      }
     }
     torrent.pushStatus = 'PUSHED'
     torrent.currentState = 'PUSHED'
@@ -375,6 +392,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     torrent.errorMessage = undefined
     updateBuffer.push(torrent)
     successCount += 1
+    const batchPushLogMessage = torrent.pushUnconfirmed
+      ? `批量推送种子「${torrent.title}」到「${downloader.name}」（下载器未返回任务详情）`
+      : `批量推送种子「${torrent.title}」到「${downloader.name}」`
     await recordTorrentLog({
       torrentId: torrent.id,
       siteId: torrent.siteId,
@@ -385,7 +405,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       source: 'MANUAL',
       actorId: res.locals.user?.id,
       actorName: res.locals.user?.username,
-      message: `批量推送种子「${torrent.title}」到「${downloader.name}」`
+      message: batchPushLogMessage
     })
   }
   if (updateBuffer.length) await updateTorrents(updateBuffer)

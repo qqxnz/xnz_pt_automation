@@ -227,14 +227,16 @@ const TABLE_SPECS: TableSpec[] = [
       ipv6_peer_count INTEGER,
       total_peer_count INTEGER,
       peer_sync_rid INTEGER,
-      peer_synced_at TEXT
+      peer_synced_at TEXT,
+      push_unconfirmed INTEGER NOT NULL DEFAULT 0
     )`,
     requiredColumns: [
       'id', 'site_id', 'site_name', 'title', 'title_lc', 'size', 'discount_type',
       'is_free_now', 'current_state', 'push_status', 'link_status', 'only_free_download',
       'source_run_mode', 'first_seen_at', 'last_seen_at',
       'has_ipv6_peers', 'ipv6_peer_count', 'total_peer_count', 'peer_sync_rid', 'peer_synced_at',
-      'delete_on_free_expire', 'low_upload_kbps', 'low_upload_minutes', 'low_upload_since'
+      'delete_on_free_expire', 'low_upload_kbps', 'low_upload_minutes', 'low_upload_since',
+      'push_unconfirmed'
     ]
   },
   {
