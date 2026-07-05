@@ -363,21 +363,23 @@ export async function addTorrentFileToQb(
     } catch (diffError) {
       unconfirmed = true
     }
-    const preexisting =
-      !added && before.find((item) => {
-        const itemKey = normalizeTorrentName(item.name)
-        const filenameKey = normalizeTorrentName(filename)
-        return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
-      })
+    const preexisting = added
+      ? undefined
+      : before.find((item) => {
+          const itemKey = normalizeTorrentName(item.name)
+          const filenameKey = normalizeTorrentName(filename)
+          return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
+        })
+    const alreadyAdded = Boolean(preexisting)
     if (added && added.state && /^paused/i.test(added.state)) {
       throw new QbittorrentError('种子已添加但处于暂停状态')
     }
     return {
-      hash: added?.hash ?? '',
-      name: added?.name ?? filename,
-      state: added?.state ?? 'added',
-      alreadyAdded: Boolean(preexisting) && !added,
-      unconfirmed
+      hash: added?.hash ?? preexisting?.hash ?? '',
+      name: added?.name ?? preexisting?.name ?? filename,
+      state: added?.state ?? preexisting?.state ?? 'added',
+      alreadyAdded,
+      unconfirmed: unconfirmed || alreadyAdded
     }
   }
 
@@ -398,11 +400,13 @@ export async function addTorrentFileToQb(
     })
   if (!added) throw new QbittorrentError('下载器未返回新增任务，请检查是否已存在相同种子', 'NOT_CONFIRMED')
   if (added.state && /^paused/i.test(added.state)) throw new QbittorrentError('种子已添加但处于暂停状态')
+  const alreadyAdded = Boolean(preexisting) && !after.some((item) => item.hash && !beforeHashes.has(item.hash))
   return {
-    hash: added.hash ?? '',
-    name: added.name ?? filename,
+    hash: added.hash ?? preexisting?.hash ?? '',
+    name: added.name ?? preexisting?.name ?? filename,
     state: added.state,
-    alreadyAdded: Boolean(preexisting) && !after.some((item) => item.hash && !beforeHashes.has(item.hash))
+    alreadyAdded,
+    unconfirmed: alreadyAdded
   }
 }
 
