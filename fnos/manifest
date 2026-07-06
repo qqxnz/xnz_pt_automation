@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.21
+version=0.6.22
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.21<br/>数据库每天凌晨3点自动备份；推送种子时通过 info hash 精确匹配下载器已有任务；设置页基础参数移至左列密码下方。
+changelog=0.6.22<br/>修复卸载时删除数据失败静默吞错；升级向导文案改为项目介绍。
