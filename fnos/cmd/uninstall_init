@@ -1,3 +1,7 @@
 #!/bin/bash
-# 卸载前钩子：当前无自定义操作
+# 卸载前钩子：确保容器已停止，释放文件锁
+DOCKER_COMPOSE_FILE="${TRIM_APPDEST}/docker/docker-compose.yaml"
+if [ -f "$DOCKER_COMPOSE_FILE" ]; then
+  docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
+fi
 exit 0
