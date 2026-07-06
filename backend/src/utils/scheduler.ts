@@ -7,6 +7,10 @@ import { logger, recordScheduleLog } from './logger.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 import { syncTorrentDownloadStats } from './torrentSync.js'
 import { localDateKey } from './time.js'
+import { createManualBackup } from '../storage/backup.js'
+import { getCurrentDatabase, storagePaths } from '../storage.js'
+import { getMeta } from '../storage/_meta.js'
+import path from 'node:path'
 
 const SCHEDULER_TICK_INTERVAL_MS = 1000
 const TASK_SCAN_INTERVAL_MS = 60 * 1000
@@ -16,6 +20,7 @@ const TORRENT_IPV6_PEER_SYNC_INTERVAL_MS = 60 * 1000
 const EXPIRED_FREE_DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 1000
 const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 const SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS = 10 * 60 * 1000
+const AUTO_BACKUP_SCAN_INTERVAL_MS = 60 * 1000
 
 type SchedulerJob = {
   name: string
@@ -43,7 +48,8 @@ function readableJobName(name: string) {
     'torrent-ipv6-peer-sync': '种子 IPV6 peer 同步',
     'expired-free-download-cleanup': '下载器自动清理',
     'site-traffic-sync': '站点流量统计同步',
-    'site-auto-signin': '站点自动签到'
+    'site-auto-signin': '站点自动签到',
+    'auto-backup': '数据库自动备份'
   }
   return map[name] ?? name
 }
@@ -154,6 +160,30 @@ const jobs: SchedulerJob[] = [
       return false
     },
     run: async () => runDueSignins()
+  },
+  {
+    name: 'auto-backup',
+    intervalMs: AUTO_BACKUP_SCAN_INTERVAL_MS,
+    nextRunAt: Date.now() + AUTO_BACKUP_SCAN_INTERVAL_MS,
+    running: false,
+    logStart: false,
+    shouldLogSuccess: (result) => result.backupCreated === true,
+    run: async () => {
+      const now = new Date()
+      if (now.getHours() !== 3) {
+        return { skipped: true }
+      }
+      const db = getCurrentDatabase()
+      const lastBackupAt = getMeta(db, 'last_backup_at')
+      if (lastBackupAt) {
+        const lastDate = new Date(lastBackupAt)
+        if (lastDate.toDateString() === now.toDateString()) {
+          return { skipped: true, reason: 'already backed up today' }
+        }
+      }
+      const result = createManualBackup(db, storagePaths.dataDir)
+      return { backupCreated: true, name: path.basename(result.path), sizeBytes: result.sizeBytes }
+    }
   }
 ]
 

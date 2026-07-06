@@ -36,10 +36,27 @@ backupRouter.get('/', requireAuth, async (_req, res) => {
   const backups = listBackups(storagePaths.dataDir)
   const db = getCurrentDatabase()
   const lastBackupAt = getMeta(db, 'last_backup_at')
+
+  const now = new Date()
+  const today3am = new Date(now)
+  today3am.setHours(3, 0, 0, 0)
+  const tomorrow3am = new Date(today3am)
+  tomorrow3am.setDate(tomorrow3am.getDate() + 1)
+
+  let nextAutoBackupAt: string
+  if (lastBackupAt && new Date(lastBackupAt).toDateString() === now.toDateString()) {
+    nextAutoBackupAt = tomorrow3am.toISOString()
+  } else if (now <= today3am) {
+    nextAutoBackupAt = today3am.toISOString()
+  } else {
+    nextAutoBackupAt = tomorrow3am.toISOString()
+  }
+
   res.json({
     backups,
     dataDir: storagePaths.dataDir,
-    lastBackupAt
+    lastBackupAt,
+    nextAutoBackupAt
   })
 })
 

@@ -92,13 +92,17 @@
             <strong>{{ lastBackupAtText }}</strong>
           </article>
           <article>
+            <span>下次自动备份</span>
+            <strong>{{ nextAutoBackupText }}</strong>
+          </article>
+          <article>
             <span>备份文件数量</span>
             <strong>{{ backups.length }}</strong>
           </article>
         </div>
 
         <div class="backup-tip">
-          备份文件可直接移出本目录以节省空间，再点击"刷新"即可从列表中隐藏；移回 dataDir 会自动重新出现。本系统不会自动生成定时备份，请通过 NAS 计划任务或外部脚本定期触发「立即备份」。
+          系统每天凌晨 03:00 自动备份数据库；备份文件可直接移出本目录以节省空间，再点击"刷新"即可从列表中隐藏；移回 dataDir 会自动重新出现。
         </div>
 
         <div class="backup-actions">
@@ -181,6 +185,7 @@ const backupSection = ref<HTMLElement>()
 const backups = ref<BackupItem[]>([])
 const backupDataDir = ref('')
 const backupLastAt = ref<string>()
+const backupNextAutoAt = ref<string>()
 const loadingBackups = ref(false)
 const backupError = ref('')
 const creatingBackup = ref(false)
@@ -286,6 +291,7 @@ async function loadBackups() {
     backups.value = result.backups
     backupDataDir.value = result.dataDir
     backupLastAt.value = result.lastBackupAt
+    backupNextAutoAt.value = result.nextAutoBackupAt
   } catch (err) {
     backupError.value = err instanceof Error ? err.message : '备份列表加载失败'
   } finally {
@@ -294,6 +300,7 @@ async function loadBackups() {
 }
 
 const lastBackupAtText = computed(() => (backupLastAt.value ? formatDate(backupLastAt.value) : '尚未生成'))
+const nextAutoBackupText = computed(() => (backupNextAutoAt.value ? formatDate(backupNextAutoAt.value) : '--'))
 
 async function runBackupNow() {
   creatingBackup.value = true
@@ -462,7 +469,7 @@ onBeforeUnmount(() => {
 }
 
 .backup-summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;
 }
 

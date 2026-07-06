@@ -10,6 +10,7 @@ export type BackupListResult = {
   backups: BackupItem[]
   dataDir: string
   lastBackupAt?: string
+  nextAutoBackupAt?: string
 }
 
 export type RestoreResult = {
