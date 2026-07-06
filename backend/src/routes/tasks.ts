@@ -756,7 +756,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
             pushedCount += 1
           } catch (error) {
             if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
-              pushed = { hash: '', name: item.title, state: 'added', unconfirmed: true }
+              pushed = { hash: error.hash || '', name: item.title, state: 'added', unconfirmed: true }
               pushedCount += 1
             } else {
               pushError = errorMessage(error, '推送到下载器失败')

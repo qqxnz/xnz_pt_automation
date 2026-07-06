@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto'
 import type { DownloaderRecord, SiteRecord } from '../storage.js'
 
 export class QbittorrentError extends Error {
   constructor(
     message: string,
-    public code: 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT' | 'REJECTED' | 'NOT_CONFIRMED' = 'NETWORK_ERROR'
+    public code: 'NETWORK_ERROR' | 'AUTH_FAILED' | 'TIMEOUT' | 'REJECTED' | 'NOT_CONFIRMED' = 'NETWORK_ERROR',
+    public hash?: string
   ) {
     super(message)
   }
@@ -309,6 +311,70 @@ function parseAddResponse(text: string): 'ok' | 'fail' | 'unknown' {
   return 'unknown'
 }
 
+function computeInfoHash(torrentBytes: Uint8Array): string | null {
+  try {
+    const decoder = new TextDecoder()
+    let pos = 0
+
+    function skipValue(start: number): number {
+      let i = start
+      if (i >= torrentBytes.length) return i
+      const byte = torrentBytes[i]
+      if (byte === 0x69) {
+        i++
+        while (i < torrentBytes.length && torrentBytes[i] !== 0x65) i++
+        return i + 1
+      } else if (byte === 0x6c) {
+        i++
+        while (i < torrentBytes.length && torrentBytes[i] !== 0x65) {
+          i = skipValue(i)
+        }
+        return i + 1
+      } else if (byte === 0x64) {
+        i++
+        while (i < torrentBytes.length && torrentBytes[i] !== 0x65) {
+          let cp = i
+          while (cp < torrentBytes.length && torrentBytes[cp] !== 0x3a) cp++
+          const kl = parseInt(decoder.decode(torrentBytes.slice(i, cp)), 10)
+          i = cp + 1 + kl
+          i = skipValue(i)
+        }
+        return i + 1
+      } else if (byte >= 0x30 && byte <= 0x39) {
+        let cp = i
+        while (cp < torrentBytes.length && torrentBytes[cp] !== 0x3a) cp++
+        const sl = parseInt(decoder.decode(torrentBytes.slice(i, cp)), 10)
+        return cp + 1 + sl
+      }
+      return i
+    }
+
+    if (pos >= torrentBytes.length || torrentBytes[pos] !== 0x64) return null
+    pos++
+
+    while (pos < torrentBytes.length && torrentBytes[pos] !== 0x65) {
+      let colonPos = pos
+      while (colonPos < torrentBytes.length && torrentBytes[colonPos] !== 0x3a) colonPos++
+      const keyLen = parseInt(decoder.decode(torrentBytes.slice(pos, colonPos)), 10)
+      pos = colonPos + 1
+      const key = decoder.decode(torrentBytes.slice(pos, pos + keyLen))
+      pos += keyLen
+
+      if (key === 'info') {
+        const valueStart = pos
+        const valueEnd = skipValue(pos)
+        const infoBytes = torrentBytes.slice(valueStart, valueEnd)
+        return createHash('sha1').update(infoBytes).digest('hex')
+      } else {
+        pos = skipValue(pos)
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function addTorrentFileToQb(
   downloader: Pick<DownloaderRecord, 'host' | 'username' | 'password'>,
   torrentFile: Uint8Array,
@@ -318,6 +384,7 @@ export async function addTorrentFileToQb(
   const cookie = await loginQb(downloader)
   const before = await listQbTorrents(downloader, cookie)
   const beforeHashes = new Set(before.map((item) => item.hash).filter(Boolean))
+  const infoHash = computeInfoHash(torrentFile)
   const form = new FormData()
   const fileBytes = torrentFile.buffer.slice(torrentFile.byteOffset, torrentFile.byteOffset + torrentFile.byteLength) as ArrayBuffer
   form.append('torrents', new Blob([fileBytes], { type: 'application/x-bittorrent' }), filename)
@@ -355,6 +422,7 @@ export async function addTorrentFileToQb(
       const filenameKey = normalizeTorrentName(filename)
       added =
         after.find((item) => item.hash && !beforeHashes.has(item.hash)) ??
+        (infoHash ? after.find((item) => item.hash?.toLowerCase() === infoHash) : undefined) ??
         after.find((item) => {
           const itemKey = normalizeTorrentName(item.name)
           return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
@@ -365,7 +433,8 @@ export async function addTorrentFileToQb(
     }
     const preexisting = added
       ? undefined
-      : before.find((item) => {
+      : (infoHash ? before.find((item) => item.hash?.toLowerCase() === infoHash) : undefined) ??
+        before.find((item) => {
           const itemKey = normalizeTorrentName(item.name)
           const filenameKey = normalizeTorrentName(filename)
           return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
@@ -373,6 +442,15 @@ export async function addTorrentFileToQb(
     const alreadyAdded = Boolean(preexisting)
     if (added && added.state && /^paused/i.test(added.state)) {
       throw new QbittorrentError('种子已添加但处于暂停状态')
+    }
+    if (!added && !preexisting && infoHash) {
+      return {
+        hash: infoHash,
+        name: filename,
+        state: 'added',
+        alreadyAdded: true,
+        unconfirmed: true
+      }
     }
     return {
       hash: added?.hash ?? preexisting?.hash ?? '',
@@ -387,18 +465,31 @@ export async function addTorrentFileToQb(
   const after = await listQbTorrents(downloader, cookie)
   const filenameKey = normalizeTorrentName(filename)
   const preexisting =
+    (infoHash ? before.find((item) => item.hash?.toLowerCase() === infoHash) : undefined) ??
     before.find((item) => {
       const itemKey = normalizeTorrentName(item.name)
       return itemKey && filenameKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
     }) ?? null
   const added =
     after.find((item) => item.hash && !beforeHashes.has(item.hash)) ??
+    (infoHash ? after.find((item) => item.hash?.toLowerCase() === infoHash) : undefined) ??
     preexisting ??
     after.find((item) => {
       const itemKey = normalizeTorrentName(item.name)
       return itemKey && (filenameKey.includes(itemKey) || itemKey.includes(filenameKey))
     })
-  if (!added) throw new QbittorrentError('下载器未返回新增任务，请检查是否已存在相同种子', 'NOT_CONFIRMED')
+  if (!added) {
+    if (infoHash) {
+      return {
+        hash: infoHash,
+        name: filename,
+        state: 'added',
+        alreadyAdded: true,
+        unconfirmed: true
+      }
+    }
+    throw new QbittorrentError('下载器未返回新增任务，请检查是否已存在相同种子', 'NOT_CONFIRMED')
+  }
   if (added.state && /^paused/i.test(added.state)) throw new QbittorrentError('种子已添加但处于暂停状态')
   const alreadyAdded = Boolean(preexisting) && !after.some((item) => item.hash && !beforeHashes.has(item.hash))
   return {

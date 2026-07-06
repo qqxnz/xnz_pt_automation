@@ -248,7 +248,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     torrent.pushUnconfirmed = pushed.unconfirmed
   } catch (error) {
     if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
-      torrent.torrentHash = torrent.torrentHash || ''
+      torrent.torrentHash = torrent.torrentHash || error.hash || ''
       torrent.downloaderState = torrent.downloaderState ?? 'added'
       torrent.pushUnconfirmed = true
     } else {
@@ -358,7 +358,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       torrent.pushUnconfirmed = pushed.unconfirmed
     } catch (error) {
       if (error instanceof QbittorrentError && error.code === 'NOT_CONFIRMED') {
-        torrent.torrentHash = torrent.torrentHash || ''
+        torrent.torrentHash = torrent.torrentHash || error.hash || ''
         torrent.downloaderState = torrent.downloaderState ?? 'added'
         torrent.pushUnconfirmed = true
       } else {
