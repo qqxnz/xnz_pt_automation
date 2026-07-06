@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.20
+version=0.6.21
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.20<br/>站点导入后自动触发流量同步；设置密码页显示用户名；推送种子时若下载器已存在同名任务自动回填 hash。
+changelog=0.6.21<br/>数据库每天凌晨3点自动备份；推送种子时通过 info hash 精确匹配下载器已有任务；设置页基础参数移至左列密码下方。
