@@ -20,20 +20,47 @@
       </div>
 
       <div class="settings-grid">
-        <section class="panel settings-card" ref="passwordSection">
-          <div class="panel-title-row">
-            <h2>修改密码</h2>
-            <span>当前会话保持有效</span>
-          </div>
-          <form class="settings-form" @submit.prevent="submitPassword">
-            <label>旧密码<input v-model="passwordForm.oldPassword" :disabled="changingPassword" type="password" autocomplete="current-password" /></label>
-            <label>新密码<input v-model="passwordForm.newPassword" :disabled="changingPassword" type="password" autocomplete="new-password" /></label>
-            <label>确认新密码<input v-model="passwordForm.confirmPassword" :disabled="changingPassword" type="password" autocomplete="new-password" /></label>
-            <button class="secondary-button blue" type="submit" :disabled="changingPassword">
-              {{ changingPassword ? '提交中...' : '更新密码' }}
-            </button>
-          </form>
-        </section>
+        <div class="settings-grid-left">
+          <section class="panel settings-card" ref="passwordSection">
+            <div class="panel-title-row">
+              <h2>修改密码</h2>
+              <span>当前会话保持有效</span>
+            </div>
+            <form class="settings-form" @submit.prevent="submitPassword">
+              <label>旧密码<input v-model="passwordForm.oldPassword" :disabled="changingPassword" type="password" autocomplete="current-password" /></label>
+              <label>新密码<input v-model="passwordForm.newPassword" :disabled="changingPassword" type="password" autocomplete="new-password" /></label>
+              <label>确认新密码<input v-model="passwordForm.confirmPassword" :disabled="changingPassword" type="password" autocomplete="new-password" /></label>
+              <button class="secondary-button blue" type="submit" :disabled="changingPassword">
+                {{ changingPassword ? '提交中...' : '更新密码' }}
+              </button>
+            </form>
+          </section>
+
+          <section class="panel settings-card" ref="settingsSection">
+            <div class="panel-title-row">
+              <h2>基础参数</h2>
+              <span>{{ loadingSettings ? '加载中...' : '一次保存全部参数' }}</span>
+            </div>
+
+            <div class="settings-groups">
+              <section ref="sessionSection">
+                <h3>会话</h3>
+                <div class="settings-form two-columns">
+                  <label>登录态有效期（小时）<input v-model.number="settingsForm.sessionTtlHours" type="number" min="1" max="720" /></label>
+                  <label>最大并发任务数<input v-model.number="settingsForm.maxConcurrentTasks" type="number" min="1" max="10" /></label>
+                </div>
+              </section>
+
+              <section ref="networkSection">
+                <h3>网络</h3>
+                <div class="settings-form two-columns">
+                  <label>请求超时时间（ms）<input v-model.number="settingsForm.requestTimeoutMs" type="number" min="3000" max="120000" step="1000" /></label>
+                  <label class="wide-field">默认 User-Agent<input v-model.trim="settingsForm.defaultUserAgent" /></label>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
 
         <section class="panel settings-card">
           <div class="panel-title-row">
@@ -48,31 +75,6 @@
           </div>
         </section>
       </div>
-
-      <section class="panel settings-card" ref="settingsSection">
-        <div class="panel-title-row">
-          <h2>基础参数</h2>
-          <span>{{ loadingSettings ? '加载中...' : '一次保存全部参数' }}</span>
-        </div>
-
-        <div class="settings-groups">
-          <section ref="sessionSection">
-            <h3>会话</h3>
-            <div class="settings-form two-columns">
-              <label>登录态有效期（小时）<input v-model.number="settingsForm.sessionTtlHours" type="number" min="1" max="720" /></label>
-              <label>最大并发任务数<input v-model.number="settingsForm.maxConcurrentTasks" type="number" min="1" max="10" /></label>
-            </div>
-          </section>
-
-          <section ref="networkSection">
-            <h3>网络</h3>
-            <div class="settings-form two-columns">
-              <label>请求超时时间（ms）<input v-model.number="settingsForm.requestTimeoutMs" type="number" min="3000" max="120000" step="1000" /></label>
-              <label class="wide-field">默认 User-Agent<input v-model.trim="settingsForm.defaultUserAgent" /></label>
-            </div>
-          </section>
-        </div>
-      </section>
 
       <section class="panel settings-card" ref="backupSection">
         <div class="panel-title-row">
@@ -453,6 +455,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.settings-grid-left {
+  display: grid;
+  gap: 28px;
+  align-content: start;
+}
+
 .backup-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
