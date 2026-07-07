@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.22
+version=0.6.23
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.22<br/>修复卸载时删除数据失败静默吞错；升级向导文案改为项目介绍。
+changelog=0.6.23<br/>系统信息卡片和数据库备份卡片新增备份目录显示；安装向导新增数据目录选择，卸载不再询问删除数据。
