@@ -1,7 +1,7 @@
 services:
-  xnz-pt-automation:
-    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.24}
-    container_name: xnz-pt-automation
+  pta:
+    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.26}
+    container_name: pta
     restart: unless-stopped
     network_mode: host
     environment:

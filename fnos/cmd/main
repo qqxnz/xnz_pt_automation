@@ -1,5 +1,5 @@
 #!/bin/bash
-# xnz-pt-automation fnos cmd/main
+# qqxnz.pta fnos cmd/main
 # Docker 应用的 start/stop 由 appcenter 自动执行 docker compose 处理
 # status 通过检测 container_name 判断容器运行状态
 # 退出码：
