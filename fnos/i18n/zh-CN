@@ -6,9 +6,10 @@ step_port_title="端口设置"
 label_service_port="Web 端口"
 service_port_required="请输入端口"
 service_port_pattern="端口必须为 2-5 位数字"
-step_data_dir_title="数据目录"
-label_data_dir="数据存储路径"
-data_dir_required="请选择数据存储目录"
+
+[uninstall]
+step_data_title="数据清理"
+label_delete_data="同时删除所有数据（数据库、日志、用户配置）"
 
 [upgrade]
 step_version_title="升级版本"

@@ -33,8 +33,8 @@ fnos/
 │   └── resource               # docker-project 声明
 │
 ├── wizard/
-│   ├── install                # 端口 + 数据目录
-│   ├── uninstall              # 无向导步骤（始终保留数据）
+│   ├── install                # 端口 / 密码
+│   ├── uninstall              # 是否删除数据
 │   └── upgrade                # 仅提示说明，使用 fpk 内置镜像版本
 │
 └── i18n/
@@ -99,8 +99,9 @@ appcenter-cli install-local
 
 ## 卸载
 
-- 卸载时始终保留数据（数据库、备份、日志、用户配置），不再弹出删除确认
-- 安装时可自定义数据目录，默认路径为 `$TRIM_PKGVAR/data`
+- 默认保留 fnOS 托管的 `$TRIM_PKGVAR/data`（数据库、备份、日志、用户配置）
+- 卸载向导中勾选「同时删除所有数据」才会彻底清理
+- 当前飞牛 Docker 挂载为 `$TRIM_PKGVAR/data:/data`，实际宿主机路径可用 `docker inspect` 查看
 
 ## 数据迁移（从 Docker compose 部署迁移到飞牛）
 

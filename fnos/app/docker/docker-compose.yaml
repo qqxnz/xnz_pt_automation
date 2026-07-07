@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.23}
+    image: crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation:${wizard_image_tag:-0.6.22}
     container_name: xnz-pt-automation
     restart: unless-stopped
     network_mode: host
@@ -9,7 +9,7 @@ services:
       DATA_DIR: /data
       TZ: Asia/Shanghai
     volumes:
-      - ${wizard_data_dir:-${TRIM_PKGVAR}/data}:/data
+      - ${TRIM_PKGVAR}/data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${wizard_service_port:-3180}/api/health"]
       interval: 30s
