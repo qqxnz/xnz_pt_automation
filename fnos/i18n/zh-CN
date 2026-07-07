@@ -7,12 +7,6 @@ label_service_port="Web 端口"
 service_port_required="请输入端口"
 service_port_pattern="端口必须为 2-5 位数字"
 
-[uninstall]
-step_data_title="数据清理"
-label_delete_data="同时删除所有数据（数据库、日志、用户配置、备份）"
-step_data_location_title="数据目录说明"
-data_location_tip="0.6.24 起, 应用数据已映射到 fnOS 共享目录 <code>xnz-pt-automation/data</code>, 可在「文件管理 → 共享文件夹」中查看和管理.<br/>勾选删除时, 系统会尝试清空该共享目录内的应用数据; 如因权限问题失败, 可在卸载后手动删除该目录."
-
 [upgrade]
 step_version_title="升级版本"
 version_tip="面向 NAS 的 PT 自动化系统：按规则抓取 PT 站点种子、推送到 qBittorrent 下载器、检查免费时间并按规则删除，统计各站点上传/下载/分享率。<br/>内置 Vue 前端与 Express API，开箱即用。<br/><a target=\"_blank\" href=\"https://github.com/qqxnz/xnz_pt_automation\">项目主页</a>"

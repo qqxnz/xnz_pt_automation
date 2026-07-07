@@ -7,7 +7,7 @@ set -u
 cd "$(dirname "$0")"
 
 VERSION="${1:-}"
-APP_NAME="qqxnz.xnz-pt-automation"
+APP_NAME="qqxnz.pta"
 OUT_DIR="../fpk"
 
 if [ -z "$VERSION" ]; then

@@ -2,7 +2,7 @@
   "docker-project": {
     "projects": [
       {
-        "name": "xnz-pt-automation",
+        "name": "pta",
         "path": "docker"
       }
     ]
@@ -10,7 +10,7 @@
   "data-share": {
     "shares": [
       {
-        "name": "xnz-pt-automation/data"
+        "name": "pta/data"
       }
     ]
   }

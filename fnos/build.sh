@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 VERSION="${1:-0.6.2}"
-APP_NAME="qqxnz.xnz-pt-automation"
+APP_NAME="qqxnz.pta"
 
 if ! command -v fnpack >/dev/null 2>&1; then
   echo "ℹ️  fnpack 未安装，尝试自动安装…"
