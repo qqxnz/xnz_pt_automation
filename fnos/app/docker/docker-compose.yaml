@@ -9,7 +9,7 @@ services:
       DATA_DIR: /data
       TZ: Asia/Shanghai
     volumes:
-      - ${TRIM_PKGVAR}/data:/data
+      - ${wizard_data_dir:-${TRIM_PKGVAR}/data}:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${wizard_service_port:-3180}/api/health"]
       interval: 30s

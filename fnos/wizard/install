@@ -13,5 +13,19 @@
         ]
       }
     ]
+  },
+  {
+    "stepTitle": "${install.step_data_dir_title}",
+    "items": [
+      {
+        "type": "path",
+        "field": "wizard_data_dir",
+        "label": "${install.label_data_dir}",
+        "initValue": "${TRIM_PKGVAR}/data",
+        "rules": [
+          { "required": true, "message": "${install.data_dir_required}" }
+        ]
+      }
+    ]
   }
 ]

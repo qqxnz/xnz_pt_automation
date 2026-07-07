@@ -1,13 +1,1 @@
-[
-  {
-    "stepTitle": "${uninstall.step_data_title}",
-    "items": [
-      {
-        "type": "switch",
-        "field": "wizard_delete_data",
-        "label": "${uninstall.label_delete_data}",
-        "initValue": "false"
-      }
-    ]
-  }
-]
+[]
