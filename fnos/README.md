@@ -22,19 +22,19 @@ fnos/
 │   ├── install_init
 │   ├── install_callback       # 打印访问信息
 │   ├── uninstall_init
-│   ├── uninstall_callback     # 清理数据（按用户选择）
-│   ├── upgrade_init
+│   ├── uninstall_callback     # 清空共享数据目录（按用户选择）
+│   ├── upgrade_init           # 0.6.24+ 兼容旧版本数据迁移
 │   ├── upgrade_callback
 │   ├── config_init
 │   └── config_callback
 │
 ├── config/
 │   ├── privilege              # 应用用户/组（package 模式）
-│   └── resource               # docker-project 声明
+│   └── resource               # docker-project + data-share 声明
 │
 ├── wizard/
 │   ├── install                # 端口 / 密码
-│   ├── uninstall              # 是否删除数据
+│   ├── uninstall              # 是否删除数据 + 数据目录说明
 │   └── upgrade                # 仅提示说明，使用 fpk 内置镜像版本
 │
 └── i18n/
@@ -99,19 +99,26 @@ appcenter-cli install-local
 
 ## 卸载
 
-- 默认保留 fnOS 托管的 `$TRIM_PKGVAR/data`（数据库、备份、日志、用户配置）
-- 卸载向导中勾选「同时删除所有数据」才会彻底清理
-- 当前飞牛 Docker 挂载为 `$TRIM_PKGVAR/data:/data`，实际宿主机路径可用 `docker inspect` 查看
+- 数据目录从 0.6.24 起映射到 fnOS 共享目录 `xnz-pt-automation/data`（在 fnOS「文件管理 → 共享文件夹」中可见）
+- 默认**保留**共享目录内的应用数据
+- 卸载向导中勾选「同时删除所有数据」会清空共享目录内的数据库/备份/缓存，但保留共享目录本身（由 fnOS 决定是否回收）
+- 由于容器内 `node` 用户与 fnOS 包用户的 UID 不同，`uninstall_callback` 会优先用一次性 Docker 容器以 root 身份删除 share 内文件，失败时退化到 host 端 `find` 并在日志中完整列出残留条目，便于手动清理
 
-## 数据迁移（从 Docker compose 部署迁移到飞牛）
+## 数据迁移
 
-旧版部署在 `./data/`，飞牛封装使用 fnOS 托管的 `$TRIM_PKGVAR/data`，迁移方法：
+### 0.6.24 之前的用户（升级时自动迁移）
+
+`upgrade_init` 会检测旧版本残留数据 `$TRIM_PKGVAR/data`，并自动复制到新共享目录 `xnz-pt-automation/data`，复制成功后在共享目录写入 `.migrated-from-legacy` 标记以避免重复处理。老数据保留在原位置，可在新版本运行正常后手动清理。
+
+### 从 Docker compose 部署迁移到飞牛
+
+旧版部署在 `./data/`，飞牛封装使用共享目录 `xnz-pt-automation/data`，迁移方法：
 
 ```bash
 # 在飞牛 SSH 中
-APP_DATA="$(docker inspect xnz-pt-automation --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}')"
+SHARE_DIR="$(echo "$TRIM_DATA_SHARE_PATHS" | cut -d: -f1)"
 # 把旧 ./data 整个目录拷贝过去
-scp -r user@old-host:/path/to/old/data/* "$APP_DATA/"
+scp -r user@old-host:/path/to/old/data/* "$SHARE_DIR/"
 # 重启应用
 ```
 

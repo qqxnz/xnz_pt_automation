@@ -1,5 +1,5 @@
 appname=qqxnz.xnz-pt-automation
-version=0.6.23
+version=0.6.24
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.xnz-pt-automation.PTA
-changelog=0.6.23<br/>系统信息卡片和数据库备份卡片新增备份目录显示；安装向导新增数据目录选择，卸载不再询问删除数据。
+changelog=0.6.24<br/>数据目录（数据库、备份、缓存）从 fnOS 系统目录 $TRIM_PKGVAR/data 改为 fnOS 共享目录 xnz-pt-automation/data，可在「文件管理 → 共享文件夹」中直接查看和管理；首次升级会自动迁移老数据到新目录。<br/>修复卸载勾选删除数据时偶发残留的问题，改为优先通过一次性 Docker 容器以 root 身份清理 share 内文件（绕开容器 node 用户与 fnOS 包用户的 UID 不一致），失败时退化到 host 端 find 并完整记录残留条目便于手动清理。

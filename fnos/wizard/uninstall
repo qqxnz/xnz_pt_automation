@@ -9,5 +9,14 @@
         "initValue": "false"
       }
     ]
+  },
+  {
+    "stepTitle": "${uninstall.step_data_location_title}",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "${uninstall.data_location_tip}"
+      }
+    ]
   }
 ]

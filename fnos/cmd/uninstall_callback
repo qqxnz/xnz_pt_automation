@@ -1,10 +1,113 @@
 #!/bin/bash
 # 卸载后钩子：根据用户选择清理数据
-if [ "${wizard_delete_data:-false}" = "true" ]; then
-  if rm -rf "$TRIM_PKGVAR" 2>&1; then
-    echo "✅ 已清理应用数据目录 $TRIM_PKGVAR" >> "$TRIM_TEMP_LOGFILE"
+# 0.6.24+ 数据已映射到 fnOS data-share (xnz-pt-automation/data)
+#
+# 清理策略：
+#   1) 优先使用一次性 Docker 容器以 root 身份删除 share 内文件，
+#      绕开容器内 node 用户与宿主机 app 用户的 UID 不一致导致的权限问题
+#   2) Docker 不可用时退化到 host 端 find -delete
+#   3) 任何错误都完整记录到 TRIM_TEMP_LOGFILE，便于用户排查
+#   4) 保留 share 目录本身与 .migrated-from-legacy 标记
+
+LOG="$TRIM_TEMP_LOGFILE"
+
+# wizard_delete_data 可能未设置，默认视为 false
+WANT_DELETE="${wizard_delete_data:-false}"
+
+log() {
+  echo "$1" >> "$LOG"
+}
+
+if [ "$WANT_DELETE" != "true" ]; then
+  log "ℹ️  用户未勾选删除数据, 已保留共享目录 $TRIM_DATA_SHARE_PATHS"
+  exit 0
+fi
+
+SHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+
+# --- 1. 清理 fnOS 共享目录 (data-share) ---
+if [ -n "$SHARE_DIR" ] && [ -d "$SHARE_DIR" ]; then
+  log "🗑️  开始清理共享数据目录: $SHARE_DIR"
+
+  # 1a. 尝试使用一次性 Docker 容器以 root 身份清理
+  #     bind mount 模式下容器 root == 宿主机 root，可以删除任何属主的文件
+  DOCKER_OK=0
+  if command -v docker >/dev/null 2>&1; then
+    # 优先用本应用镜像（确保一定存在），退化到 alpine
+    IMAGE="$(awk -F ':[[:space:]]*' '/^[[:space:]]*image:[[:space:]]*/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "${TRIM_APPDEST}/docker/docker-compose.yaml" 2>/dev/null | awk -F'${' '{print $1}')"
+    IMAGE="${IMAGE:-alpine}"
+    log "   尝试通过 Docker ($IMAGE) 以 root 身份删除 share 内文件..."
+
+    if docker run --rm \
+        --user root \
+        -v "$SHARE_DIR:/data:rw" \
+        "$IMAGE" \
+        sh -c "rm -rf /data/* /data/.[!.]* /data/..?* 2>/dev/null; ls -la /data" \
+        >> "$LOG" 2>&1; then
+      DOCKER_OK=1
+      log "   ✅ Docker 清理完成"
+    else
+      log "   ⚠️  Docker 清理失败 (退出码 $?), 退化到 host 端 find"
+    fi
   else
-    echo "❌ 清理数据目录失败: $TRIM_PKGVAR" >> "$TRIM_TEMP_LOGFILE"
+    log "   ℹ️  docker 命令不可用, 退化到 host 端 find"
+  fi
+
+  # 1b. 退化方案：host 端 find -delete（可能受 ACL/UID 限制失败）
+  if [ "$DOCKER_OK" -eq 0 ]; then
+    log "   使用 host 端 find 删除 share 顶层条目 (保留 .migrated-from-legacy)..."
+    DELETED=0
+    FAILED=0
+    while IFS= read -r -d '' entry; do
+      name="$(basename "$entry")"
+      if [ "$name" = ".migrated-from-legacy" ]; then
+        continue
+      fi
+      if rm -rf "$entry" 2>/dev/null; then
+        DELETED=$((DELETED + 1))
+      else
+        FAILED=$((FAILED + 1))
+        log "   ❌ 无法删除: $entry (可能为容器 node 用户创建, 无权删除)"
+      fi
+    done < <(find "$SHARE_DIR" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+    log "   host find 结果: 成功 $DELETED, 失败 $FAILED"
+
+    # 1c. 如果仍有残留（典型场景：容器 node 用户创建的文件），
+    #     尝试用 chown 改成当前用户再删一次
+    if [ "$FAILED" -gt 0 ]; then
+      log "   尝试 chown 残留文件到当前用户后再次删除..."
+      CURRENT_UID="$(id -u 2>/dev/null)"
+      CURRENT_GID="$(id -g 2>/dev/null)"
+      if [ -n "$CURRENT_UID" ] && [ -n "$CURRENT_GID" ]; then
+        chown -R "$CURRENT_UID:$CURRENT_GID" "$SHARE_DIR" 2>/dev/null || true
+        find "$SHARE_DIR" -mindepth 1 -maxdepth 1 \
+          ! -name '.migrated-from-legacy' \
+          -exec rm -rf {} + 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  # 验证最终状态
+  REMAINING="$(find "$SHARE_DIR" -mindepth 1 -maxdepth 1 \
+    ! -name '.migrated-from-legacy' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$REMAINING" = "0" ]; then
+    log "✅ 共享数据目录已清空: $SHARE_DIR"
+  else
+    log "⚠️  共享目录仍有 $REMAINING 个条目残留, 请手动到 fnOS 文件管理器清理: $SHARE_DIR"
+    find "$SHARE_DIR" -mindepth 1 -maxdepth 1 \
+      ! -name '.migrated-from-legacy' >> "$LOG" 2>&1
+  fi
+else
+  log "ℹ️  未检测到共享目录 (TRIM_DATA_SHARE_PATHS=$SHARE_DIR), 跳过 share 清理"
+fi
+
+# --- 2. 兼容清理老版本 (0.6.23 及之前) 残留的 fnOS 托管目录 ---
+if [ -n "${TRIM_PKGVAR:-}" ] && [ -d "$TRIM_PKGVAR/data" ]; then
+  if rm -rf "$TRIM_PKGVAR/data" 2>/dev/null; then
+    log "✅ 已清理老版本数据目录: $TRIM_PKGVAR/data"
+  else
+    log "⚠️  老版本数据目录清理失败: $TRIM_PKGVAR/data"
   fi
 fi
+
 exit 0

@@ -5,7 +5,11 @@
   echo "   统一网关访问: http://NAS_IP:5666/app/xnz-pt-automation"
   echo "   直接端口访问: http://NAS_IP:${wizard_service_port:-3180}"
   echo "   首次访问需设置管理员密码，按页面提示操作"
-  echo "   数据目录: \${TRIM_PKGVAR}/data（实际路径可用 docker inspect 查看）"
+  SHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+  if [ -n "$SHARE_DIR" ]; then
+    echo "   数据目录（共享）: $SHARE_DIR"
+    echo "   可在 fnOS「文件管理 → 共享文件夹」中查看和管理数据库与备份"
+  fi
   echo "   首次启动需要拉取镜像，请耐心等待 1-2 分钟"
 } >> "$TRIM_TEMP_LOGFILE"
 exit 0
