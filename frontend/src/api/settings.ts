@@ -26,6 +26,7 @@ export type SystemInfo = {
     dataDir?: string
     logDir?: string
     cacheDir?: string
+    backupDir?: string
   }
 }
 

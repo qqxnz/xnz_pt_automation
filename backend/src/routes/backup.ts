@@ -55,6 +55,7 @@ backupRouter.get('/', requireAuth, async (_req, res) => {
   res.json({
     backups,
     dataDir: storagePaths.dataDir,
+    backupDir: path.join(storagePaths.dataDir, 'backup'),
     lastBackupAt,
     nextAutoBackupAt
   })

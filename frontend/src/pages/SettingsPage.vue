@@ -88,6 +88,10 @@
             <strong>{{ backupDataDir || '-' }}</strong>
           </article>
           <article>
+            <span>备份目录</span>
+            <strong>{{ backupDir || '-' }}</strong>
+          </article>
+          <article>
             <span>最近一次备份</span>
             <strong>{{ lastBackupAtText }}</strong>
           </article>
@@ -184,6 +188,7 @@ const networkSection = ref<HTMLElement>()
 const backupSection = ref<HTMLElement>()
 const backups = ref<BackupItem[]>([])
 const backupDataDir = ref('')
+const backupDir = ref('')
 const backupLastAt = ref<string>()
 const backupNextAutoAt = ref<string>()
 const loadingBackups = ref(false)
@@ -225,7 +230,8 @@ const systemInfoItems = computed(() => {
     { label: '最近迁移结果', value: migrationText(info.database.lastMigrationStatus) },
     { label: '数据目录', value: info.paths.dataDir || '-' },
     { label: '日志目录', value: info.paths.logDir || '-' },
-    { label: '缓存目录', value: info.paths.cacheDir || '-' }
+    { label: '缓存目录', value: info.paths.cacheDir || '-' },
+    { label: '备份目录', value: info.paths.backupDir || '-' }
   ]
 })
 
@@ -290,6 +296,7 @@ async function loadBackups() {
     const result = await apiListBackups()
     backups.value = result.backups
     backupDataDir.value = result.dataDir
+    backupDir.value = result.backupDir
     backupLastAt.value = result.lastBackupAt
     backupNextAutoAt.value = result.nextAutoBackupAt
   } catch (err) {

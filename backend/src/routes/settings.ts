@@ -133,7 +133,8 @@ settingsRouter.get('/system-info', requireAuth, async (_req, res) => {
     paths: {
       dataDir: storagePaths.dataDir,
       logDir: storagePaths.logDir,
-      cacheDir: storagePaths.cacheDir
+      cacheDir: storagePaths.cacheDir,
+      backupDir: storagePaths.backupDir
     }
   })
 })

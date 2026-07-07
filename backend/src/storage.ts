@@ -385,7 +385,8 @@ export const storagePaths = {
   dbFile,
   legacyStateFile,
   logDir: path.join(dataDir, 'logs'),
-  cacheDir: path.join(dataDir, 'cache')
+  cacheDir: path.join(dataDir, 'cache'),
+  backupDir: path.join(dataDir, 'backup')
 }
 
 export const SCHEMA_VERSION_VALUE = SCHEMA_VERSION
