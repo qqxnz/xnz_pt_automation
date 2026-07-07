@@ -1,5 +1,32 @@
 #!/bin/bash
-# 卸载后钩子：始终保留 fnOS 共享目录中的应用数据
-# 用户如需彻底清理，请到 fnOS「文件管理 → 共享文件夹」手动删除 pta/data
-echo "✅ xnz-pt-automation 已卸载; 如需删除应用数据, 请手动清理 fnOS 共享目录 pta/data" >> "$TRIM_TEMP_LOGFILE"
+# 卸载后钩子：记录用户对应用数据的处理选择
+# - 用户未勾选删除数据: 保留 fnOS 共享目录 pta/data 中的应用数据
+# - 用户勾选删除数据: 仅记录用户选择并提示手动清理路径
+#   (fnOS「文件管理 → 共享文件夹 → pta/data」)
+#
+# 说明: 0.6.24 曾实现过自动删除 (Docker root + host find + chown 三层兜底),
+# 但因容器内 node 用户与 fnOS 包用户 UID 不同, 自动删除经常有残留;
+# 改为仅提示、用户手动删除最可靠。
+#
+# 注意: 用户可见的 echo 字符串避免使用全角逗号/冒号等中文标点,
+#       旧版 bash (3.2) 在 set -u 下对含全角标点的双引号字符串 + 变量替换存在 bug,
+#       会误报变量未绑定。这里统一使用 ASCII 逗号 + 空格。
+
+LOG="$TRIM_TEMP_LOGFILE"
+WANT_DELETE="${wizard_delete_data:-false}"
+SHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+
+if [ "$WANT_DELETE" = "true" ]; then
+  {
+    echo "ℹ️  用户已选择删除应用数据"
+    if [ -n "$SHARE_DIR" ]; then
+      echo "   请到 fnOS「文件管理 → 共享文件夹」手动删除: $SHARE_DIR"
+    else
+      echo "   请到 fnOS「文件管理 → 共享文件夹」手动删除 pta/data"
+    fi
+  } >> "$LOG"
+else
+  echo "ℹ️  用户未勾选删除数据, 已保留共享目录 ${SHARE_DIR:-pta/data}" >> "$LOG"
+fi
+
 exit 0
