@@ -1,6 +1,6 @@
 # PT 自动化系统技术方案
 
-> 本文档以代码 `v0.5.0`（数据库 schema `v20`）为基准，对原方案文档进行全量重写。所有描述均与 `backend/src/`、`frontend/src/` 实际实现保持一致。
+> 本文档以代码 `v0.6.24`（数据库 schema `v22`）为基准，对原方案文档进行全量重写。所有描述均与 `backend/src/`、`frontend/src/` 实际实现保持一致。
 
 ## 1. 目标
 
@@ -81,6 +81,7 @@ Express Application  (app.ts)
   |     |-- expired-free-download-cleanup
   |     |-- site-traffic-sync
   |     |-- site-auto-signin
+  |     |-- auto-backup
   |
   |-- 站点适配器          (routes/sites/adapters.ts)
   |     |-- m-team (API Key)
@@ -108,11 +109,12 @@ Express Application  (app.ts)
   → 任务模块选择站点、下载器、间隔、抓取与删除规则
   → 任务打开自动执行 → 按 intervalMinutes 自动触发 runTaskById('AUTO')
   → 抓取 → 过滤 → 入库 → 推送（若 autoPush） → 记录任务/调度/操作/种子日志
-  → torrent-download-stats-sync 每 3s 同步下载器状态
-  → torrent-ipv6-peer-sync 每 30s 同步 IPv6 peer
+  → torrent-download-stats-sync 每 60s 同步下载器状态
+  → torrent-ipv6-peer-sync 每 60s 同步 IPv6 peer
   → expired-free-download-cleanup 每 60s 检查免费/低速并删除
   → site-traffic-sync 每 6h 同步站点流量
-  → site-auto-signin 每 60s 检查站点签到时间
+  → site-auto-signin 每 10min 检查站点签到时间
+  → auto-backup 每天凌晨 3 点自动备份数据库
 ```
 
 访问路径：
@@ -743,13 +745,14 @@ POST   /api/torrents/:id/delete-from-downloader
 
 | Job 名 | intervalMs | 行为 |
 | --- | --- | --- |
-| `task-auto-run-scan` | 1000 | 扫表 `autoRunEnabled && nextRunAt && !running`，触发 `runTaskById(id, 'AUTO')` |
+| `task-auto-run-scan` | 60000 | 扫表 `autoRunEnabled && nextRunAt && !running`，触发 `runTaskById(id, 'AUTO')` |
 | `task-stuck-check` | 60000 | `resetStuckRunningTasks({ thresholdMs: 10*60*1000 })` |
-| `torrent-download-stats-sync` | 3000 | `syncTorrentDownloadStats()`，维护 `lowUploadSince` |
-| `torrent-ipv6-peer-sync` | 30000 | `syncTorrentIpv6Peers()`，统计每个种子的 IPv4/IPv6 peer |
+| `torrent-download-stats-sync` | 60000 | `syncTorrentDownloadStats()`，维护 `lowUploadSince` |
+| `torrent-ipv6-peer-sync` | 60000 | `syncTorrentIpv6Peers()`，统计每个种子的 IPv4/IPv6 peer |
 | `expired-free-download-cleanup` | 60000 | `cleanupExpiredFreeDownloads()` |
 | `site-traffic-sync` | 21600000 | `syncSiteTrafficStats({ staleOnly: true })` |
-| `site-auto-signin` | 60000 | `runDueSignins()` |
+| `site-auto-signin` | 600000 | `runDueSignins()` |
+| `auto-backup` | 60000 | 每天凌晨 3 点自动备份数据库到 `dataDir/backup/` |
 
 每个 job 在执行前后会写一条 `schedule_logs`（默认 SUCCESS / FAILED，可通过 `shouldLogSuccess` 关闭成功日志）。
 
@@ -871,7 +874,7 @@ DELETE /api/logs                # 按 type 清空
 
 ## 18. 数据库设计
 
-> 实际表结构以 `backend/src/storage/health.ts` 的 `TABLE_SPECS` 为准；schema 版本 `SCHEMA_VERSION` 常量在 `backend/src/storage/migrations/index.ts`（当前为 21）。每个版本的迁移脚本在 `backend/src/storage/migrations/v{N}.ts`，由 `runMigrations` 串行执行。
+> 实际表结构以 `backend/src/storage/health.ts` 的 `TABLE_SPECS` 为准；schema 版本 `SCHEMA_VERSION` 常量在 `backend/src/storage/migrations/index.ts`（当前为 22）。每个版本的迁移脚本在 `backend/src/storage/migrations/v{N}.ts`，由 `runMigrations` 串行执行。
 
 迁移文件按版本号递增，完整清单见 `backend/src/storage/migrations/index.ts` 的 `MIGRATIONS` 数组。新增/修改字段的流程见 [docs/database-migration.md](./database-migration.md)。
 
@@ -947,14 +950,14 @@ mkdir dataDir + cacheDir
 打开 SQLite dbFile
   PRAGMA journal_mode=WAL; foreign_keys=ON
   createStructuredTables  （所有 CREATE TABLE IF NOT EXISTS）
-  user_version = schemaVersion = 20 ?
+  user_version = schemaVersion = 22 ?
     -> 是：inspectTaskSchemaCompatibility，缺列则 ALTER/DROP 并写 STORAGE_SCHEMA_REPAIR
     -> 否 (>=2)：migrateStructuredDatabase 按版本逐级 ALTER / 建表 / seed
     -> 否 (<2)：
          从 app_state 单行表 或 app-state.json 文件读旧状态
          写 users/sites/proxies/downloaders/tasks/torrents/operation_logs/task_logs/schedule_logs/site_traffic_snapshots/system_settings
          seedTorrentTrafficStatistics（生成 site_torrent_traffic_daily + torrent_traffic_cursors 基线）
-         PRAGMA user_version = 20
+         PRAGMA user_version = 22
          写 STORAGE_MIGRATION 成功日志
 ```
 
@@ -971,7 +974,7 @@ mkdir dataDir + cacheDir
 ```yaml
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.5.0
+    image: qqxnz/xnz-pt-automation:0.6.24
     container_name: xnz-pt-automation
     restart: unless-stopped
     ports:
@@ -991,35 +994,39 @@ services:
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-COPY backend/package*.json backend/
-COPY frontend/package*.json frontend/
-RUN npm ci
+COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
+RUN npm ci --frozen-lockfile
 
 FROM deps AS build
 WORKDIR /app
-COPY . .
+COPY backend/tsconfig*.json backend/
+COPY backend/src backend/src
+COPY frontend/tsconfig*.json frontend/
+COPY frontend/index.html frontend/
+COPY frontend/vite.config.ts frontend/
+COPY frontend/public frontend/public
+COPY frontend/src frontend/src
+ENV NODE_ENV=production
 RUN npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3180
-ENV DATA_DIR=/data
-ENV DEFAULT_ADMIN_PASSWORD=123456
-ENV TZ=Asia/Shanghai
-ENV NODE_OPTIONS=--max-old-space-size=512
-RUN apk add --no-cache tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-RUN addgroup -S node && adduser -S node -G node
-RUN npm i -g pm2
-COPY ecosystem.config.cjs ./
-COPY --from=build /app/backend/dist backend/dist
-COPY --from=build /app/backend/package*.json backend/
-COPY --from=build /app/frontend/dist backend/public
-RUN npm ci --omit=dev --prefix backend && chown -R node:node /app
+ARG VERSION=0.6.24
+ARG DATA_DIR=/data
+ARG SCHEMA_VERSION=22
+RUN apk add --no-cache tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone && apk del tzdata
+ENV NODE_ENV=production PORT=3180 DATA_DIR=/data TZ=Asia/Shanghai XNZ_VERSION=0.6.24 XNZ_SCHEMA_VERSION=22 NODE_OPTIONS="--max-old-space-size=512"
+COPY --chown=node:node ecosystem.config.cjs ecosystem.config.cjs
+COPY --chown=node:node scripts/pre-start.sh /usr/local/bin/pre-start.sh
+COPY --from=build --chown=node:node /app/backend/dist backend/dist
+COPY --from=build --chown=node:node /app/frontend/dist frontend/dist
+RUN mkdir -p /data && chown -R node:node /data
 USER node
-EXPOSE 3180
+RUN chmod +x /usr/local/bin/pre-start.sh
 VOLUME ["/data"]
-CMD ["pm2-runtime", "ecosystem.config.cjs"]
+EXPOSE 3180
+CMD ["/usr/local/bin/pre-start.sh"]
 ```
 
 构建时由 `npm run build` 在 monorepo 根目录先编译 backend（`tsc`）再编译 frontend（`vue-tsc` + `vite build`），然后将 dist 复制到后端镜像。
@@ -1027,7 +1034,7 @@ CMD ["pm2-runtime", "ecosystem.config.cjs"]
 ### 20.3 镜像版本与升级
 
 - 镜像发布到 Docker Hub 与阿里云镜像仓库（`build-and-push.sh` 多架构 `linux/amd64,linux/arm64`）
-- 当前稳定版本 `0.5.0`；升级：`docker compose pull && docker compose up -d`
+- 当前稳定版本 `0.6.24`；升级：`docker compose pull && docker compose up -d`
 
 ## 21. Express 托管前端
 
@@ -1063,7 +1070,7 @@ if (existsSync(frontendDist)) {
 
 - 单容器 Docker + pm2-runtime 部署
 - Express + TypeScript 后端；Vue 3 + Vite + Varlet UI 前端
-- SQLite + 自写迁移（`schemaVersion=20`）；启动时自动建表、迁移、seed
+- SQLite + 自写迁移（`schemaVersion=22`）；启动时自动建表、迁移、seed
 - 单用户登录、改密；HTTP-only Cookie + Bearer 双轨会话
 - 站点 CRUD + API Key 优先 / Cookie 兜底 + 适配器分发（m-team / TTG / NexusPHP 通用）
 - 站点连通性 + 诊断（`finalUrl/httpStatus/bodyExcerpt`）
@@ -1084,6 +1091,7 @@ if (existsSync(frontendDist)) {
 ### 23.2 当前未实现 / 与方案文档差异
 
 - **代理管理**：`routes/proxies.ts` 当前只实现 `GET /api/proxies` 列表（剔除 password）；`proxies-plan.md` 中的 CRUD、`/test`、`/api/proxies/options`、`REFERENCED_BY_SITES / PROXY_DISABLED` 保护等仍待补充
+- **数据库备份**：`/api/backup` 路由已实现备份列表、手动创建、下载、删除、恢复功能；调度器 `auto-backup` 每天凌晨 3 点自动备份
 - **下载器状态/任务列表的实时刷新**：前端 `DownloadersPage` 5s 轮询；后端只读 qB API
 - **`expiring_soon_minutes`**：DB 列保留，运行时未使用；前端无 UI
 - **`ModulePage.vue` 与 `StatisticsBarChart.vue`**：组件实现完毕但未在路由/页面中引用

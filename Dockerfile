@@ -31,7 +31,7 @@ WORKDIR /app
 
 ARG VERSION=0.6.24
 ARG DATA_DIR=/data
-ARG SCHEMA_VERSION=21
+ARG SCHEMA_VERSION=22
 
 # 强制使用 Asia/Shanghai 时区，避免容器默认 UTC 与用户本地时区错位
 # 导致「今日流量」按字符串日期匹配时查不到数据

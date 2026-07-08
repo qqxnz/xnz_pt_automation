@@ -7,7 +7,7 @@
 当前镜像发布在 Docker Hub：
 
 ```bash
-docker pull qqxnz/xnz-pt-automation:0.5.0
+docker pull qqxnz/xnz-pt-automation:0.6.24
 ```
 
 推荐使用 `docker compose` 启动：
@@ -15,7 +15,7 @@ docker pull qqxnz/xnz-pt-automation:0.5.0
 ```yaml
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.5.0
+    image: qqxnz/xnz-pt-automation:0.6.24
     container_name: xnz-pt-automation
     restart: unless-stopped
     ports:
@@ -47,13 +47,13 @@ http://localhost:3180
 
 ```bash
 # 在 fnos/ 目录下
-./build.sh 0.6.2
-# 得到 ../qqxnz.xnz-pt-automation-0.6.2.fpk
+./build.sh 0.6.28
+# 得到 ../qqxnz.pta-0.6.28.fpk
 ```
 
 安装方式：
 - **应用中心 GUI**：「应用中心 → 手动安装 → 上传 .fpk」
-- **SSH 安装**：`appcenter-cli install-fpk qqxnz.xnz-pt-automation-0.6.2.fpk`
+- **SSH 安装**：`appcenter-cli install-fpk qqxnz.pta-0.6.28.fpk`
 
 镜像从阿里云容器镜像服务拉取（`crpi-yg64rrvs864jdm4p.cn-shenzhen.personal.cr.aliyuncs.com/qqxnz/xnz-pt-automation`），如需更换仓库地址编辑 `fnos/app/docker/docker-compose.yaml`。
 
@@ -67,7 +67,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3180:3180 \
   -v "$(pwd)/data:/data" \
-  qqxnz/xnz-pt-automation:0.5.0
+qqxnz/xnz-pt-automation:0.6.24
 ```
 
 ### 镜像版本
@@ -129,16 +129,16 @@ designs/
 
 | 模块 | 设计稿 | 方案&执行清单 | 开发完成 | 说明 |
 | --- | --- | --- | --- | --- |
-| 登录 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/login.svg`，`docs/login-plan.md`。 |
-| 首页 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/dashboard.svg`，`docs/dashboard-plan.md`。 |
-| 站点 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/sites.svg`、`designs/sites-form.svg`，`docs/sites-plan.md`。 |
-| 种子 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/torrents.svg`，`docs/torrents-plan.md`。 |
-| 下载器 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/downloaders.svg`、`designs/downloaders-form.svg`，`docs/downloaders-plan.md`。 |
-| 代理管理 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/proxies.svg`，`docs/proxies-plan.md`。 |
-| 数据统计 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/statistics.svg`，`docs/statistics-plan.md`。 |
-| 任务 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |
-| 日志 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/logs.svg`，`docs/logs-plan.md`。 |
-| 系统设置 | ✅ 已完成 | ✅ 已完成 | ⬜ 未开始 | `designs/settings.svg`，`docs/settings-plan.md`。 |
+| 登录 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/login.svg`，`docs/login-plan.md`。 |
+| 首页 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/dashboard.svg`，`docs/dashboard-plan.md`。 |
+| 站点 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/sites.svg`、`designs/sites-form.svg`，`docs/sites-plan.md`。 |
+| 种子 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/torrents.svg`，`docs/torrents-plan.md`。 |
+| 下载器 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/downloaders.svg`、`designs/downloaders-form.svg`，`docs/downloaders-plan.md`。 |
+| 代理管理 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/proxies.svg`，`docs/proxies-plan.md`。 |
+| 数据统计 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/statistics.svg`，`docs/statistics-plan.md`。 |
+| 任务 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |
+| 日志 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/logs.svg`，`docs/logs-plan.md`。 |
+| 系统设置 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/settings.svg`，`docs/settings-plan.md`。 |
 
 ## 开发前限制规则
 
