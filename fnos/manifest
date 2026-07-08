@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.27
+version=0.6.28
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -15,5 +15,5 @@ checkport=false
 service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
-desktop_applaunchname=qqxnz.pta.PTA
-changelog=0.6.27<br/>恢复卸载步骤：卸载向导重新提供「是否删除数据」开关。<br/>⚠️ 勾选删除时仅记录用户选择并提示手动清理路径（fnOS「文件管理 → 共享文件夹 → pta/data」），不再由应用脚本自动删除；因容器 node 用户与 fnOS 包用户 UID 不同，自动删除可能残留。
+desktop_applaunchname=qqxnz.pta
+changelog=0.6.28<br/>简化卸载步骤：移除「是否删除数据」开关，改为直接说明卸载不会清空共享目录 pta/data 下的数据，卸载后数据将保留。
