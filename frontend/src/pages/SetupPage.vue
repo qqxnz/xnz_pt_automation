@@ -1,63 +1,43 @@
 <template>
-  <div class="login-page">
-    <section class="login-hero">
-      <div class="logo-box">
-        <img src="/pta-icon.png" alt="PTA" />
-      </div>
-      <h1>PT Automation</h1>
-      <p>Free torrent monitor for NAS</p>
-      <p class="hero-desc">首次启动需要设置管理员密码，设置完成后才能使用所有功能。</p>
-    </section>
-
-    <form class="login-card" @submit.prevent="handleSubmit">
+  <AuthShell
+    eyebrow="首次安全配置"
+    title="为系统创建安全入口"
+    description="首次启动需要设置管理员密码。完成后即可开始配置站点、下载器和自动化任务。"
+    note-title="密码安全"
+    note="密码只用于当前私有部署，请妥善保管。"
+  >
+    <form class="auth-card" novalidate @submit.prevent="handleSubmit">
+      <span class="auth-card-eyebrow">首次使用</span>
       <h2>设置管理员密码</h2>
-      <p>密码需 8-64 位，至少包含字母和数字</p>
-
-      <label>
-        用户名
-        <input value="admin" disabled />
-      </label>
-
-      <label>
-        新密码
+      <p>密码需 8-64 位，至少包含字母和数字。</p>
+      <label class="auth-field"><span>管理员账号</span><input value="admin" disabled /></label>
+      <label class="auth-field">
+        <span>新密码</span>
         <div class="password-input">
-          <input
-            v-model="form.password"
-            :disabled="submitting"
-            :type="passwordVisible ? 'text' : 'password'"
-            autocomplete="new-password"
-          />
-          <button type="button" :disabled="submitting" @click="passwordVisible = !passwordVisible">
-            {{ passwordVisible ? '隐藏' : '显示' }}
-          </button>
+          <input v-model="form.password" :aria-invalid="Boolean(passwordError)" :disabled="submitting" :type="passwordVisible ? 'text' : 'password'" autocomplete="new-password" />
+          <button type="button" :disabled="submitting" :aria-label="passwordVisible ? '隐藏新密码' : '显示新密码'" @click="passwordVisible = !passwordVisible">{{ passwordVisible ? '隐藏' : '显示' }}</button>
         </div>
+        <small v-if="passwordError" class="auth-field-error">{{ passwordError }}</small>
       </label>
-      <label>
-        确认密码
+      <label class="auth-field">
+        <span>确认密码</span>
         <div class="password-input">
-          <input
-            v-model="form.confirmPassword"
-            :disabled="submitting"
-            :type="confirmVisible ? 'text' : 'password'"
-            autocomplete="new-password"
-          />
-          <button type="button" :disabled="submitting" @click="confirmVisible = !confirmVisible">
-            {{ confirmVisible ? '隐藏' : '显示' }}
-          </button>
+          <input v-model="form.confirmPassword" :aria-invalid="Boolean(confirmError)" :disabled="submitting" :type="confirmVisible ? 'text' : 'password'" autocomplete="new-password" />
+          <button type="button" :disabled="submitting" :aria-label="confirmVisible ? '隐藏确认密码' : '显示确认密码'" @click="confirmVisible = !confirmVisible">{{ confirmVisible ? '隐藏' : '显示' }}</button>
         </div>
+        <small v-if="confirmError" class="auth-field-error">{{ confirmError }}</small>
       </label>
-
-      <button class="primary-button" type="submit" :disabled="submitting">
-        {{ submitting ? '设置中...' : '设置密码' }}
-      </button>
+      <button class="primary-button auth-submit" type="submit" :disabled="submitting">{{ submitting ? '设置中...' : '完成初始化' }}</button>
+      <div class="auth-card-note"><span>完成后</span><strong>前往登录</strong></div>
     </form>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { Snackbar } from '@varlet/ui'
 import { useRouter } from 'vue-router'
+import AuthShell from '../components/AuthShell.vue'
 import { markSetupComplete } from '../router'
 import { setupPassword } from '../api/auth'
 
@@ -65,22 +45,26 @@ const router = useRouter()
 const submitting = ref(false)
 const passwordVisible = ref(false)
 const confirmVisible = ref(false)
+const attempted = ref(false)
 const form = reactive({ password: '', confirmPassword: '' })
+const passwordError = computed(() => {
+  if (!attempted.value) return ''
+  if (!form.password) return '请输入新密码'
+  if (!/^(?=.*[A-Za-z])(?=.*\d).{8,64}$/.test(form.password)) return '密码需为 8-64 位，且至少包含字母和数字'
+  return ''
+})
+const confirmError = computed(() => {
+  if (!attempted.value) return ''
+  if (!form.confirmPassword) return '请再次输入密码'
+  if (form.password !== form.confirmPassword) return '两次输入的密码不一致'
+  return ''
+})
 
 async function handleSubmit() {
-  if (!form.password) {
-    Snackbar.warning('密码不能为空')
-    return
-  }
-  if (!/^(?=.*[A-Za-z])(?=.*\d).{8,64}$/.test(form.password)) {
-    Snackbar.warning('密码需为 8-64 位，且至少包含字母和数字')
-    return
-  }
-  if (form.password !== form.confirmPassword) {
-    Snackbar.warning('两次输入的密码不一致')
-    return
-  }
-
+  attempted.value = true
+  if (!form.password) return void Snackbar.warning('密码不能为空')
+  if (!/^(?=.*[A-Za-z])(?=.*\d).{8,64}$/.test(form.password)) return void Snackbar.warning('密码需为 8-64 位，且至少包含字母和数字')
+  if (form.password !== form.confirmPassword) return void Snackbar.warning('两次输入的密码不一致')
   submitting.value = true
   try {
     await setupPassword(form.password)

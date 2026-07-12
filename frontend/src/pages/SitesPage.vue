@@ -1,29 +1,35 @@
 <template>
   <AppLayout>
     <section class="sites-page">
-      <div class="dashboard-head">
-        <div>
-          <h1>站点</h1>
-          <p>管理 PT 站点域名、API Key、Cookie、连通状态和用户统计</p>
-        </div>
-        <div class="head-actions">
-          <button class="primary-button compact" type="button" @click="openCreate">新增站点</button>
-          <button class="secondary-button outline" type="button" :disabled="loading" @click="handleExport">导出</button>
-          <button class="secondary-button outline" type="button" :disabled="loading" @click="triggerImport">导入</button>
-          <input ref="importInputRef" type="file" accept=".json" hidden @change="handleImport" />
-        </div>
-      </div>
+      <CCPageHeader
+        eyebrow="站点管理"
+        title="管理 PT 站点"
+        description="集中查看连通、账号、流量与签到状态，异常站点优先处理。"
+      />
 
-      <section class="site-stats">
-        <article v-for="card in statCards" :key="card.label" class="metric-card">
-          <span>{{ card.label }}</span>
-          <strong :class="card.className">{{ card.value }}</strong>
-        </article>
-      </section>
-
-      <section class="sites-toolbar panel">
-        <input v-model.trim="filters.keyword" placeholder="搜索站点 / 域名" @keyup.enter="loadSites" />
-        <select v-if="isDesktop" v-model="filters.connectivityStatus" @change="loadSites" aria-label="按连通状态过滤">
+      <section
+        class="sites-toolbar cc-toolbar cc-card"
+        :class="{ 'filters-open': mobileFiltersOpen }"
+      >
+        <input
+          v-model.trim="filters.keyword"
+          placeholder="搜索站点 / 域名"
+          @keyup.enter="loadSites"
+        />
+        <button
+          class="mobile-filter-toggle"
+          type="button"
+          :aria-expanded="mobileFiltersOpen"
+          @click="mobileFiltersOpen = !mobileFiltersOpen"
+        >
+          筛选 {{ mobileFiltersOpen ? "收起" : "⌄" }}
+        </button>
+        <select
+          v-if="isDesktop"
+          v-model="filters.connectivityStatus"
+          @change="loadSites"
+          aria-label="按连通状态过滤"
+        >
           <option value="ALL">状态：全部</option>
           <option value="ONLINE">在线</option>
           <option value="AUTH_FAILED">认证失败</option>
@@ -40,7 +46,12 @@
           :options="connectivityFilterOptions"
           @update:model-value="loadSites"
         />
-        <select v-if="isDesktop" v-model="filters.enabled" @change="loadSites" aria-label="按启用状态过滤">
+        <select
+          v-if="isDesktop"
+          v-model="filters.enabled"
+          @change="loadSites"
+          aria-label="按启用状态过滤"
+        >
           <option value="ALL">启用：全部</option>
           <option value="ENABLED">已启用</option>
           <option value="DISABLED">已禁用</option>
@@ -53,7 +64,12 @@
           size="small"
           @change="loadSites"
         />
-        <select v-if="isDesktop" v-model="filters.signinEnabled" @change="loadSites" aria-label="按签到启用过滤">
+        <select
+          v-if="isDesktop"
+          v-model="filters.signinEnabled"
+          @change="loadSites"
+          aria-label="按签到启用过滤"
+        >
           <option value="ALL">签到：全部</option>
           <option value="ENABLED">已开启</option>
           <option value="DISABLED">已关闭</option>
@@ -66,35 +82,77 @@
           size="small"
           @change="loadSites"
         />
-<button class="secondary-button" type="button" :disabled="loading" @click="loadSites">
-            {{ loading ? '刷新中...' : '刷新' }}
-          </button>
-        </section>
+        <button
+          class="secondary-button toolbar-refresh-action"
+          type="button"
+          :disabled="loading"
+          @click="loadSites"
+        >
+          {{ loading ? "刷新中..." : "刷新" }}
+        </button>
+        <button
+          class="secondary-button outline filter-secondary-action"
+          type="button"
+          :disabled="loading"
+          @click="handleExport"
+        >
+          导出
+        </button>
+        <button
+          class="secondary-button outline filter-secondary-action"
+          type="button"
+          :disabled="loading"
+          @click="triggerImport"
+        >
+          导入
+        </button>
+        <button
+          class="primary-button compact toolbar-primary-action"
+          type="button"
+          @click="openCreate"
+        >
+          新增站点
+        </button>
+        <input
+          ref="importInputRef"
+          type="file"
+          accept=".json"
+          hidden
+          @change="handleImport"
+        />
+      </section>
 
-      <section class="sites-table panel">
+      <section class="sites-table cc-card cc-list-surface">
         <div v-if="error" class="error-banner">
           {{ error }}
           <button type="button" @click="loadSites">重试</button>
         </div>
-        <div v-if="!items.length && !loading" class="sites-empty">
-          <h2>{{ hasFilters ? '没有符合条件的站点' : '还没有配置 PT 站点' }}</h2>
-          <p>{{ hasFilters ? '清空筛选后再试试。' : '添加第一个站点后，系统会开始检查种子和上传下载统计。' }}</p>
-          <button class="primary-button compact" type="button" @click="hasFilters ? resetFilters() : openCreate()">
-            {{ hasFilters ? '清空筛选' : '新增站点' }}
+        <CCStateView
+          v-if="!items.length && !loading"
+          :title="hasFilters ? '没有符合条件的站点' : '还没有配置 PT 站点'"
+          :description="
+            hasFilters
+              ? '清空筛选后再试试。'
+              : '添加第一个站点后，系统会开始检查种子和上传下载统计。'
+          "
+        >
+          <button
+            class="primary-button compact"
+            type="button"
+            @click="hasFilters ? resetFilters() : openCreate()"
+          >
+            {{ hasFilters ? "清空筛选" : "新增站点" }}
           </button>
-        </div>
+        </CCStateView>
 
         <div v-else class="desktop-table">
           <div class="site-row table-head">
             <span>站点</span>
             <span>连通状态</span>
-            <span>用户等级</span>
             <span>分享率</span>
             <span>总流量</span>
-            <span>昨日</span>
             <span>今日</span>
-            <span>凭证</span>
-            <span>签到</span>
+            <span>凭证 / 签到</span>
             <span>操作</span>
           </div>
           <div v-for="site in items" :key="site.id" class="site-row">
@@ -102,94 +160,136 @@
               <strong>{{ site.displayName }}</strong>
               <small>{{ site.domain }}</small>
             </div>
-            <span class="chip" :class="statusMeta(site.connectivityStatus).className">{{ statusMeta(site.connectivityStatus).label }}</span>
-            <span>{{ site.userLevel || '-' }}</span>
-            <span class="ratio-value" :class="{ good: Boolean(site.ratioInfinite || (site.ratio ?? 0) >= 2), warning: !site.ratioInfinite && (site.ratio ?? 0) > 0 && (site.ratio ?? 0) < 1 }">
+            <span
+              class="chip"
+              :class="statusMeta(site.connectivityStatus).className"
+              >{{ statusMeta(site.connectivityStatus).label }}</span
+            >
+            <span
+              class="ratio-value"
+              :class="{
+                good: Boolean(site.ratioInfinite || (site.ratio ?? 0) >= 2),
+                warning:
+                  !site.ratioInfinite &&
+                  (site.ratio ?? 0) > 0 &&
+                  (site.ratio ?? 0) < 1,
+              }"
+            >
               {{ formatRatio(site) }}
+              <small>{{ site.userLevel || "等级未知" }}</small>
             </span>
             <span class="traffic-pair">
               <span class="traffic-up">↑ {{ formatBytes(site.uploaded) }}</span>
-              <span class="traffic-down">↓ {{ formatBytes(site.downloaded) }}</span>
+              <span class="traffic-down"
+                >↓ {{ formatBytes(site.downloaded) }}</span
+              >
+              <small
+                >昨日 ↑ {{ formatBytes(site.yesterdayUploaded) }} / ↓
+                {{ formatBytes(site.yesterdayDownloaded) }}</small
+              >
             </span>
             <span class="traffic-pair">
-              <span class="traffic-up">↑ {{ formatBytes(site.yesterdayUploaded) }}</span>
-              <span class="traffic-down">↓ {{ formatBytes(site.yesterdayDownloaded) }}</span>
+              <span class="traffic-up"
+                >↑ {{ formatBytes(site.todayUploaded) }}</span
+              >
+              <span class="traffic-down"
+                >↓ {{ formatBytes(site.todayDownloaded) }}</span
+              >
             </span>
-            <span class="traffic-pair">
-              <span class="traffic-up">↑ {{ formatBytes(site.todayUploaded) }}</span>
-              <span class="traffic-down">↓ {{ formatBytes(site.todayDownloaded) }}</span>
+            <span class="site-credential-cell">
+              <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
+              <small :class="signinStatusMeta(site).className"
+                >{{ signinStatusMeta(site).label
+                }}<template v-if="site.signinSupported && site.signinEnabled">
+                  · {{ site.signinTime }}</template
+                ></small
+              >
             </span>
-            <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
-            <span class="chip" :class="signinStatusMeta(site).className">{{ signinStatusMeta(site).label }}</span>
-            <div class="row-actions">
-              <button type="button" :disabled="!site.signinSupported || site.signinRunning" :aria-busy="site.signinRunning" :title="!site.signinSupported ? '此站点不支持签到功能' : ''" @click="triggerSignin(site)">{{ signinButtonLabel(site) }}</button>
-              <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
-              <button type="button" @click="openBrowse(site)">浏览</button>
-              <button type="button" @click="openEdit(site)">编辑</button>
-              <button class="danger-text" type="button" @click="removeSite(site)">删除</button>
+            <div class="row-actions compact-actions">
+              <button
+                class="row-primary-action"
+                type="button"
+                :disabled="sitePrimaryDisabled(site)"
+                @click="runSitePrimaryAction(site)"
+              >
+                {{ sitePrimaryLabel(site) }}
+              </button>
+              <AppActionMenu
+                :items="siteMenuItems(site)"
+                :label="`${site.displayName} 的更多操作`"
+                @select="handleSiteMenu(site, $event)"
+              />
             </div>
           </div>
         </div>
 
         <div class="mobile-site-list">
-          <article v-for="site in items" :key="site.id" class="site-card">
+          <article
+            v-for="site in items"
+            :key="site.id"
+            class="cc-card cc-mobile-card cc-site-mobile-card"
+          >
             <div class="site-name-cell" @click="openSite(site)">
               <strong>{{ site.displayName }}</strong>
-              <span class="chip" :class="statusMeta(site.connectivityStatus).className">{{ statusMeta(site.connectivityStatus).label }}</span>
+              <span
+                class="chip"
+                :class="statusMeta(site.connectivityStatus).className"
+                >{{ statusMeta(site.connectivityStatus).label }}</span
+              >
             </div>
-            <p class="site-domain-cell" @click="openSite(site)">{{ site.domain }}</p>
-            <dl class="site-stat-grid">
-              <div>
-                <dt>用户等级</dt>
-                <dd>{{ site.userLevel || '-' }}</dd>
-              </div>
-              <div>
-                <dt>分享率</dt>
-                <dd>{{ formatRatio(site) }}</dd>
-              </div>
-              <div>
-                <dt>总流量</dt>
-                <dd class="traffic-pair">
-                  <span class="traffic-up">↑ {{ formatBytes(site.uploaded) }}</span>
-                  <span class="traffic-down">↓ {{ formatBytes(site.downloaded) }}</span>
-                </dd>
-              </div>
-              <div>
-                <dt>昨日</dt>
-                <dd class="traffic-pair">
-                  <span class="traffic-up">↑ {{ formatBytes(site.yesterdayUploaded) }}</span>
-                  <span class="traffic-down">↓ {{ formatBytes(site.yesterdayDownloaded) }}</span>
-                </dd>
-              </div>
-              <div>
-                <dt>今日</dt>
-                <dd class="traffic-pair">
-                  <span class="traffic-up">↑ {{ formatBytes(site.todayUploaded) }}</span>
-                  <span class="traffic-down">↓ {{ formatBytes(site.todayDownloaded) }}</span>
-                </dd>
-              </div>
-            </dl>
-            <p>凭证：{{ credentialLabel(site) }}</p>
-            <p>签到：{{ signinStatusMeta(site).label }}<span v-if="site.signinSupported && site.signinEnabled">（{{ site.signinTime }}）</span></p>
-            <p>最近成功：{{ formatDate(site.lastConnectedAt) }}</p>
-            <p v-if="site.lastConnectError">错误：{{ site.lastConnectError }}</p>
-            <div class="row-actions">
-              <button type="button" :disabled="!site.signinSupported || site.signinRunning" :aria-busy="site.signinRunning" :title="!site.signinSupported ? '此站点不支持签到功能' : ''" @click="triggerSignin(site)">{{ signinButtonLabel(site) }}</button>
-              <button type="button" :disabled="site.updating" :aria-busy="site.updating" @click="triggerSiteUpdate(site)">{{ site.updating ? '更新中...' : '更新' }}</button>
-              <button type="button" @click="openBrowse(site)">浏览</button>
-              <button type="button" @click="openEdit(site)">编辑</button>
-              <button class="danger-text" type="button" @click="removeSite(site)">删除</button>
+            <p class="site-domain-cell" @click="openSite(site)">
+              {{ site.domain }}
+            </p>
+            <p class="cc-mobile-summary">
+              分享率 {{ formatRatio(site) }} ·
+              {{ site.userLevel || "等级未知" }}
+            </p>
+            <div class="cc-mobile-traffic">
+              <strong>↑ {{ formatBytes(site.uploaded) }}</strong
+              ><span>↓ {{ formatBytes(site.downloaded) }}</span
+              ><small
+                >今日 ↑ {{ formatBytes(site.todayUploaded) }} / ↓
+                {{ formatBytes(site.todayDownloaded) }}</small
+              >
+            </div>
+            <p class="cc-mobile-summary">
+              {{ credentialLabel(site) }} · {{ signinStatusMeta(site).label
+              }}<span v-if="site.signinSupported && site.signinEnabled">
+                {{ site.signinTime }}</span
+              >
+            </p>
+            <p v-if="site.lastConnectError" class="cc-mobile-error">
+              {{ site.lastConnectError }}
+            </p>
+            <div class="row-actions compact-actions">
+              <button
+                class="row-primary-action"
+                type="button"
+                :disabled="sitePrimaryDisabled(site)"
+                @click="runSitePrimaryAction(site)"
+              >
+                {{ sitePrimaryLabel(site) }}
+              </button>
+              <AppActionMenu
+                :items="siteMenuItems(site)"
+                :label="`${site.displayName} 的更多操作`"
+                @select="handleSiteMenu(site, $event)"
+              />
             </div>
           </article>
         </div>
       </section>
     </section>
 
-    <div v-if="formVisible" class="modal-backdrop" @click.self="closeForm">
-      <form class="site-form" @submit.prevent="saveSite">
-        <div class="form-head">
+    <div
+      v-if="formVisible"
+      class="cc-modal-backdrop modal-backdrop"
+      @click.self="closeForm"
+    >
+      <form class="cc-form-dialog site-form" @submit.prevent="saveSite">
+        <div class="cc-form-head form-head">
           <div>
-            <h2>{{ editingSiteId ? '编辑站点' : '新增站点' }}</h2>
+            <h2>{{ editingSiteId ? "编辑站点" : "新增站点" }}</h2>
             <p>保存后会自动执行站点检查和用户统计获取。</p>
           </div>
           <button type="button" @click="closeForm">×</button>
@@ -198,8 +298,15 @@
         <div class="form-grid compact-form-grid">
           <section>
             <h3>基础信息</h3>
-            <label>站点域名<input v-model.trim="form.domain" required placeholder="pt.m-team.cc" /></label>
-            <label class="inline-check"><input v-model="form.enabled" type="checkbox" /> 启用站点</label>
+            <label
+              >站点域名<input
+                v-model.trim="form.domain"
+                required
+                placeholder="pt.m-team.cc"
+            /></label>
+            <label class="inline-check"
+              ><input v-model="form.enabled" type="checkbox" /> 启用站点</label
+            >
           </section>
 
           <section>
@@ -210,10 +317,18 @@
                 <input
                   v-model.trim="form.apiKey"
                   :type="apiKeyVisible ? 'text' : 'password'"
-                  :placeholder="editingSiteId && detailHasApiKey && !form.apiKey ? '已保存，留空不修改' : ''"
+                  :placeholder="
+                    editingSiteId && detailHasApiKey && !form.apiKey
+                      ? '已保存，留空不修改'
+                      : ''
+                  "
                 />
-                <button type="button" :disabled="saving" @click="apiKeyVisible = !apiKeyVisible">
-                  {{ apiKeyVisible ? '隐藏' : '显示' }}
+                <button
+                  type="button"
+                  :disabled="saving"
+                  @click="apiKeyVisible = !apiKeyVisible"
+                >
+                  {{ apiKeyVisible ? "隐藏" : "显示" }}
                 </button>
               </div>
             </label>
@@ -223,18 +338,31 @@
                 <input
                   v-model.trim="form.cookie"
                   :type="cookieVisible ? 'text' : 'password'"
-                  :placeholder="editingSiteId && detailHasCookie && !form.cookie ? '已保存，留空不修改' : ''"
+                  :placeholder="
+                    editingSiteId && detailHasCookie && !form.cookie
+                      ? '已保存，留空不修改'
+                      : ''
+                  "
                 />
-                <button type="button" :disabled="saving" @click="cookieVisible = !cookieVisible">
-                  {{ cookieVisible ? '隐藏' : '显示' }}
+                <button
+                  type="button"
+                  :disabled="saving"
+                  @click="cookieVisible = !cookieVisible"
+                >
+                  {{ cookieVisible ? "隐藏" : "显示" }}
                 </button>
               </div>
             </label>
             <label>
               User-Agent
               <div class="ua-row">
-                <input v-model.trim="form.userAgent" placeholder="当前浏览器 User-Agent" />
-                <button type="button" @click="restoreUserAgent">恢复当前浏览器</button>
+                <input
+                  v-model.trim="form.userAgent"
+                  placeholder="当前浏览器 User-Agent"
+                />
+                <button type="button" @click="restoreUserAgent">
+                  恢复当前浏览器
+                </button>
               </div>
             </label>
           </section>
@@ -242,37 +370,80 @@
           <section>
             <h3>签到设置</h3>
             <label class="inline-check">
-              <input v-model="form.signinEnabled" type="checkbox" /> 启用每日签到
+              <input v-model="form.signinEnabled" type="checkbox" />
+              启用每日签到
             </label>
             <label v-if="form.signinEnabled">
               签到时间
-              <input v-model.trim="form.signinTime" placeholder="HH:mm，例如 09:00" pattern="^([01]\d|2[0-3]):[0-5]\d$" required />
+              <input
+                v-model.trim="form.signinTime"
+                placeholder="HH:mm，例如 09:00"
+                pattern="^([01]\d|2[0-3]):[0-5]\d$"
+                required
+              />
             </label>
-            <p v-if="!form.signinEnabled" class="form-hint">开启后调度器会按签到时间自动签到；列表【签到】按钮始终可用。</p>
-            <p v-else-if="!signinSupportedForForm" class="form-hint warning-hint">此站点不支持签到功能，开启后调度器会自动跳过。</p>
-            <p v-else class="form-hint">时间采用 24 小时制 HH:mm；签到结果将记录到【日志 &gt; 签到日志】。</p>
+            <p v-if="!form.signinEnabled" class="form-hint">
+              开启后调度器会按签到时间自动签到；列表【签到】按钮始终可用。
+            </p>
+            <p
+              v-else-if="!signinSupportedForForm"
+              class="form-hint warning-hint"
+            >
+              此站点不支持签到功能，开启后调度器会自动跳过。
+            </p>
+            <p v-else class="form-hint">
+              时间采用 24 小时制 HH:mm；签到结果将记录到【日志 &gt; 签到日志】。
+            </p>
           </section>
         </div>
 
-        <div class="form-foot">
-          <span>校验：域名合法，API Key 和 Cookie 至少填写一个。已知域名自动显示站点显示名。</span>
-          <button type="button" class="secondary-button" @click="closeForm">取消</button>
-          <button class="primary-button compact" :disabled="saving" type="submit">{{ saving ? '保存中...' : '保存' }}</button>
+        <div class="cc-form-foot form-foot">
+          <span
+            >校验：域名合法，API Key 和 Cookie
+            至少填写一个。已知域名自动显示站点显示名。</span
+          >
+          <button type="button" class="secondary-button" @click="closeForm">
+            取消
+          </button>
+          <button
+            class="primary-button compact"
+            :disabled="saving"
+            type="submit"
+          >
+            {{ saving ? "保存中..." : "保存" }}
+          </button>
         </div>
       </form>
     </div>
 
-    <div v-if="browseVisible" class="modal-backdrop" @click.self="closeBrowse">
+    <div
+      v-if="browseVisible"
+      class="cc-modal-backdrop modal-backdrop"
+      @click.self="closeBrowse"
+    >
       <section class="browse-dialog">
         <div class="browse-head">
           <h2>浏览 - {{ browsingSite?.displayName }}</h2>
           <button type="button" @click="closeBrowse">×</button>
         </div>
         <div class="browse-toolbar">
-          <input v-model.trim="browseFilters.keyword" placeholder="搜索关键字" @keyup.enter="loadBrowseTorrents" />
-          <AppSelect v-model="browseFilters.category" placeholder="资源分类" :options="browseCategoryOptions" />
-          <button class="primary-button compact" type="button" :disabled="browseLoading" @click="loadBrowseTorrents">
-            {{ browseLoading ? '搜索中...' : '搜索' }}
+          <input
+            v-model.trim="browseFilters.keyword"
+            placeholder="搜索关键字"
+            @keyup.enter="loadBrowseTorrents"
+          />
+          <AppSelect
+            v-model="browseFilters.category"
+            placeholder="资源分类"
+            :options="browseCategoryOptions"
+          />
+          <button
+            class="primary-button compact"
+            type="button"
+            :disabled="browseLoading"
+            @click="loadBrowseTorrents"
+          >
+            {{ browseLoading ? "搜索中..." : "搜索" }}
           </button>
         </div>
         <div class="browse-meta">
@@ -287,19 +458,28 @@
             <span>做种</span>
             <span>下载</span>
           </div>
-          <div v-if="!browseItems.length && !browseLoading" class="browse-empty">{{ browseError ? '获取失败' : '暂无结果' }}</div>
-          <div v-for="torrent in browseItems" :key="torrent.id" class="browse-row">
+          <div
+            v-if="!browseItems.length && !browseLoading"
+            class="browse-empty"
+          >
+            {{ browseError ? "获取失败" : "暂无结果" }}
+          </div>
+          <div
+            v-for="torrent in browseItems"
+            :key="torrent.id"
+            class="browse-row"
+          >
             <div>
               <strong>{{ torrent.title }}</strong>
-              <small>{{ torrent.subtitle || '-' }}</small>
+              <small>{{ torrent.subtitle || "-" }}</small>
               <div class="torrent-tags">
                 <span v-for="tag in torrent.tags" :key="tag">{{ tag }}</span>
               </div>
             </div>
             <span>{{ formatFreeRemaining(torrent.freeEndAt) }}</span>
             <span>{{ formatBytes(torrent.size) }}</span>
-            <span>{{ torrent.seeders ?? '-' }}</span>
-            <span>{{ torrent.leechers ?? '-' }}</span>
+            <span>{{ torrent.seeders ?? "-" }}</span>
+            <span>{{ torrent.leechers ?? "-" }}</span>
           </div>
         </div>
       </section>
@@ -308,13 +488,18 @@
 </template>
 
 <script setup lang="ts">
-import { Snackbar } from '@varlet/ui'
-import { Select, SegmentedButtons } from '@varlet/ui'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import AppLayout from '../components/AppLayout.vue'
-import AppSelect from '../components/AppSelect.vue'
-import { useMediaQuery } from '../composables/useMediaQuery'
+import { Snackbar } from "@varlet/ui";
+import { Select, SegmentedButtons } from "@varlet/ui";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import AppLayout from "../components/AppLayout.vue";
+import AppSelect from "../components/AppSelect.vue";
+import AppActionMenu, {
+  type AppActionMenuItem,
+} from "../components/AppActionMenu.vue";
+import CCPageHeader from "../components/CCPageHeader.vue";
+import CCStateView from "../components/CCStateView.vue";
+import { useMediaQuery } from "../composables/useMediaQuery";
 import {
   browseSiteTorrents,
   createSite,
@@ -331,476 +516,610 @@ import {
   type SiteFilter,
   type SiteFormPayload,
   type SiteListItem,
-  type SiteStats
-} from '../api/sites'
-import { isSigninSupportedByDomain } from '../config/siteSigninSupport'
+  type SiteStats,
+} from "../api/sites";
+import { isSigninSupportedByDomain } from "../config/siteSigninSupport";
 
-const route = useRoute()
-const router = useRouter()
-const loading = ref(false)
-const saving = ref(false)
-const error = ref('')
-const items = ref<SiteListItem[]>([])
-const stats = ref<SiteStats>({ total: 0, online: 0, authFailed: 0, offline: 0, unknown: 0 })
-const formVisible = ref(false)
-const editingSiteId = ref<string>()
-const detailHasApiKey = ref(false)
-const detailHasCookie = ref(false)
-const apiKeyVisible = ref(false)
-const cookieVisible = ref(false)
-const originalApiKey = ref('')
-const originalCookie = ref('')
-const browseVisible = ref(false)
-const browseLoading = ref(false)
-const browseError = ref('')
-const browsingSite = ref<SiteListItem>()
-const browseItems = ref<BrowseTorrentItem[]>([])
-const browseTotal = ref(0)
-let updatePollingTimer: number | undefined
-const importInputRef = ref<HTMLInputElement>()
+const route = useRoute();
+const router = useRouter();
+const loading = ref(false);
+const saving = ref(false);
+const error = ref("");
+const items = ref<SiteListItem[]>([]);
+const stats = ref<SiteStats>({
+  total: 0,
+  online: 0,
+  authFailed: 0,
+  offline: 0,
+  unknown: 0,
+});
+const formVisible = ref(false);
+const mobileFiltersOpen = ref(false);
+const editingSiteId = ref<string>();
+const detailHasApiKey = ref(false);
+const detailHasCookie = ref(false);
+const apiKeyVisible = ref(false);
+const cookieVisible = ref(false);
+const originalApiKey = ref("");
+const originalCookie = ref("");
+const browseVisible = ref(false);
+const browseLoading = ref(false);
+const browseError = ref("");
+const browsingSite = ref<SiteListItem>();
+const browseItems = ref<BrowseTorrentItem[]>([]);
+const browseTotal = ref(0);
+let updatePollingTimer: number | undefined;
+const importInputRef = ref<HTMLInputElement>();
 
-const filters = reactive<Required<Omit<SiteFilter, 'page' | 'pageSize'>>>({
-  keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
-  connectivityStatus: typeof route.query.connectivityStatus === 'string' ? (route.query.connectivityStatus as SiteFilter['connectivityStatus']) ?? 'ALL' : 'ALL',
-  enabled: typeof route.query.enabled === 'string' ? (route.query.enabled as SiteFilter['enabled']) ?? 'ALL' : 'ALL',
-  signinEnabled: typeof route.query.signinEnabled === 'string' ? (route.query.signinEnabled as SiteFilter['signinEnabled']) ?? 'ALL' : 'ALL'
-})
+const filters = reactive<Required<Omit<SiteFilter, "page" | "pageSize">>>({
+  keyword: typeof route.query.keyword === "string" ? route.query.keyword : "",
+  connectivityStatus:
+    typeof route.query.connectivityStatus === "string"
+      ? ((route.query.connectivityStatus as SiteFilter["connectivityStatus"]) ??
+        "ALL")
+      : "ALL",
+  enabled:
+    typeof route.query.enabled === "string"
+      ? ((route.query.enabled as SiteFilter["enabled"]) ?? "ALL")
+      : "ALL",
+  signinEnabled:
+    typeof route.query.signinEnabled === "string"
+      ? ((route.query.signinEnabled as SiteFilter["signinEnabled"]) ?? "ALL")
+      : "ALL",
+});
 
 const form = reactive<SiteFormPayload>({
-  domain: '',
+  domain: "",
   enabled: true,
-  apiKey: '',
-  cookie: '',
-  userAgent: '',
+  apiKey: "",
+  cookie: "",
+  userAgent: "",
   signinEnabled: false,
-  signinTime: '09:00'
-})
+  signinTime: "09:00",
+});
 
 const browseFilters = reactive({
-  keyword: '',
-  category: '',
+  keyword: "",
+  category: "",
   page: 1,
-  pageSize: 100
-})
+  pageSize: 100,
+});
 
 // 与后端 isSiteSigninSupported 对齐：仅按域名判断
-const signinSupportedForForm = computed(() => isSigninSupportedByDomain(form.domain || ''))
+const signinSupportedForForm = computed(() =>
+  isSigninSupportedByDomain(form.domain || ""),
+);
 
-const hasFilters = computed(() => Boolean(filters.keyword || filters.connectivityStatus !== 'ALL' || filters.enabled !== 'ALL' || filters.signinEnabled !== 'ALL'))
+const hasFilters = computed(() =>
+  Boolean(
+    filters.keyword ||
+    filters.connectivityStatus !== "ALL" ||
+    filters.enabled !== "ALL" ||
+    filters.signinEnabled !== "ALL",
+  ),
+);
 const statCards = computed(() => [
-  { label: '全部站点', value: stats.value.total, className: '' },
-  { label: '在线站点', value: stats.value.online, className: 'success' },
-  { label: '认证失败', value: stats.value.authFailed, className: 'warning' },
-  { label: '离线站点', value: stats.value.offline, className: 'danger' },
-  { label: '未知状态', value: stats.value.unknown, className: '' }
-])
+  { label: "全部站点", value: stats.value.total, className: "" },
+  { label: "在线站点", value: stats.value.online, className: "success" },
+  { label: "认证失败", value: stats.value.authFailed, className: "warning" },
+  { label: "离线站点", value: stats.value.offline, className: "danger" },
+  { label: "未知状态", value: stats.value.unknown, className: "" },
+]);
 
 // 移动端过滤选项：桌面端用原生 select，移动端用 SegmentedButtons（≤3 选项）或 Varlet Select（动态/多选项）
-const isDesktop = useMediaQuery('(min-width: 768px)')
+const isDesktop = useMediaQuery("(min-width: 768px)");
 
 const connectivityFilterOptions = [
-  { label: '全部', value: 'ALL' },
-  { label: '在线', value: 'ONLINE' },
-  { label: '认证失败', value: 'AUTH_FAILED' },
-  { label: '离线', value: 'OFFLINE' },
-  { label: '未检测', value: 'UNKNOWN' }
-]
+  { label: "全部", value: "ALL" },
+  { label: "在线", value: "ONLINE" },
+  { label: "认证失败", value: "AUTH_FAILED" },
+  { label: "离线", value: "OFFLINE" },
+  { label: "未检测", value: "UNKNOWN" },
+];
 
 const enabledFilterOptions = [
-  { label: '全部', value: 'ALL' },
-  { label: '已启用', value: 'ENABLED' },
-  { label: '已禁用', value: 'DISABLED' }
-]
+  { label: "全部", value: "ALL" },
+  { label: "已启用", value: "ENABLED" },
+  { label: "已禁用", value: "DISABLED" },
+];
 
 const signinFilterOptions = [
-  { label: '全部', value: 'ALL' },
-  { label: '已开启', value: 'ENABLED' },
-  { label: '已关闭', value: 'DISABLED' }
-]
+  { label: "全部", value: "ALL" },
+  { label: "已开启", value: "ENABLED" },
+  { label: "已关闭", value: "DISABLED" },
+];
 
 // 浏览弹窗的分类选项（暂无分类则只显示"全部"）
 const browseCategoryOptions = computed(() => {
-  return [{ label: '资源分类', value: '' }]
-})
+  return [{ label: "资源分类", value: "" }];
+});
 
 function resetForm() {
-  editingSiteId.value = undefined
-  detailHasApiKey.value = false
-  detailHasCookie.value = false
-  apiKeyVisible.value = false
-  cookieVisible.value = false
-  originalApiKey.value = ''
-  originalCookie.value = ''
+  editingSiteId.value = undefined;
+  detailHasApiKey.value = false;
+  detailHasCookie.value = false;
+  apiKeyVisible.value = false;
+  cookieVisible.value = false;
+  originalApiKey.value = "";
+  originalCookie.value = "";
   Object.assign(form, {
-    domain: '',
+    domain: "",
     enabled: true,
-    apiKey: '',
-    cookie: '',
+    apiKey: "",
+    cookie: "",
     userAgent: navigator.userAgent,
     signinEnabled: false,
-    signinTime: '09:00'
-  })
+    signinTime: "09:00",
+  });
 }
 
-function statusMeta(status: SiteListItem['connectivityStatus']) {
+function statusMeta(status: SiteListItem["connectivityStatus"]) {
   const map = {
-    ONLINE: { label: '在线', className: 'online-chip' },
-    OFFLINE: { label: '离线', className: 'offline-chip' },
-    AUTH_FAILED: { label: '认证失败', className: 'auth-chip' },
-    UNKNOWN: { label: '未检测', className: 'unknown-chip' }
-  }
-  return map[status]
+    ONLINE: { label: "在线", className: "online-chip" },
+    OFFLINE: { label: "离线", className: "offline-chip" },
+    AUTH_FAILED: { label: "认证失败", className: "auth-chip" },
+    UNKNOWN: { label: "未检测", className: "unknown-chip" },
+  };
+  return map[status];
 }
 
 function credentialLabel(site: SiteListItem) {
-  if (site.currentCredential === 'API_KEY') return 'API Key'
-  if (site.currentCredential === 'COOKIE') return 'Cookie'
-  if (site.hasApiKey) return 'API Key'
-  if (site.hasCookie) return 'Cookie'
-  return '无可用凭证'
+  if (site.currentCredential === "API_KEY") return "API Key";
+  if (site.currentCredential === "COOKIE") return "Cookie";
+  if (site.hasApiKey) return "API Key";
+  if (site.hasCookie) return "Cookie";
+  return "无可用凭证";
 }
 
 function signinStatusMeta(site: SiteListItem) {
   if (!site.signinSupported) {
-    return { label: '不支持', className: 'disabled-chip' }
+    return { label: "不支持", className: "disabled-chip" };
   }
   if (!site.signinEnabled) {
-    return { label: '已关闭', className: 'muted-chip' }
+    return { label: "已关闭", className: "muted-chip" };
   }
   if (site.signinRunning) {
-    return { label: '签到中...', className: 'unknown-chip' }
+    return { label: "签到中...", className: "unknown-chip" };
   }
-  if (site.todaySigninStatus === 'SUCCESS') {
-    return { label: '已签到', className: 'online-chip' }
+  if (site.todaySigninStatus === "SUCCESS") {
+    return { label: "已签到", className: "online-chip" };
   }
-  if (site.todaySigninStatus === 'FAILED') {
-    return { label: '签到失败', className: 'auth-chip' }
+  if (site.todaySigninStatus === "FAILED") {
+    return { label: "签到失败", className: "auth-chip" };
   }
-  if (site.todaySigninStatus === 'SKIPPED') {
-    return { label: '已跳过', className: 'unknown-chip' }
+  if (site.todaySigninStatus === "SKIPPED") {
+    return { label: "已跳过", className: "unknown-chip" };
   }
-  if (site.todaySigninStatus === 'UNSUPPORTED') {
-    return { label: '不支持', className: 'disabled-chip' }
+  if (site.todaySigninStatus === "UNSUPPORTED") {
+    return { label: "不支持", className: "disabled-chip" };
   }
-  return { label: '待签到', className: 'unknown-chip' }
+  return { label: "待签到", className: "unknown-chip" };
 }
 
 function signinButtonLabel(site: SiteListItem) {
-  if (site.signinRunning) return '签到中...'
-  if (!site.signinSupported) return '不支持'
-  return '签到'
+  if (site.signinRunning) return "签到中...";
+  if (!site.signinSupported) return "不支持";
+  return "签到";
+}
+
+function sitePrimaryKey(site: SiteListItem) {
+  if (
+    site.connectivityStatus === "AUTH_FAILED" ||
+    site.connectivityStatus === "OFFLINE"
+  )
+    return "update";
+  if (
+    site.signinSupported &&
+    site.signinEnabled &&
+    site.todaySigninStatus !== "SUCCESS"
+  )
+    return "signin";
+  return "browse";
+}
+
+function sitePrimaryLabel(site: SiteListItem) {
+  const key = sitePrimaryKey(site);
+  if (key === "update")
+    return site.updating
+      ? "更新中..."
+      : site.connectivityStatus === "AUTH_FAILED"
+        ? "更新凭证"
+        : "重新检测";
+  if (key === "signin") return signinButtonLabel(site);
+  return "浏览";
+}
+
+function sitePrimaryDisabled(site: SiteListItem) {
+  const key = sitePrimaryKey(site);
+  return key === "update"
+    ? Boolean(site.updating)
+    : key === "signin"
+      ? Boolean(site.signinRunning)
+      : false;
+}
+
+function runSitePrimaryAction(site: SiteListItem) {
+  const key = sitePrimaryKey(site);
+  if (key === "update") void triggerSiteUpdate(site);
+  else if (key === "signin") void triggerSignin(site);
+  else openBrowse(site);
+}
+
+function siteMenuItems(site: SiteListItem): AppActionMenuItem[] {
+  const primary = sitePrimaryKey(site);
+  return [
+    {
+      key: "signin",
+      label: signinButtonLabel(site),
+      hidden: primary === "signin",
+      disabled: !site.signinSupported || site.signinRunning,
+      disabledReason: !site.signinSupported ? "此站点不支持签到" : undefined,
+    },
+    {
+      key: "update",
+      label: site.updating ? "更新中..." : "更新站点信息",
+      hidden: primary === "update",
+      disabled: site.updating,
+    },
+    { key: "browse", label: "浏览站点种子", hidden: primary === "browse" },
+    { key: "edit", label: "编辑站点" },
+    { key: "delete", label: "删除站点", tone: "danger" },
+  ];
+}
+
+function handleSiteMenu(site: SiteListItem, key: string) {
+  if (key === "signin") void triggerSignin(site);
+  else if (key === "update") void triggerSiteUpdate(site);
+  else if (key === "browse") openBrowse(site);
+  else if (key === "edit") void openEdit(site);
+  else if (key === "delete") void removeSite(site);
 }
 
 function formatDate(value?: string) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatFreeRemaining(value?: string) {
-  if (!value) return '非免费'
-  const endTime = new Date(value.replace(' ', 'T')).getTime()
-  if (Number.isNaN(endTime)) return '非免费'
-  const diffMs = endTime - Date.now()
-  if (diffMs <= 0) return '已过期'
-  const totalMinutes = Math.floor(diffMs / 60_000)
-  const days = Math.floor(totalMinutes / (60 * 24))
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
-  const minutes = totalMinutes % 60
-  if (days > 0) return `${days}天${hours}小时`
-  if (hours > 0) return `${hours}小时${minutes}分`
-  if (minutes > 0) return `${minutes}分钟`
-  return '即将到期'
+  if (!value) return "非免费";
+  const endTime = new Date(value.replace(" ", "T")).getTime();
+  if (Number.isNaN(endTime)) return "非免费";
+  const diffMs = endTime - Date.now();
+  if (diffMs <= 0) return "已过期";
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}天${hours}小时`;
+  if (hours > 0) return `${hours}小时${minutes}分`;
+  if (minutes > 0) return `${minutes}分钟`;
+  return "即将到期";
 }
 
 function formatRatio(site: SiteListItem) {
-  if (site.ratioInfinite) return '∞'
-  if (site.ratio === undefined) return '-'
-  return site.ratio.toFixed(2)
+  if (site.ratioInfinite) return "∞";
+  if (site.ratio === undefined) return "-";
+  return site.ratio.toFixed(2);
 }
 
 function formatBytes(value?: number) {
-  if (value === undefined) return '-'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = value
-  let unitIndex = 0
+  if (value === undefined) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
+    size /= 1024;
+    unitIndex += 1;
   }
-  const maximumFractionDigits = unitIndex === 0 ? 0 : 2
-  const formatted = new Intl.NumberFormat('zh-CN', {
+  const maximumFractionDigits = unitIndex === 0 ? 0 : 2;
+  const formatted = new Intl.NumberFormat("zh-CN", {
     minimumFractionDigits: 0,
-    maximumFractionDigits
-  }).format(size)
-  return `${formatted} ${units[unitIndex]}`
+    maximumFractionDigits,
+  }).format(size);
+  return `${formatted} ${units[unitIndex]}`;
 }
 
 function restoreUserAgent() {
-  form.userAgent = navigator.userAgent
+  form.userAgent = navigator.userAgent;
 }
 
 function closeForm() {
-  formVisible.value = false
+  formVisible.value = false;
 }
 
 function closeBrowse() {
-  browseVisible.value = false
+  browseVisible.value = false;
 }
 
 async function loadSites() {
-  loading.value = true
-  error.value = ''
+  loading.value = true;
+  error.value = "";
   try {
-    const result = await getSites({ ...filters, page: 1, pageSize: 50 })
-    items.value = result.items
-    stats.value = result.stats
+    const result = await getSites({ ...filters, page: 1, pageSize: 50 });
+    items.value = result.items;
+    stats.value = result.stats;
     await router.replace({
       query: {
         keyword: filters.keyword || undefined,
-        connectivityStatus: filters.connectivityStatus === 'ALL' ? undefined : filters.connectivityStatus,
-        enabled: filters.enabled === 'ALL' ? undefined : filters.enabled,
-        signinEnabled: filters.signinEnabled === 'ALL' ? undefined : filters.signinEnabled
-      }
-    })
+        connectivityStatus:
+          filters.connectivityStatus === "ALL"
+            ? undefined
+            : filters.connectivityStatus,
+        enabled: filters.enabled === "ALL" ? undefined : filters.enabled,
+        signinEnabled:
+          filters.signinEnabled === "ALL" ? undefined : filters.signinEnabled,
+      },
+    });
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '站点列表加载失败'
+    error.value = err instanceof Error ? err.message : "站点列表加载失败";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function openSite(site: SiteListItem) {
-  window.open(site.baseUrl, '_blank', 'noopener,noreferrer')
+  window.open(site.baseUrl, "_blank", "noopener,noreferrer");
 }
 
 function openCreate() {
-  resetForm()
-  formVisible.value = true
+  resetForm();
+  formVisible.value = true;
 }
 
 async function openEdit(site: SiteListItem) {
-  resetForm()
-  const detail = await getSite(site.id)
-  editingSiteId.value = detail.id
-  detailHasApiKey.value = detail.hasApiKey
-  detailHasCookie.value = detail.hasCookie
+  resetForm();
+  const detail = await getSite(site.id);
+  editingSiteId.value = detail.id;
+  detailHasApiKey.value = detail.hasApiKey;
+  detailHasCookie.value = detail.hasCookie;
   Object.assign(form, {
     domain: detail.domain,
     enabled: detail.enabled,
-    apiKey: detail.apiKey || '',
-    cookie: detail.cookie || '',
+    apiKey: detail.apiKey || "",
+    cookie: detail.cookie || "",
     userAgent: detail.userAgent || navigator.userAgent,
     signinEnabled: detail.signinEnabled,
-    signinTime: detail.signinTime || '09:00'
-  })
-  originalApiKey.value = detail.apiKey || ''
-  originalCookie.value = detail.cookie || ''
-  formVisible.value = true
+    signinTime: detail.signinTime || "09:00",
+  });
+  originalApiKey.value = detail.apiKey || "";
+  originalCookie.value = detail.cookie || "";
+  formVisible.value = true;
 }
 
 function validateForm() {
-  if (!form.domain.trim()) return '站点域名不能为空'
+  if (!form.domain.trim()) return "站点域名不能为空";
   try {
-    new URL(form.domain.includes('://') ? form.domain : `https://${form.domain}`)
+    new URL(
+      form.domain.includes("://") ? form.domain : `https://${form.domain}`,
+    );
   } catch {
-    return '站点域名必须是合法域名或 URL'
+    return "站点域名必须是合法域名或 URL";
   }
-  if (!form.apiKey?.trim() && !form.cookie?.trim() && !detailHasApiKey.value && !detailHasCookie.value) return 'API Key 和 Cookie 至少填写一个'
-  if (form.signinEnabled && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.signinTime?.trim() ?? '')) return '签到时间必须是 HH:mm 格式'
-  return ''
+  if (
+    !form.apiKey?.trim() &&
+    !form.cookie?.trim() &&
+    !detailHasApiKey.value &&
+    !detailHasCookie.value
+  )
+    return "API Key 和 Cookie 至少填写一个";
+  if (
+    form.signinEnabled &&
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.signinTime?.trim() ?? "")
+  )
+    return "签到时间必须是 HH:mm 格式";
+  return "";
 }
 
 function buildSitePayload(): SiteFormPayload {
   return {
     domain: form.domain.trim(),
     enabled: form.enabled,
-    apiKey: editingSiteId.value && form.apiKey === originalApiKey.value ? originalApiKey.value || undefined : form.apiKey?.trim() || undefined,
-    cookie: editingSiteId.value && form.cookie === originalCookie.value ? originalCookie.value || undefined : form.cookie?.trim() || undefined,
+    apiKey:
+      editingSiteId.value && form.apiKey === originalApiKey.value
+        ? originalApiKey.value || undefined
+        : form.apiKey?.trim() || undefined,
+    cookie:
+      editingSiteId.value && form.cookie === originalCookie.value
+        ? originalCookie.value || undefined
+        : form.cookie?.trim() || undefined,
     userAgent: form.userAgent?.trim() || undefined,
     signinEnabled: form.signinEnabled,
-    signinTime: form.signinEnabled ? (form.signinTime?.trim() || '09:00') : (form.signinTime?.trim() || '09:00')
-  }
+    signinTime: form.signinEnabled
+      ? form.signinTime?.trim() || "09:00"
+      : form.signinTime?.trim() || "09:00",
+  };
 }
 
 async function saveSite() {
-  const validation = validateForm()
+  const validation = validateForm();
   if (validation) {
-    Snackbar.warning(validation)
-    return
+    Snackbar.warning(validation);
+    return;
   }
 
-  saving.value = true
+  saving.value = true;
   try {
-    const payload = buildSitePayload()
-    editingSiteId.value ? await updateSite(editingSiteId.value, payload) : await createSite(payload)
-    formVisible.value = false
+    const payload = buildSitePayload();
+    editingSiteId.value
+      ? await updateSite(editingSiteId.value, payload)
+      : await createSite(payload);
+    formVisible.value = false;
     if (payload.signinEnabled && !signinSupportedForForm) {
-      Snackbar.warning('此站点不支持签到功能，自动签到将被忽略')
+      Snackbar.warning("此站点不支持签到功能，自动签到将被忽略");
     } else {
-      Snackbar.success('站点已保存，正在后台更新')
+      Snackbar.success("站点已保存，正在后台更新");
     }
-    await loadSites()
-    startUpdatePolling()
+    await loadSites();
+    startUpdatePolling();
   } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : '保存失败')
+    Snackbar.error(err instanceof Error ? err.message : "保存失败");
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 async function triggerSiteUpdate(site: SiteListItem) {
-  if (site.updating) return
-  const target = items.value.find((item) => item.id === site.id)
-  if (target) target.updating = true
+  if (site.updating) return;
+  const target = items.value.find((item) => item.id === site.id);
+  if (target) target.updating = true;
   try {
-    await updateSiteInfo(site.id)
-    Snackbar.success('站点信息正在后台更新')
-    startUpdatePolling()
+    await updateSiteInfo(site.id);
+    Snackbar.success("站点信息正在后台更新");
+    startUpdatePolling();
   } catch (err) {
-    if (target) target.updating = false
-    Snackbar.error(err instanceof Error ? err.message : '更新失败')
+    if (target) target.updating = false;
+    Snackbar.error(err instanceof Error ? err.message : "更新失败");
   }
 }
 
 function stopUpdatePolling() {
-  if (updatePollingTimer !== undefined) window.clearTimeout(updatePollingTimer)
-  updatePollingTimer = undefined
+  if (updatePollingTimer !== undefined) window.clearTimeout(updatePollingTimer);
+  updatePollingTimer = undefined;
 }
 
 function startUpdatePolling() {
-  if (updatePollingTimer !== undefined) return
+  if (updatePollingTimer !== undefined) return;
   updatePollingTimer = window.setTimeout(async () => {
-    updatePollingTimer = undefined
-    await loadSites()
-    if (items.value.some((site) => site.updating)) startUpdatePolling()
-  }, 3000)
+    updatePollingTimer = undefined;
+    await loadSites();
+    if (items.value.some((site) => site.updating)) startUpdatePolling();
+  }, 3000);
 }
 
 async function triggerAutomaticUpdate() {
   try {
-    const result = await updateAllSites()
+    const result = await updateAllSites();
     if (result.acceptedCount > 0 || result.alreadyRunning) {
-      await loadSites()
-      startUpdatePolling()
+      await loadSites();
+      startUpdatePolling();
     }
   } catch (err) {
-    console.warn('自动更新站点信息失败', err)
+    console.warn("自动更新站点信息失败", err);
   }
 }
 
 async function triggerSignin(site: SiteListItem) {
   if (!site.signinSupported) {
-    Snackbar.warning('此站点不支持签到功能')
-    return
+    Snackbar.warning("此站点不支持签到功能");
+    return;
   }
   if (site.signinRunning) {
-    Snackbar.warning('该站点签到正在执行中')
-    return
+    Snackbar.warning("该站点签到正在执行中");
+    return;
   }
-  const target = items.value.find((item) => item.id === site.id)
-  if (target) target.signinRunning = true
+  const target = items.value.find((item) => item.id === site.id);
+  if (target) target.signinRunning = true;
   try {
-    const result = await triggerSiteSignin(site.id)
-    if (result.status === 'SUCCESS') {
-      Snackbar.success(result.message)
-    } else if (result.status === 'SKIPPED' || result.status === 'UNSUPPORTED') {
-      Snackbar.warning(result.message)
+    const result = await triggerSiteSignin(site.id);
+    if (result.status === "SUCCESS") {
+      Snackbar.success(result.message);
+    } else if (result.status === "SKIPPED" || result.status === "UNSUPPORTED") {
+      Snackbar.warning(result.message);
     } else {
-      Snackbar.error(result.errorMessage || result.message || '签到失败')
+      Snackbar.error(result.errorMessage || result.message || "签到失败");
     }
   } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : '签到失败')
+    Snackbar.error(err instanceof Error ? err.message : "签到失败");
   } finally {
-    await loadSites()
+    await loadSites();
   }
 }
 
 async function openBrowse(site: SiteListItem) {
-  browsingSite.value = site
-  browseVisible.value = true
-  browseItems.value = []
-  browseTotal.value = 0
-  browseError.value = ''
-  browseFilters.keyword = ''
-  browseFilters.category = ''
-  browseFilters.page = 1
-  await loadBrowseTorrents()
+  browsingSite.value = site;
+  browseVisible.value = true;
+  browseItems.value = [];
+  browseTotal.value = 0;
+  browseError.value = "";
+  browseFilters.keyword = "";
+  browseFilters.category = "";
+  browseFilters.page = 1;
+  await loadBrowseTorrents();
 }
 
 async function loadBrowseTorrents() {
-  if (!browsingSite.value) return
-  browseLoading.value = true
-  browseError.value = ''
+  if (!browsingSite.value) return;
+  browseLoading.value = true;
+  browseError.value = "";
   try {
-    const result = await browseSiteTorrents(browsingSite.value.id, { ...browseFilters })
-    browseItems.value = result.items
-    browseTotal.value = result.total
+    const result = await browseSiteTorrents(browsingSite.value.id, {
+      ...browseFilters,
+    });
+    browseItems.value = result.items;
+    browseTotal.value = result.total;
   } catch (err) {
-    browseError.value = err instanceof Error ? err.message : '种子列表获取失败'
-    browseItems.value = []
-    browseTotal.value = 0
+    browseError.value = err instanceof Error ? err.message : "种子列表获取失败";
+    browseItems.value = [];
+    browseTotal.value = 0;
   } finally {
-    browseLoading.value = false
+    browseLoading.value = false;
   }
 }
 
 async function removeSite(site: SiteListItem) {
-  if (!window.confirm(`确认删除站点「${site.displayName}」？`)) return
-  await deleteSite(site.id)
-  Snackbar.success('站点已删除')
-  await loadSites()
+  if (!window.confirm(`确认删除站点「${site.displayName}」？`)) return;
+  await deleteSite(site.id);
+  Snackbar.success("站点已删除");
+  await loadSites();
 }
 
 function resetFilters() {
-  filters.keyword = ''
-  filters.connectivityStatus = 'ALL'
-  filters.enabled = 'ALL'
-  filters.signinEnabled = 'ALL'
-  loadSites()
+  filters.keyword = "";
+  filters.connectivityStatus = "ALL";
+  filters.enabled = "ALL";
+  filters.signinEnabled = "ALL";
+  loadSites();
 }
 
 async function handleExport() {
   try {
-    const { blob, filename } = await exportSites()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
-    Snackbar.success('站点配置已导出')
+    const { blob, filename } = await exportSites();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    Snackbar.success("站点配置已导出");
   } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : '导出失败')
+    Snackbar.error(err instanceof Error ? err.message : "导出失败");
   }
 }
 
 function triggerImport() {
-  importInputRef.value?.click()
+  importInputRef.value?.click();
 }
 
 async function handleImport(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
   try {
-    const result = await importSites(file)
-    Snackbar.success(`导入完成：成功 ${result.imported} 个，失败 ${result.failed} 个`)
+    const result = await importSites(file);
+    Snackbar.success(
+      `导入完成：成功 ${result.imported} 个，失败 ${result.failed} 个`,
+    );
     if (result.errors.length) {
-      result.errors.forEach((msg) => Snackbar.warning(msg))
+      result.errors.forEach((msg) => Snackbar.warning(msg));
     }
-    await loadSites()
+    await loadSites();
   } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : '导入失败')
+    Snackbar.error(err instanceof Error ? err.message : "导入失败");
   } finally {
-    input.value = ''
+    input.value = "";
   }
 }
 
 onMounted(async () => {
-  if (route.query.action === 'create') openCreate()
-  await loadSites()
-  await triggerAutomaticUpdate()
-})
+  if (route.query.action === "create") openCreate();
+  await loadSites();
+  await triggerAutomaticUpdate();
+});
 
-onBeforeUnmount(stopUpdatePolling)
+onBeforeUnmount(stopUpdatePolling);
 </script>
