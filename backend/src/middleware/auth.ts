@@ -5,13 +5,13 @@ import { getSessionUserId } from '../utils/session.js'
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const userId = getSessionUserId(req)
   if (!userId) {
-    res.status(401).json({ message: '登录态已过期，请重新登录' })
+    res.status(401).json({ message: '未登录或登录凭据无效，请重新登录' })
     return
   }
 
   const user = await findUserById(userId)
   if (!user) {
-    res.status(401).json({ message: '登录态已过期，请重新登录' })
+    res.status(401).json({ message: '未登录或登录凭据无效，请重新登录' })
     return
   }
 

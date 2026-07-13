@@ -57,7 +57,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 
   if (response.status === 401 && !isLoginRequest(path)) {
     await handleUnauthorized()
-    throw new Error('登录态已过期，请重新登录')
+    throw new Error('未登录或登录凭据无效，请重新登录')
   }
 
   const data = (await response.json().catch(() => ({}))) as { message?: string }

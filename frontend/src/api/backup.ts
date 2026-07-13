@@ -59,7 +59,7 @@ export async function triggerBrowserDownload(name: string) {
   if (response.status === 401) {
     const { handleUnauthorized } = await import('./client')
     await handleUnauthorized()
-    throw new Error('登录态已过期，请重新登录')
+    throw new Error('未登录或登录凭据无效，请重新登录')
   }
   if (response.status === 404) {
     const data = (await response.json().catch(() => ({}))) as { message?: string }

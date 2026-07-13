@@ -169,7 +169,7 @@ export async function exportTasks() {
   const response = await fetch('/api/tasks/export', { credentials: 'include' })
   if (response.status === 401) {
     await handleUnauthorized()
-    throw new Error('登录态已过期，请重新登录')
+    throw new Error('未登录或登录凭据无效，请重新登录')
   }
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as { message?: string }

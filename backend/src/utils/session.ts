@@ -23,12 +23,11 @@ function shouldUseSecureCookie(req: Request) {
   return req.secure || forwardedProto === 'https'
 }
 
-function createSessionToken(userId: string, ttlHours: number) {
+function createSessionToken(userId: string) {
   const payload = Buffer.from(
     JSON.stringify({
       userId,
-      nonce: randomBytes(8).toString('hex'),
-      expiresAt: Date.now() + ttlHours * 60 * 60 * 1000
+      nonce: randomBytes(8).toString('hex')
     })
   ).toString('base64url')
   return `${payload}.${sign(payload)}`
@@ -41,11 +40,7 @@ function readSessionToken(token: unknown) {
   if (!payload || !signature || !safeEqual(signature, sign(payload))) return undefined
 
   try {
-    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
-      userId?: string
-      expiresAt?: number
-    }
-    if (typeof parsed.expiresAt === 'number' && parsed.expiresAt < Date.now()) return undefined
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { userId?: string }
     return parsed.userId
   } catch {
     return undefined
@@ -58,13 +53,12 @@ function getBearerToken(req: Request) {
   return match?.[1]
 }
 
-export function setSession(req: Request, res: Response, userId: string, ttlHours = 168) {
-  const token = createSessionToken(userId, ttlHours)
+export function setSession(req: Request, res: Response, userId: string) {
+  const token = createSessionToken(userId)
   res.cookie(cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: shouldUseSecureCookie(req),
-    maxAge: ttlHours * 60 * 60 * 1000,
     path: '/'
   })
   return token

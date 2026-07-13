@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { findUserById, findUserByUsername, readSystemSettings, updateUserLastLoginAt, updateUserPassword, type UserRecord } from '../storage.js'
+import { findUserById, findUserByUsername, updateUserLastLoginAt, updateUserPassword, type UserRecord } from '../storage.js'
 import { clearSession, getSessionUserId, setSession } from '../utils/session.js'
 import { recordOperationLog } from '../utils/logger.js'
 import { createPasswordHash, verifyPassword } from '../utils/password.js'
@@ -93,8 +93,7 @@ authRouter.post('/login', async (req, res) => {
   const lastLoginAt = new Date().toISOString()
   await updateUserLastLoginAt(user.id, lastLoginAt)
   user.lastLoginAt = lastLoginAt
-  const settings = await readSystemSettings()
-  const sessionToken = setSession(req, res, user.id, settings.sessionTtlHours)
+  const sessionToken = setSession(req, res, user.id)
   await recordOperationLog({
     action: 'AUTH_LOGIN',
     message: `用户 ${user.username} 登录成功`,
@@ -126,13 +125,13 @@ authRouter.post('/logout', async (req, res) => {
 authRouter.get('/me', async (req, res) => {
   const userId = getSessionUserId(req)
   if (!userId) {
-    res.status(401).json({ message: '登录态已过期，请重新登录' })
+    res.status(401).json({ message: '未登录或登录凭据无效，请重新登录' })
     return
   }
 
   const user = await findUserById(userId)
   if (!user) {
-    res.status(401).json({ message: '登录态已过期，请重新登录' })
+    res.status(401).json({ message: '未登录或登录凭据无效，请重新登录' })
     return
   }
 

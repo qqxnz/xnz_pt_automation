@@ -4,7 +4,7 @@
       <CCPageHeader
         eyebrow="系统设置"
         title="系统设置"
-        description="管理密码、运行参数、系统信息与数据库备份恢复。"
+        description="管理密码、系统信息与数据库备份恢复。"
         meta="系统信息已同步"
       >
         <template #actions>
@@ -18,16 +18,12 @@
         </template>
       </CCPageHeader>
 
-      <div v-if="infoError || settingsError" class="error-banner">
-        {{ infoError || settingsError }}
+      <div v-if="infoError" class="error-banner">
+        {{ infoError }}
         <button type="button" @click="loadAll">重试</button>
       </div>
 
       <nav class="cc-settings-mobile-nav" aria-label="系统设置分区">
-        <button type="button" @click="scrollToSettingsSection('base')">
-          <strong>基础参数</strong><span>会话、并发、超时与 User-Agent</span
-          ><i>只读</i>
-        </button>
         <button type="button" @click="scrollToSettingsSection('info')">
           <strong>系统信息</strong><span>版本、数据库与存储目录</span
           ><i class="success">正常</i>
@@ -81,54 +77,6 @@
         </div>
         <div v-else-if="loadingInfo" class="empty-tip">系统信息加载中...</div>
         <div v-else class="empty-tip">暂时无法获取系统信息。</div>
-      </section>
-
-      <section
-        class="cc-card settings-card cc-settings-base"
-        ref="settingsSection"
-      >
-        <div class="panel-title-row">
-          <h2>基础参数</h2>
-          <span>{{ loadingSettings ? "加载中..." : "只读信息" }}</span>
-        </div>
-        <div class="settings-groups cc-settings-groups-horizontal">
-          <section ref="sessionSection">
-            <h3>会话</h3>
-            <div class="settings-form two-columns">
-              <label
-                >登录态有效期（小时）<input
-                  v-model.number="settingsForm.sessionTtlHours"
-                  type="number"
-                  readonly
-                  min="1"
-                  max="720" /></label
-              ><label
-                >最大并发任务数<input
-                  v-model.number="settingsForm.maxConcurrentTasks"
-                  type="number"
-                  readonly
-                  min="1"
-                  max="10"
-              /></label>
-            </div>
-          </section>
-          <section ref="networkSection">
-            <h3>网络</h3>
-            <div class="settings-form two-columns">
-              <label
-                >请求超时时间（ms）<input
-                  v-model.number="settingsForm.requestTimeoutMs"
-                  type="number"
-                  readonly
-                  min="3000"
-                  max="120000"
-                  step="1000" /></label
-              ><label class="wide-field"
-                >当前 User-Agent<input :value="currentUserAgent" readonly
-              /></label>
-            </div>
-          </section>
-        </div>
       </section>
 
       <section class="cc-card settings-card" ref="backupSection">
@@ -329,32 +277,21 @@ import {
 import {
   changePassword,
   getSystemInfo,
-  getSystemSettings,
   type SystemInfo,
-  type SystemSettings,
 } from "../api/settings";
 
 const route = useRoute();
 const loadingInfo = ref(false);
-const loadingSettings = ref(false);
 const changingPassword = ref(false);
 const passwordDialogOpen = ref(false);
 const infoError = ref("");
-const settingsError = ref("");
 const systemInfo = ref<SystemInfo>();
-const settingsSection = ref<HTMLElement>();
-const sessionSection = ref<HTMLElement>();
-const networkSection = ref<HTMLElement>();
 const backupSection = ref<HTMLElement>();
 const infoSection = ref<HTMLElement>();
 
-function scrollToSettingsSection(section: "base" | "info" | "backup") {
+function scrollToSettingsSection(section: "info" | "backup") {
   const target =
-    section === "base"
-      ? settingsSection.value
-      : section === "info"
-        ? infoSection.value
-        : backupSection.value;
+    section === "info" ? infoSection.value : backupSection.value;
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 const backups = ref<BackupItem[]>([]);
@@ -389,13 +326,6 @@ function closePasswordDialog() {
   });
 }
 
-const settingsForm = reactive<SystemSettings>({
-  sessionTtlHours: 168,
-  requestTimeoutMs: 15000,
-  maxConcurrentTasks: 2,
-  defaultUserAgent: navigator.userAgent,
-});
-const currentUserAgent = navigator.userAgent;
 const systemInfoGroups = computed(() => {
   const info = systemInfo.value;
   if (!info) return [];
@@ -492,22 +422,8 @@ async function loadInfo() {
   }
 }
 
-async function loadSettings() {
-  loadingSettings.value = true;
-  settingsError.value = "";
-  try {
-    const result = await getSystemSettings();
-    Object.assign(settingsForm, result.settings);
-  } catch (err) {
-    settingsError.value =
-      err instanceof Error ? err.message : "系统设置加载失败";
-  } finally {
-    loadingSettings.value = false;
-  }
-}
-
 async function loadAll() {
-  await Promise.all([loadInfo(), loadSettings(), loadBackups()]);
+  await Promise.all([loadInfo(), loadBackups()]);
 }
 
 async function loadBackups() {
@@ -649,14 +565,7 @@ async function focusSection() {
     openPasswordDialog();
     return;
   }
-  const target =
-    section === "network"
-      ? networkSection.value
-      : section === "session"
-        ? sessionSection.value
-        : section === "backup"
-          ? backupSection.value
-          : settingsSection.value;
+  const target = section === "backup" ? backupSection.value : infoSection.value;
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 

@@ -912,13 +912,6 @@
   font-size: 12px;
   white-space: nowrap;
 }
-.cc-settings-base input[readonly] {
-  cursor: not-allowed;
-  color: #516077;
-  border-color: #e3e8ef;
-  background: #f5f7fa;
-  box-shadow: none;
-}
 .settings-password-dialog {
   width: min(520px, calc(100vw - 32px));
 }
@@ -1021,9 +1014,6 @@
 }
 .settings-system-details[open] summary {
   margin-bottom: 18px;
-}
-.settings-page .cc-settings-base {
-  margin-top: 0;
 }
 .settings-page .backup-summary {
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1734,20 +1724,6 @@
 .settings-grid > .settings-card {
   grid-area: info;
 }
-.cc-settings-base {
-  margin-top: 18px;
-}
-.cc-settings-groups-horizontal {
-  display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 24px;
-}
-.cc-settings-groups-horizontal > section + section {
-  margin: 0;
-  padding: 0 0 0 24px;
-  border-top: 0;
-  border-left: 1px solid var(--cc-border);
-}
 
 .settings-grid-left > .settings-card:first-child .settings-form {
   display: grid;
@@ -2034,15 +2010,6 @@
   .settings-grid-left > .settings-card:first-child .settings-form {
     grid-template-columns: 1fr;
   }
-  .cc-settings-groups-horizontal {
-    grid-template-columns: 1fr;
-  }
-  .cc-settings-groups-horizontal > section + section {
-    padding: 18px 0 0;
-    border-top: 1px solid var(--cc-border);
-    border-left: 0;
-  }
-
   .torrent-batch-bar {
     bottom: calc(70px + env(safe-area-inset-bottom));
     left: 12px;
