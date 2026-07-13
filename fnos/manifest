@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.29
+version=0.6.30
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.29<br/>简化卸载步骤：移除「是否删除数据」开关，改为数据保留说明；应用启动名规范化 qqxnz.pta。
+changelog=0.6.30<br/>取消登录态自动过期限制；系统设置移除「基础参数」卡片及无效配置展示。
