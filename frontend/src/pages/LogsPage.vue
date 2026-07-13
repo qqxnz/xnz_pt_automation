@@ -88,10 +88,16 @@
             <option value="torrent">种子日志</option>
           </select>
         </label>
-        <span>{{ total }} 条记录</span>
+        <span>{{ loading ? "加载中..." : `${total} 条记录` }}</span>
       </div>
 
-      <div v-if="items.length" class="log-list">
+      <CCStateView
+        v-if="loading"
+        title="日志加载中..."
+        :description="`正在读取${activeTypeText}，请稍候。`"
+        tone="loading"
+      />
+      <div v-else-if="items.length" class="log-list">
         <article v-for="item in items" :key="item.id" class="log-row">
           <div class="log-meta">
             <time>{{ formatTime(item.createdAt) }}</time>
@@ -117,7 +123,7 @@
         description="切换分类或刷新后再查看。"
       />
 
-      <div class="pager">
+      <div v-if="!loading" class="pager">
         <button
           type="button"
           :disabled="page <= 1 || loading"
@@ -181,6 +187,7 @@ const lastUpdatedAt = ref("");
 const page = ref(1);
 const pageSize = 20;
 const total = ref(0);
+let loadRequestId = 0;
 
 const items = computed(() => {
   if (activeType.value === "operation") return operationLogs.value;
@@ -445,35 +452,44 @@ async function clearCurrentLogs() {
 }
 
 async function loadLogs() {
+  const requestId = ++loadRequestId;
+  const requestedType = activeType.value;
+  const requestedPage = page.value;
   loading.value = true;
   error.value = "";
   try {
-    if (activeType.value === "operation") {
-      const result = await getLogs("operation", page.value, pageSize);
+    if (requestedType === "operation") {
+      const result = await getLogs("operation", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
       operationLogs.value = result.items;
       total.value = result.total;
-    } else if (activeType.value === "schedule") {
-      const result = await getLogs("schedule", page.value, pageSize);
+    } else if (requestedType === "schedule") {
+      const result = await getLogs("schedule", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
       scheduleLogs.value = result.items;
       total.value = result.total;
-    } else if (activeType.value === "signin") {
-      const result = await getLogs("signin", page.value, pageSize);
+    } else if (requestedType === "signin") {
+      const result = await getLogs("signin", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
       signinLogs.value = result.items;
       total.value = result.total;
-    } else if (activeType.value === "torrent") {
-      const result = await getLogs("torrent", page.value, pageSize);
+    } else if (requestedType === "torrent") {
+      const result = await getLogs("torrent", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
       torrentLogs.value = result.items;
       total.value = result.total;
     } else {
-      const result = await getLogs("task", page.value, pageSize);
+      const result = await getLogs("task", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
       taskLogs.value = result.items;
       total.value = result.total;
     }
     lastUpdatedAt.value = new Date().toLocaleString("zh-CN");
   } catch (err) {
+    if (requestId !== loadRequestId) return;
     error.value = err instanceof Error ? err.message : "日志加载失败";
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) loading.value = false;
   }
 }
 

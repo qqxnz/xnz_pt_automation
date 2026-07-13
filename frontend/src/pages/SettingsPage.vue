@@ -5,16 +5,15 @@
         eyebrow="系统设置"
         title="系统设置"
         description="管理密码、运行参数、系统信息与数据库备份恢复。"
-        :meta="dirty ? '有未保存修改' : lastSavedText"
+        meta="系统信息已同步"
       >
         <template #actions>
           <button
             class="primary-button compact"
             type="button"
-            :disabled="!dirty || savingSettings"
-            @click="saveSettings"
+            @click="openPasswordDialog"
           >
-            {{ savingSettings ? "保存中..." : "保存设置" }}
+            修改密码
           </button>
         </template>
       </CCPageHeader>
@@ -25,13 +24,9 @@
       </div>
 
       <nav class="cc-settings-mobile-nav" aria-label="系统设置分区">
-        <button type="button" @click="openPasswordDialog">
-          <strong>修改密码</strong><span>旧密码、新密码与确认密码</span
-          ><i>配置</i>
-        </button>
         <button type="button" @click="scrollToSettingsSection('base')">
           <strong>基础参数</strong><span>会话、并发、超时与 User-Agent</span
-          ><i>配置</i>
+          ><i>只读</i>
         </button>
         <button type="button" @click="scrollToSettingsSection('info')">
           <strong>系统信息</strong><span>版本、数据库与存储目录</span
@@ -43,64 +38,50 @@
         </button>
       </nav>
 
-      <div class="settings-grid">
-        <div class="settings-grid-left">
-          <section
-            class="cc-card settings-card settings-password-entry"
-            ref="passwordSection"
-          >
-            <div class="panel-title-row">
-              <h2>修改密码</h2>
-              <span>当前会话保持有效</span>
-            </div>
-            <p>定期更新管理员密码，修改成功后当前会话不会退出。</p>
-            <button
-              class="secondary-button blue"
-              type="button"
-              @click="openPasswordDialog"
-            >
-              修改密码
-            </button>
-          </section>
-        </div>
-
-        <section ref="infoSection" class="cc-card settings-card">
-          <div class="panel-title-row">
+      <section
+        ref="infoSection"
+        class="cc-card settings-card settings-info-card"
+      >
+        <div class="panel-title-row">
+          <div>
             <h2>系统信息</h2>
+            <p>版本、运行环境、数据库和存储目录</p>
+          </div>
+          <div class="settings-info-actions">
             <span>{{ loadingInfo ? "加载中..." : "运行中" }}</span>
           </div>
-          <div v-if="systemInfo" class="system-info-sections">
-            <section
-              v-for="group in systemInfoGroups"
-              :key="group.title"
-              class="system-info-group"
-            >
-              <h3>{{ group.title }}</h3>
-              <div class="settings-info-grid">
-                <article
-                  v-for="item in group.items"
-                  :key="item.label"
-                  :class="{ 'path-info-item': item.copyable }"
+        </div>
+        <div v-if="systemInfo" class="system-info-sections">
+          <section
+            v-for="group in systemInfoGroups"
+            :key="group.title"
+            class="system-info-group"
+          >
+            <h3>{{ group.title }}</h3>
+            <div class="settings-info-grid">
+              <article
+                v-for="item in group.items"
+                :key="item.label"
+                :class="{ 'path-info-item': item.copyable }"
+              >
+                <span>{{ item.label }}</span>
+                <strong :title="item.value">{{ item.value }}</strong>
+                <button
+                  v-if="item.copyable"
+                  class="text-button"
+                  type="button"
+                  :aria-label="`复制${item.label}`"
+                  @click="copySystemValue(item.value)"
                 >
-                  <span>{{ item.label }}</span>
-                  <strong :title="item.value">{{ item.value }}</strong>
-                  <button
-                    v-if="item.copyable"
-                    class="text-button"
-                    type="button"
-                    :aria-label="`复制${item.label}`"
-                    @click="copySystemValue(item.value)"
-                  >
-                    复制
-                  </button>
-                </article>
-              </div>
-            </section>
-          </div>
-          <div v-else-if="loadingInfo" class="empty-tip">系统信息加载中...</div>
-          <div v-else class="empty-tip">暂时无法获取系统信息。</div>
-        </section>
-      </div>
+                  复制
+                </button>
+              </article>
+            </div>
+          </section>
+        </div>
+        <div v-else-if="loadingInfo" class="empty-tip">系统信息加载中...</div>
+        <div v-else class="empty-tip">暂时无法获取系统信息。</div>
+      </section>
 
       <section
         class="cc-card settings-card cc-settings-base"
@@ -108,7 +89,7 @@
       >
         <div class="panel-title-row">
           <h2>基础参数</h2>
-          <span>{{ loadingSettings ? "加载中..." : "一次保存全部参数" }}</span>
+          <span>{{ loadingSettings ? "加载中..." : "只读信息" }}</span>
         </div>
         <div class="settings-groups cc-settings-groups-horizontal">
           <section ref="sessionSection">
@@ -118,12 +99,14 @@
                 >登录态有效期（小时）<input
                   v-model.number="settingsForm.sessionTtlHours"
                   type="number"
+                  readonly
                   min="1"
                   max="720" /></label
               ><label
                 >最大并发任务数<input
                   v-model.number="settingsForm.maxConcurrentTasks"
                   type="number"
+                  readonly
                   min="1"
                   max="10"
               /></label>
@@ -136,12 +119,12 @@
                 >请求超时时间（ms）<input
                   v-model.number="settingsForm.requestTimeoutMs"
                   type="number"
+                  readonly
                   min="3000"
                   max="120000"
                   step="1000" /></label
               ><label class="wide-field"
-                >默认 User-Agent<input
-                  v-model.trim="settingsForm.defaultUserAgent"
+                >当前 User-Agent<input :value="currentUserAgent" readonly
               /></label>
             </div>
           </section>
@@ -331,15 +314,8 @@
 
 <script setup lang="ts">
 import { Dialog, Snackbar } from "@varlet/ui";
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-} from "vue";
-import { onBeforeRouteLeave, useRoute } from "vue-router";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import AppLayout from "../components/AppLayout.vue";
 import CCPageHeader from "../components/CCPageHeader.vue";
 import {
@@ -354,7 +330,6 @@ import {
   changePassword,
   getSystemInfo,
   getSystemSettings,
-  updateSystemSettings,
   type SystemInfo,
   type SystemSettings,
 } from "../api/settings";
@@ -362,32 +337,24 @@ import {
 const route = useRoute();
 const loadingInfo = ref(false);
 const loadingSettings = ref(false);
-const savingSettings = ref(false);
 const changingPassword = ref(false);
 const passwordDialogOpen = ref(false);
 const infoError = ref("");
 const settingsError = ref("");
 const systemInfo = ref<SystemInfo>();
-const savedSettings = ref<SystemSettings>();
-const settingsUpdatedAt = ref<string>();
-const passwordSection = ref<HTMLElement>();
 const settingsSection = ref<HTMLElement>();
 const sessionSection = ref<HTMLElement>();
 const networkSection = ref<HTMLElement>();
 const backupSection = ref<HTMLElement>();
 const infoSection = ref<HTMLElement>();
 
-function scrollToSettingsSection(
-  section: "password" | "base" | "info" | "backup",
-) {
+function scrollToSettingsSection(section: "base" | "info" | "backup") {
   const target =
-    section === "password"
-      ? passwordSection.value
-      : section === "base"
-        ? settingsSection.value
-        : section === "info"
-          ? infoSection.value
-          : backupSection.value;
+    section === "base"
+      ? settingsSection.value
+      : section === "info"
+        ? infoSection.value
+        : backupSection.value;
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 const backups = ref<BackupItem[]>([]);
@@ -428,17 +395,7 @@ const settingsForm = reactive<SystemSettings>({
   maxConcurrentTasks: 2,
   defaultUserAgent: navigator.userAgent,
 });
-
-const dirty = computed(
-  () =>
-    JSON.stringify(settingsForm) !==
-    JSON.stringify(savedSettings.value ?? settingsForm),
-);
-const lastSavedText = computed(() =>
-  settingsUpdatedAt.value
-    ? `保存于 ${formatDate(settingsUpdatedAt.value)}`
-    : "设置已同步",
-);
+const currentUserAgent = navigator.userAgent;
 const systemInfoGroups = computed(() => {
   const info = systemInfo.value;
   if (!info) return [];
@@ -541,8 +498,6 @@ async function loadSettings() {
   try {
     const result = await getSystemSettings();
     Object.assign(settingsForm, result.settings);
-    savedSettings.value = { ...result.settings };
-    settingsUpdatedAt.value = result.updatedAt;
   } catch (err) {
     settingsError.value =
       err instanceof Error ? err.message : "系统设置加载失败";
@@ -660,33 +615,6 @@ function validatePasswordForm() {
   return "";
 }
 
-function validateSettingsForm() {
-  if (
-    !Number.isInteger(settingsForm.sessionTtlHours) ||
-    settingsForm.sessionTtlHours < 1 ||
-    settingsForm.sessionTtlHours > 720
-  )
-    return "登录态有效期需在 1-720 小时之间";
-  if (
-    !Number.isInteger(settingsForm.maxConcurrentTasks) ||
-    settingsForm.maxConcurrentTasks < 1 ||
-    settingsForm.maxConcurrentTasks > 10
-  )
-    return "最大并发任务数需在 1-10 之间";
-  if (
-    !Number.isInteger(settingsForm.requestTimeoutMs) ||
-    settingsForm.requestTimeoutMs < 3000 ||
-    settingsForm.requestTimeoutMs > 120000
-  )
-    return "请求超时时间需在 3000-120000 ms 之间";
-  if (
-    settingsForm.defaultUserAgent.trim().length < 20 ||
-    settingsForm.defaultUserAgent.trim().length > 300
-  )
-    return "默认 User-Agent 需为 20-300 字";
-  return "";
-}
-
 async function submitPassword() {
   const error = validatePasswordForm();
   if (error) {
@@ -714,74 +642,31 @@ async function submitPassword() {
   }
 }
 
-async function saveSettings() {
-  const error = validateSettingsForm();
-  if (error) {
-    Snackbar.warning(error);
-    return;
-  }
-  savingSettings.value = true;
-  try {
-    const result = await updateSystemSettings({
-      ...settingsForm,
-      defaultUserAgent: settingsForm.defaultUserAgent.trim(),
-    });
-    Object.assign(settingsForm, result.settings);
-    savedSettings.value = { ...result.settings };
-    settingsUpdatedAt.value = result.updatedAt;
-    Snackbar.success("系统设置已保存");
-  } catch (err) {
-    Snackbar.error(err instanceof Error ? err.message : "设置保存失败");
-  } finally {
-    savingSettings.value = false;
-  }
-}
-
-function handleBeforeUnload(event: BeforeUnloadEvent) {
-  if (!dirty.value) return;
-  event.preventDefault();
-  event.returnValue = "";
-}
-
 async function focusSection() {
   await nextTick();
   const section = String(route.query.section ?? "");
+  if (section === "password") {
+    openPasswordDialog();
+    return;
+  }
   const target =
-    section === "password"
-      ? passwordSection.value
-      : section === "network"
-        ? networkSection.value
-        : section === "session"
-          ? sessionSection.value
-          : section === "backup"
-            ? backupSection.value
-            : settingsSection.value;
+    section === "network"
+      ? networkSection.value
+      : section === "session"
+        ? sessionSection.value
+        : section === "backup"
+          ? backupSection.value
+          : settingsSection.value;
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-onBeforeRouteLeave(() => {
-  if (!dirty.value) return true;
-  return window.confirm("系统设置尚未保存，确认离开？");
-});
-
 onMounted(async () => {
-  window.addEventListener("beforeunload", handleBeforeUnload);
   await loadAll();
   if (route.query.section) await focusSection();
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener("beforeunload", handleBeforeUnload);
 });
 </script>
 
 <style scoped>
-.settings-grid-left {
-  display: grid;
-  gap: 28px;
-  align-content: start;
-}
-
 .backup-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;

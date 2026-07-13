@@ -884,15 +884,30 @@
 .settings-page .panel-title-row h2 {
   font-size: 18px;
 }
-.settings-password-entry {
-  align-self: start;
+.settings-info-card .panel-title-row {
+  align-items: flex-start;
 }
-.settings-password-entry p {
-  max-width: 460px;
-  margin: 0 0 22px;
+.settings-info-card .panel-title-row p {
+  margin: 6px 0 0;
   color: var(--cc-muted);
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 12px;
+}
+.settings-info-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-info-actions > span {
+  color: var(--cc-success) !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cc-settings-base input[readonly] {
+  cursor: not-allowed;
+  color: #516077;
+  border-color: #e3e8ef;
+  background: #f5f7fa;
+  box-shadow: none;
 }
 .settings-password-dialog {
   width: min(520px, calc(100vw - 32px));
@@ -1024,6 +1039,14 @@
   }
   .settings-page .settings-grid {
     gap: 14px;
+  }
+  .settings-info-card .panel-title-row {
+    align-items: flex-start;
+  }
+  .settings-info-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 8px;
   }
   .settings-password-dialog {
     width: 100%;
