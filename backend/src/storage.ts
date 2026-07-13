@@ -349,6 +349,8 @@ export type TorrentStats = {
   total: number
   running: number
   notRunning: number
+  todayAdded: number
+  todaySiteCount: number
   auto: number
   manual: number
   pending: number
@@ -706,7 +708,8 @@ function createStructuredTables(db: DatabaseSync) {
       ipv6_peer_count INTEGER,
       total_peer_count INTEGER,
       peer_sync_rid INTEGER,
-      peer_synced_at TEXT
+      peer_synced_at TEXT,
+      push_unconfirmed INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS operation_logs (
       id TEXT PRIMARY KEY,
@@ -1806,11 +1809,14 @@ export async function listAllTorrents(query: Omit<TorrentQuery, 'page' | 'pageSi
 export async function readTorrentStats(): Promise<TorrentStats> {
   const db = await readyDb()
   const now = new Date().toISOString()
+  const { startIso, endIso } = localDayRangeIso(localDateKey(new Date()))
   const row = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN push_status = 'PUSHED' THEN 1 ELSE 0 END) AS running,
       SUM(CASE WHEN push_status IN ('PUSH_FAILED', 'DELETED') THEN 1 ELSE 0 END) AS not_running,
+      SUM(CASE WHEN first_seen_at >= ? AND first_seen_at < ? THEN 1 ELSE 0 END) AS today_added,
+      COUNT(DISTINCT CASE WHEN first_seen_at >= ? AND first_seen_at < ? THEN site_id END) AS today_site_count,
       SUM(CASE WHEN source_run_mode = 'AUTO' THEN 1 ELSE 0 END) AS auto_count,
       SUM(CASE WHEN source_run_mode = 'MANUAL_RUN' THEN 1 ELSE 0 END) AS manual_count,
       SUM(CASE WHEN push_status = 'NEW' THEN 1 ELSE 0 END) AS pending,
@@ -1819,11 +1825,13 @@ export async function readTorrentStats(): Promise<TorrentStats> {
       SUM(COALESCE(uploaded, 0)) AS total_uploaded,
       SUM(COALESCE(downloaded, 0)) AS total_downloaded
     FROM torrents
-  `).get(now) as any
+  `).get(startIso, endIso, startIso, endIso, now) as any
   return {
     total: Number(row.total ?? 0),
     running: Number(row.running ?? 0),
     notRunning: Number(row.not_running ?? 0),
+    todayAdded: Number(row.today_added ?? 0),
+    todaySiteCount: Number(row.today_site_count ?? 0),
     auto: Number(row.auto_count ?? 0),
     manual: Number(row.manual_count ?? 0),
     pending: Number(row.pending ?? 0),

@@ -127,6 +127,8 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       total: torrentStats.total,
       running: torrentStats.running,
       notRunning: torrentStats.notRunning,
+      todayAdded: torrentStats.todayAdded,
+      todaySiteCount: torrentStats.todaySiteCount,
       totalUploaded: torrentStats.totalUploaded,
       totalDownloaded: torrentStats.totalDownloaded
     },

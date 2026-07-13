@@ -196,53 +196,58 @@
               </div>
               <router-link to="/statistics">查看流量 →</router-link>
             </header>
-            <div class="cc-inline-metrics is-four">
-              <div>
-                <span>种子数量</span
-                ><strong>{{ overview?.torrents.total ?? 0 }}</strong>
+            <section class="cc-overview-metric-group" aria-label="种子数据">
+              <span class="cc-overview-metric-title">种子</span>
+              <div class="cc-inline-metrics is-four">
+                <div>
+                  <span>种子数量</span
+                  ><strong>{{ overview?.torrents.total ?? 0 }}</strong>
+                </div>
+                <div>
+                  <span>运行中</span
+                  ><strong class="is-success">{{
+                    overview?.torrents.running ?? 0
+                  }}</strong>
+                </div>
+                <div>
+                  <span>今日种子</span
+                  ><strong>{{ overview?.torrents.todayAdded ?? 0 }}</strong>
+                </div>
+                <div>
+                  <span>今日站点</span
+                  ><strong>{{ overview?.torrents.todaySiteCount ?? 0 }}</strong>
+                </div>
               </div>
-              <div>
-                <span>运行中</span
-                ><strong class="is-success">{{
-                  overview?.torrents.running ?? 0
-                }}</strong>
-              </div>
-              <div>
-                <span>总上传</span
-                ><strong>{{
-                  formatBytes(overview?.torrents.totalUploaded)
-                }}</strong>
-              </div>
-              <div>
-                <span>今日下载</span
-                ><strong>{{
-                  formatBytes(overview?.traffic.todayDownloaded)
-                }}</strong>
-              </div>
-            </div>
-            <details class="cc-detail-disclosure">
-              <summary>查看完整流量数据</summary>
-              <div class="cc-detail-values">
-                <span
-                  >未运行 <b>{{ overview?.torrents.notRunning ?? 0 }}</b></span
-                ><span
-                  >总下载
-                  <b>{{
-                    formatBytes(overview?.torrents.totalDownloaded)
-                  }}</b></span
-                ><span
-                  >今日上传
-                  <b>{{
-                    formatBytes(overview?.traffic.todayUploaded)
-                  }}</b></span
-                ><span
-                  >累计下载
-                  <b>{{
+            </section>
+            <section class="cc-overview-metric-group" aria-label="流量数据">
+              <span class="cc-overview-metric-title">流量</span>
+              <div class="cc-inline-metrics is-four">
+                <div>
+                  <span>总上传</span
+                  ><strong>{{
+                    formatBytes(overview?.traffic.uploadedTotal)
+                  }}</strong>
+                </div>
+                <div>
+                  <span>总下载</span
+                  ><strong>{{
                     formatBytes(overview?.traffic.downloadedTotal)
-                  }}</b></span
-                >
+                  }}</strong>
+                </div>
+                <div>
+                  <span>今日上传</span
+                  ><strong>{{
+                    formatBytes(overview?.traffic.todayUploaded)
+                  }}</strong>
+                </div>
+                <div>
+                  <span>今日下载</span
+                  ><strong>{{
+                    formatBytes(overview?.traffic.todayDownloaded)
+                  }}</strong>
+                </div>
               </div>
-            </details>
+            </section>
           </article>
 
           <article class="cc-card cc-dashboard-card">

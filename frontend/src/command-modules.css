@@ -617,29 +617,17 @@
 .cc-inline-metrics .is-warning {
   color: var(--cc-warning);
 }
-.cc-detail-disclosure {
+.cc-overview-metric-group + .cc-overview-metric-group {
   margin-top: 20px;
   border-top: 1px solid #edf1f5;
   padding-top: 13px;
 }
-.cc-detail-disclosure summary {
-  cursor: pointer;
-  color: var(--cc-primary);
-  font-size: 11px;
-  font-weight: 700;
-}
-.cc-detail-values {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-.cc-detail-values span {
+.cc-overview-metric-title {
+  display: block;
+  margin-bottom: 12px;
   color: var(--cc-muted);
   font-size: 11px;
-}
-.cc-detail-values b {
-  color: var(--cc-text);
+  font-weight: 700;
 }
 .cc-data-list {
   display: grid;
@@ -751,9 +739,6 @@
   .cc-inline-metrics > div:nth-child(3) {
     padding-left: 0;
     border-left: 0;
-  }
-  .cc-detail-values {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .cc-data-list-head {
     display: none;

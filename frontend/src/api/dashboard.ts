@@ -62,6 +62,8 @@ export type DashboardOverview = {
     total: number
     running: number
     notRunning: number
+    todayAdded: number
+    todaySiteCount: number
     totalUploaded: number
     totalDownloaded: number
   }
