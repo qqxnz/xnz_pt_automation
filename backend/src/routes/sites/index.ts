@@ -225,8 +225,7 @@ async function recordSiteTrafficSnapshot(site: SiteRecord, syncedAt: string) {
 
 type TrafficField = 'uploaded' | 'downloaded'
 
-async function trafficDelta(siteId: string, date: string, field: TrafficField): Promise<number | undefined> {
-  const snapshots = await listSiteTrafficSnapshotsFromDb()
+function trafficDelta(snapshots: SiteTrafficSnapshotRecord[], siteId: string, date: string, field: TrafficField): number | undefined {
   const current = snapshots.find((item) => item.siteId === siteId && item.date === date)
   if (!current || current[field] === undefined) return undefined
   const previous = snapshots
@@ -237,20 +236,14 @@ async function trafficDelta(siteId: string, date: string, field: TrafficField): 
   return Math.max(current[field]! - previous[field]!, 0)
 }
 
-async function trafficDeltas(site: SiteRecord) {
+function trafficDeltas(site: SiteRecord, snapshots: SiteTrafficSnapshotRecord[]) {
   const today = dateKey()
   const yesterday = shiftDateKey(today, -1)
-  const [todayUploaded, yesterdayUploaded, todayDownloaded, yesterdayDownloaded] = await Promise.all([
-    trafficDelta(site.id, today, 'uploaded'),
-    trafficDelta(site.id, yesterday, 'uploaded'),
-    trafficDelta(site.id, today, 'downloaded'),
-    trafficDelta(site.id, yesterday, 'downloaded')
-  ])
   return {
-    todayUploaded,
-    yesterdayUploaded,
-    todayDownloaded,
-    yesterdayDownloaded
+    todayUploaded: trafficDelta(snapshots, site.id, today, 'uploaded'),
+    yesterdayUploaded: trafficDelta(snapshots, site.id, yesterday, 'uploaded'),
+    todayDownloaded: trafficDelta(snapshots, site.id, today, 'downloaded'),
+    yesterdayDownloaded: trafficDelta(snapshots, site.id, yesterday, 'downloaded')
   }
 }
 
@@ -441,8 +434,9 @@ function siteUpdateWatchdogTick() {
 const siteUpdateWatchdogTimer = setInterval(siteUpdateWatchdogTick, SITE_UPDATE_WATCHDOG_INTERVAL_MS)
 if (typeof siteUpdateWatchdogTimer.unref === 'function') siteUpdateWatchdogTimer.unref()
 
-async function listItem(site: SiteRecord) {
-  const deltas = await trafficDeltas(site)
+async function listItem(site: SiteRecord, trafficSnapshots?: SiteTrafficSnapshotRecord[]) {
+  const snapshots = trafficSnapshots ?? await listSiteTrafficSnapshotsFromDb()
+  const deltas = trafficDeltas(site, snapshots)
   const today = dateKey()
   const latest = await listLatestSigninLogBySiteAndDate(site.id, today)
   // 日志缺失时回退到 sites.last_signin_*（权威状态）
@@ -512,7 +506,10 @@ function validatePayload(payload: SitePayload, existing?: SiteRecord) {
 // ============ Express 路由 ============
 
 sitesRouter.get('/', requireAuth, async (req, res) => {
-  const sites = await listSitesFromDb()
+  const [sites, trafficSnapshots] = await Promise.all([
+    listSitesFromDb(),
+    listSiteTrafficSnapshotsFromDb()
+  ])
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const connectivityStatus = String(req.query.connectivityStatus ?? 'ALL')
   const enabled = String(req.query.enabled ?? 'ALL')
@@ -531,7 +528,7 @@ sitesRouter.get('/', requireAuth, async (req, res) => {
   })
 
   const start = (page - 1) * pageSize
-  const items = await Promise.all(filtered.slice(start, start + pageSize).map((site) => listItem(site)))
+  const items = await Promise.all(filtered.slice(start, start + pageSize).map((site) => listItem(site, trafficSnapshots)))
   const stats = {
     total: sites.length,
     online: sites.filter((site) => site.connectivityStatus === 'ONLINE').length,

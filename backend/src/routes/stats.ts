@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.js'
-import { getLatestScheduleLogPerJob, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type DownloaderRecord, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
-import { getQbTransferInfo, type QbTransferInfo } from '../utils/qbittorrent.js'
+import { getLatestScheduleLogPerJob, listDownloadersFromDb, listLatestSigninLogBySiteAndDate, listSitesFromDb, listTasksFromDb, queryLogs, readSiteStatistics, readTorrentStats, refreshStoredTorrentFreeStates, type SigninLogRecord, type SiteRecord, type TaskLogRecord } from '../storage.js'
 import { getSchedulerJobs } from '../utils/scheduler.js'
 import { isoOnLocalDate, localDateKey } from '../utils/time.js'
 
@@ -12,24 +11,6 @@ type DashboardRisk = {
   message: string
   actionText: string
   actionPath: string
-}
-
-async function readTransferOverview(enabledDownloaders: DownloaderRecord[]) {
-  const results = await Promise.allSettled(enabledDownloaders.map((downloader) => getQbTransferInfo(downloader)))
-  const byDownloader = new Map<string, QbTransferInfo>()
-  results.forEach((result, index) => {
-    if (result.status === 'fulfilled') byDownloader.set(enabledDownloaders[index].id, result.value)
-  })
-
-  const total = [...byDownloader.values()].reduce(
-    (summary, transfer) => ({
-      uploadSpeed: summary.uploadSpeed + transfer.uploadSpeed,
-      downloadSpeed: summary.downloadSpeed + transfer.downloadSpeed
-    }),
-    { uploadSpeed: 0, downloadSpeed: 0 }
-  )
-
-  return { byDownloader, total }
 }
 
 statsRouter.get('/overview', requireAuth, async (_req, res) => {
@@ -97,7 +78,6 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
     })
   }
 
-  const transfer = await readTransferOverview(downloaders.filter((downloader) => downloader.enabled))
   const recentJobs = recentLogs.items
     .map((log) => ({
       id: log.id,
@@ -113,8 +93,10 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       pushedCount: log.pushedCount,
       pushFailedCount: log.pushFailedCount
     }))
-  const allTimeTraffic = await readSiteStatistics({ startDate: '1970-01-01', endDate: '2999-12-31', page: 1, pageSize: 1 })
-  const todayTraffic = await readSiteStatistics({ startDate: today, endDate: today, page: 1, pageSize: 1 })
+  const [allTimeTraffic, todayTraffic] = await Promise.all([
+    readSiteStatistics({ startDate: '1970-01-01', endDate: '2999-12-31', page: 1, pageSize: 1 }),
+    readSiteStatistics({ startDate: today, endDate: today, page: 1, pageSize: 1 })
+  ])
 
   res.json({
     sites: siteStats,
@@ -124,17 +106,15 @@ statsRouter.get('/overview', requireAuth, async (_req, res) => {
       offline: downloaders.filter((downloader) => downloader.status === 'OFFLINE').length,
       authFailed: downloaders.filter((downloader) => downloader.status === 'AUTH_FAILED').length,
       unknown: downloaders.filter((downloader) => downloader.status === 'UNKNOWN').length,
-      items: downloaders.map((downloader) => {
-        const speed = transfer.byDownloader.get(downloader.id)
-        return {
-          id: downloader.id,
-          name: downloader.name,
-          type: downloader.type,
-          status: speed ? 'ONLINE' : downloader.status,
-          uploadSpeed: speed?.uploadSpeed ?? 0,
-          downloadSpeed: speed?.downloadSpeed ?? 0
-        }
-      })
+      items: downloaders.map((downloader) => ({
+        id: downloader.id,
+        name: downloader.name,
+        type: downloader.type,
+        status: downloader.status,
+        // 保持概览响应结构兼容；实时速度由首页渲染后独立获取。
+        uploadSpeed: 0,
+        downloadSpeed: 0
+      }))
     },
     tasks: {
       total: tasks.length,

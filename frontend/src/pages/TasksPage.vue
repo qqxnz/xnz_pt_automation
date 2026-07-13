@@ -7,23 +7,12 @@
         description="自动执行开关、运行和测试保持高频可见，配置与危险操作统一收纳。"
       />
 
-      <section
-        class="sites-toolbar tasks-toolbar cc-toolbar cc-card"
-        :class="{ 'filters-open': mobileFiltersOpen }"
-      >
+      <section class="sites-toolbar tasks-toolbar cc-toolbar cc-card">
         <input
           v-model.trim="filters.keyword"
           placeholder="搜索任务 / 站点 / 下载器"
           @keyup.enter="loadTasks"
         />
-        <button
-          class="mobile-filter-toggle"
-          type="button"
-          :aria-expanded="mobileFiltersOpen"
-          @click="mobileFiltersOpen = !mobileFiltersOpen"
-        >
-          筛选 {{ mobileFiltersOpen ? "收起" : "⌄" }}
-        </button>
         <select
           v-if="isDesktop"
           v-model="filters.autoRun"
@@ -575,7 +564,6 @@ const loading = ref(false);
 const saving = ref(false);
 const error = ref("");
 const formVisible = ref(false);
-const mobileFiltersOpen = ref(false);
 const editingTaskId = ref<string>();
 const testResult = ref<TaskTestResult>();
 const testingTaskId = ref<string>();

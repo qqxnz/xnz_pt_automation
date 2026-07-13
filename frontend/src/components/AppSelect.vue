@@ -16,9 +16,13 @@
       aria-haspopup="listbox"
       @click="toggle"
     >
-      <span :class="{ placeholder: !selectedOption }">{{
+      <span
+        :class="{ placeholder: !selectedOption }"
+        :title="String(selectedOption?.[labelKey] ?? placeholder)"
+        >{{
         selectedOption?.[labelKey] ?? placeholder
-      }}</span>
+      }}</span
+      >
       <i aria-hidden="true">⌄</i>
     </button>
     <button
@@ -49,6 +53,7 @@
         :key="String(option[valueKey])"
         type="button"
         role="option"
+        :title="String(option[labelKey])"
         :aria-selected="option[valueKey] === modelValue"
         :disabled="option.disabled"
         @click="choose(option)"

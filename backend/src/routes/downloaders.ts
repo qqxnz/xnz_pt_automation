@@ -326,18 +326,21 @@ downloadersRouter.get('/:id/status', requireAuth, async (req, res) => {
     return res.json(result)
   } catch (error) {
     const now = new Date().toISOString()
+    const status = statusFromError(error)
+    const message = errorMessage(error)
     if (!skipWrite) {
-      downloader.status = statusFromError(error)
-      downloader.statusMessage = errorMessage(error)
+      downloader.status = status
+      downloader.statusMessage = message
       downloader.updatedAt = now
       await updateDownloaderInDb(downloader)
     }
-    return res.status(400).json({
+    // 首页只读轮询需要拿到本次检测的真实异常，但不应因此写入数据库或抛出页面级错误。
+    return res.status(skipWrite ? 200 : 400).json({
       downloaderId: downloader.id,
       uploadSpeed: 0,
       downloadSpeed: 0,
-      status: skipWrite ? downloader.status : statusFromError(error),
-      message: skipWrite ? undefined : errorMessage(error),
+      status,
+      message,
       lastSyncedAt: now
     })
   }

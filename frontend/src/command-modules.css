@@ -74,6 +74,9 @@
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
 }
 .cc-button.is-primary {
   border-color: var(--cc-primary);
@@ -336,7 +339,15 @@
 .cc-select-trigger .placeholder {
   color: #94a0b1;
 }
+.cc-select-trigger > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cc-select-trigger > i {
+  flex: 0 0 auto;
   color: #7d899b;
   font-style: normal;
 }
@@ -362,7 +373,9 @@
   top: calc(100% + 7px);
   left: 0;
   display: grid;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(360px, calc(100vw - 32px));
   max-height: 254px;
   overflow-y: auto;
   padding: 6px;
@@ -383,6 +396,10 @@
   color: var(--cc-text);
   background: transparent;
   text-align: left;
+}
+.cc-select-panel > button > span {
+  min-width: 0;
+  white-space: nowrap;
 }
 .cc-select-panel > button:hover:not(:disabled),
 .cc-select-panel > button[aria-selected="true"] {
@@ -657,6 +674,14 @@
 }
 .cc-data-list-row time {
   color: var(--cc-muted);
+  white-space: nowrap;
+}
+.cc-data-list-row .cc-downloader-error {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--cc-danger);
+  font-size: 10px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cc-data-list.is-downloader .cc-data-list-head,
@@ -1134,6 +1159,16 @@
   color: #fff !important;
 }
 
+.primary-button,
+.secondary-button,
+.sites-toolbar > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .primary-button:hover:not(:disabled),
 .row-primary-action:hover:not(:disabled) {
   background: var(--cc-primary-hover) !important;
@@ -1141,8 +1176,9 @@
 
 .sites-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(3, 132px) 64px 64px 64px 96px;
+  grid-template-columns: minmax(280px, 560px) repeat(3, 152px) 64px 64px 64px 96px;
   align-items: center;
+  justify-content: start;
   gap: 10px;
   padding: 14px;
 }
@@ -1152,16 +1188,12 @@
   white-space: nowrap;
 }
 
-.mobile-filter-toggle {
-  display: none;
-}
-
 .torrents-toolbar {
-  grid-template-columns: minmax(190px, 1fr) repeat(4, minmax(128px, 170px)) auto;
+  grid-template-columns: minmax(280px, 560px) repeat(4, minmax(152px, 180px)) auto;
 }
 
 .tasks-toolbar {
-  grid-template-columns: minmax(220px, 1fr) 140px 64px 64px 64px 96px;
+  grid-template-columns: minmax(280px, 560px) 168px 64px 64px 64px 96px;
 }
 
 .sites-toolbar input,
@@ -1178,6 +1210,22 @@
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.sites-toolbar select {
+  padding-right: 32px;
+  padding-left: 12px;
+  background-position: right 11px center;
+  font-size: 13px;
+}
+
+@media (min-width: 768px) and (max-width: 1439px) {
+  .sites-toolbar,
+  .tasks-toolbar,
+  .torrents-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
 }
 
 .sites-toolbar input:focus,
@@ -1782,10 +1830,6 @@
     grid-template-columns: 1fr;
   }
 
-  .sites-toolbar > input:first-child {
-    grid-column: 1 / -1;
-  }
-
   .desktop-table {
     overflow-x: auto;
     overscroll-behavior-x: contain;
@@ -1835,31 +1879,23 @@
     grid-column: 1 / -1;
   }
 
-  .mobile-filter-toggle {
-    display: block;
-    min-height: 42px;
-    border: 1px solid var(--cc-border);
-    border-radius: 9px;
-    background: #fff;
-    color: var(--cc-primary);
-    font-weight: 700;
-  }
-
-  .sites-toolbar:not(.filters-open) .toolbar-filter-segmented,
-  .sites-toolbar:not(.filters-open) .filter-secondary-action {
-    display: none;
-  }
-
   .sites-toolbar .toolbar-filter-segmented {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .sites-toolbar .toolbar-primary-action {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .sites-toolbar .toolbar-refresh-action {
     grid-column: auto;
+  }
+
+  .sites-toolbar select,
+  .sites-toolbar .toolbar-filter-segmented,
+  .sites-toolbar > button {
+    min-width: 0;
+    width: 100%;
   }
 
   .compact-actions {
@@ -2028,6 +2064,13 @@
     right: 12px;
     max-height: 44vh;
     overflow-y: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .sites-toolbar .toolbar-filter-segmented,
+  .sites-toolbar .toolbar-primary-action {
+    grid-column: 1 / -1;
   }
 }
 

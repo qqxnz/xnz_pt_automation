@@ -7,30 +7,19 @@
         description="单条记录突出推送操作，点击标题查看完整详情，批量动作固定在底部。"
       />
 
-      <section
-        class="sites-toolbar cc-toolbar cc-card torrents-toolbar"
-        :class="{ 'filters-open': mobileFiltersOpen }"
-      >
+      <section class="sites-toolbar cc-toolbar cc-card torrents-toolbar">
         <input
           v-model.trim="filters.keyword"
           placeholder="搜索标题"
           @keyup.enter="resetPageAndLoad"
         />
-        <button
-          class="mobile-filter-toggle"
-          type="button"
-          :aria-expanded="mobileFiltersOpen"
-          @click="mobileFiltersOpen = !mobileFiltersOpen"
-        >
-          筛选 {{ mobileFiltersOpen ? "收起" : "⌄" }}
-        </button>
         <select
           v-if="isDesktop"
           v-model="filters.siteId"
           @change="resetPageAndLoad"
           aria-label="按站点过滤"
         >
-          <option value="">站点：全部</option>
+          <option value="ALL">站点：全部</option>
           <option v-for="site in siteOptions" :key="site.id" :value="site.id">
             {{ site.displayName }}
           </option>
@@ -52,7 +41,7 @@
           @change="resetPageAndLoad"
           aria-label="按任务过滤"
         >
-          <option value="">任务：全部</option>
+          <option value="ALL">任务：全部</option>
           <option v-for="task in taskOptions" :key="task.id" :value="task.id">
             {{ task.name }}
           </option>
@@ -131,7 +120,7 @@
           <h2>种子列表</h2>
         </div>
         <div v-if="error" class="error-banner">
-          {{ error }}<button type="button" @click="loadTorrents">重试</button>
+          {{ error }}<button type="button" @click="loadTorrents()">重试</button>
         </div>
         <CCStateView
           v-if="!items.length && !loading && initialLoaded"
@@ -801,7 +790,6 @@ const siteOptions = ref<SiteListItem[]>([]);
 const taskOptions = ref<TaskItem[]>([]);
 const downloaderOptions = ref<DownloaderListItem[]>([]);
 const selectedIds = ref<string[]>([]);
-const mobileFiltersOpen = ref(false);
 const detail = ref<TorrentItem>();
 const total = ref(0);
 const loading = ref(false);
@@ -833,6 +821,8 @@ type DownloaderFormState = {
 const deleteConditionForm = ref<DeleteConditionFormState>();
 const downloaderForm = ref<DownloaderFormState>();
 let refreshTimer: number | undefined;
+let latestLoadRequestId = 0;
+let backgroundRefreshInFlight = false;
 const filters = reactive<
   Required<
     Pick<
@@ -944,9 +934,15 @@ const enabledDownloaderSelectOptions = computed(() =>
   })),
 );
 
-async function loadTorrents() {
-  loading.value = true;
-  error.value = "";
+async function loadTorrents(options: { silent?: boolean } = {}) {
+  const silent = Boolean(options.silent);
+  if (silent && (backgroundRefreshInFlight || loading.value)) return;
+  const requestId = ++latestLoadRequestId;
+  if (silent) backgroundRefreshInFlight = true;
+  else {
+    loading.value = true;
+    error.value = "";
+  }
   try {
     // 'ALL' 是前端"全部"语义；调用后端时转换成空字符串（不过滤）
     const result = await getTorrents({
@@ -955,17 +951,23 @@ async function loadTorrents() {
       taskId: filters.taskId === "ALL" ? "" : filters.taskId,
       downloaderId: filters.downloaderId === "ALL" ? "" : filters.downloaderId,
     });
-    items.value = result.items;
-    total.value = result.total;
-    stats.value = result.stats;
-    selectedIds.value = selectedIds.value.filter((id) =>
-      result.items.some((item) => item.id === id),
-    );
+    if (requestId === latestLoadRequestId) {
+      items.value = result.items;
+      total.value = result.total;
+      stats.value = result.stats;
+      selectedIds.value = selectedIds.value.filter((id) =>
+        result.items.some((item) => item.id === id),
+      );
+    }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "种子列表加载失败";
+    if (!silent && requestId === latestLoadRequestId)
+      error.value = err instanceof Error ? err.message : "种子列表加载失败";
   } finally {
-    loading.value = false;
-    initialLoaded.value = true;
+    if (silent) backgroundRefreshInFlight = false;
+    if (requestId === latestLoadRequestId) {
+      if (!silent) loading.value = false;
+      initialLoaded.value = true;
+    }
   }
 }
 
@@ -1518,8 +1520,12 @@ function stopRealtimeRefresh() {
 function startRealtimeRefresh() {
   stopRealtimeRefresh();
   if (document.hidden) return;
-  loadTorrents();
-  refreshTimer = window.setInterval(() => loadTorrents(), 1000);
+  if (!initialLoaded.value) void loadTorrents();
+  else void loadTorrents({ silent: true });
+  refreshTimer = window.setInterval(
+    () => void loadTorrents({ silent: true }),
+    10_000,
+  );
 }
 
 function handleVisibilityChange() {

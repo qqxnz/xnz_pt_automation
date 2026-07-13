@@ -7,23 +7,12 @@
         description="集中查看连通、账号、流量与签到状态，异常站点优先处理。"
       />
 
-      <section
-        class="sites-toolbar cc-toolbar cc-card"
-        :class="{ 'filters-open': mobileFiltersOpen }"
-      >
+      <section class="sites-toolbar cc-toolbar cc-card">
         <input
           v-model.trim="filters.keyword"
           placeholder="搜索站点 / 域名"
           @keyup.enter="loadSites"
         />
-        <button
-          class="mobile-filter-toggle"
-          type="button"
-          :aria-expanded="mobileFiltersOpen"
-          @click="mobileFiltersOpen = !mobileFiltersOpen"
-        >
-          筛选 {{ mobileFiltersOpen ? "收起" : "⌄" }}
-        </button>
         <select
           v-if="isDesktop"
           v-model="filters.connectivityStatus"
@@ -534,7 +523,6 @@ const stats = ref<SiteStats>({
   unknown: 0,
 });
 const formVisible = ref(false);
-const mobileFiltersOpen = ref(false);
 const editingSiteId = ref<string>();
 const detailHasApiKey = ref(false);
 const detailHasCookie = ref(false);
@@ -836,30 +824,41 @@ function closeBrowse() {
   browseVisible.value = false;
 }
 
-async function loadSites() {
-  loading.value = true;
-  error.value = "";
+async function fetchSites(silent = false) {
+  if (!silent) {
+    loading.value = true;
+    error.value = "";
+  }
   try {
     const result = await getSites({ ...filters, page: 1, pageSize: 50 });
     items.value = result.items;
     stats.value = result.stats;
-    await router.replace({
-      query: {
-        keyword: filters.keyword || undefined,
-        connectivityStatus:
-          filters.connectivityStatus === "ALL"
-            ? undefined
-            : filters.connectivityStatus,
-        enabled: filters.enabled === "ALL" ? undefined : filters.enabled,
-        signinEnabled:
-          filters.signinEnabled === "ALL" ? undefined : filters.signinEnabled,
-      },
-    });
+    if (!silent) {
+      await router.replace({
+        query: {
+          keyword: filters.keyword || undefined,
+          connectivityStatus:
+            filters.connectivityStatus === "ALL"
+              ? undefined
+              : filters.connectivityStatus,
+          enabled: filters.enabled === "ALL" ? undefined : filters.enabled,
+          signinEnabled:
+            filters.signinEnabled === "ALL"
+              ? undefined
+              : filters.signinEnabled,
+        },
+      });
+    }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "站点列表加载失败";
+    if (!silent)
+      error.value = err instanceof Error ? err.message : "站点列表加载失败";
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
+}
+
+async function loadSites() {
+  await fetchSites(false);
 }
 
 function openSite(site: SiteListItem) {
@@ -954,7 +953,7 @@ async function saveSite() {
     } else {
       Snackbar.success("站点已保存，正在后台更新");
     }
-    await loadSites();
+    await fetchSites(true);
     startUpdatePolling();
   } catch (err) {
     Snackbar.error(err instanceof Error ? err.message : "保存失败");
@@ -986,7 +985,7 @@ function startUpdatePolling() {
   if (updatePollingTimer !== undefined) return;
   updatePollingTimer = window.setTimeout(async () => {
     updatePollingTimer = undefined;
-    await loadSites();
+    await fetchSites(true);
     if (items.value.some((site) => site.updating)) startUpdatePolling();
   }, 3000);
 }
@@ -995,7 +994,7 @@ async function triggerAutomaticUpdate() {
   try {
     const result = await updateAllSites();
     if (result.acceptedCount > 0 || result.alreadyRunning) {
-      await loadSites();
+      await fetchSites(true);
       startUpdatePolling();
     }
   } catch (err) {

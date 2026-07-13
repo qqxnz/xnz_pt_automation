@@ -7,7 +7,6 @@ import {
   listSitesFromDb,
   listTorrents,
   readTorrentStats,
-  refreshStoredTorrentFreeStates,
   updateTorrent,
   updateTorrents
 } from '../storage.js'
@@ -20,6 +19,18 @@ export const torrentsRouter = Router()
 
 function safeTorrent(torrent: TorrentRecord) {
   const { downloadUrl: _downloadUrl, ...safe } = torrent
+  if (safe.freeEndAt && safe.pushStatus !== 'DELETED') {
+    const freeEndTime = new Date(safe.freeEndAt).getTime()
+    if (!Number.isNaN(freeEndTime)) {
+      if (freeEndTime <= Date.now()) {
+        safe.isFreeNow = false
+        safe.currentState = 'EXPIRED'
+      } else {
+        safe.isFreeNow = true
+        safe.currentState = safe.pushStatus === 'PUSHED' ? 'PUSHED' : safe.pushStatus === 'PUSH_FAILED' ? 'PUSH_FAILED' : 'FREE_NOW'
+      }
+    }
+  }
   if (safe.pushStatus === 'PUSHED' && !torrent.downloadUrl) {
     return {
       ...safe,
@@ -57,7 +68,6 @@ function resolvePushSavePath(torrent: TorrentRecord, downloader: { savePath?: st
 }
 
 torrentsRouter.get('/', requireAuth, async (req, res) => {
-  await refreshStoredTorrentFreeStates()
   const keyword = String(req.query.keyword ?? '').trim().toLowerCase()
   const siteId = String(req.query.siteId ?? '')
   const downloaderId = String(req.query.downloaderId ?? '')
@@ -66,12 +76,14 @@ torrentsRouter.get('/', requireAuth, async (req, res) => {
   const sourceRunMode = String(req.query.sourceRunMode ?? 'ALL')
   const page = Math.max(Number(req.query.page ?? 1), 1)
   const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 20), 1), 100)
-  const result = await listTorrents({ keyword, siteId, downloaderId, taskId, pushStatus, sourceRunMode, page, pageSize })
-  res.json({ items: result.items.map(safeTorrent), total: result.total, page: result.page, pageSize: result.pageSize, stats: await readTorrentStats() })
+  const [result, stats] = await Promise.all([
+    listTorrents({ keyword, siteId, downloaderId, taskId, pushStatus, sourceRunMode, page, pageSize }),
+    readTorrentStats()
+  ])
+  res.json({ items: result.items.map(safeTorrent), total: result.total, page: result.page, pageSize: result.pageSize, stats })
 })
 
 torrentsRouter.get('/:id', requireAuth, async (req, res) => {
-  await refreshStoredTorrentFreeStates()
   const torrent = await getTorrentById(String(req.params.id))
   if (!torrent) return res.status(404).json({ message: '种子不存在' })
   res.json(safeTorrent(torrent))

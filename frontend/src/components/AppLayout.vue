@@ -142,7 +142,7 @@ const route = useRoute();
 const auth = useAuthStore();
 const mobileMenuOpen = ref(false);
 const workNavItems: NavItem[] = [
-  { label: "首页概览", shortLabel: "首页", to: "/dashboard", icon: "◈" },
+  { label: "首页", shortLabel: "首页", to: "/dashboard", icon: "◈" },
   { label: "站点", shortLabel: "站点", to: "/sites", icon: "◉" },
   { label: "下载器", shortLabel: "下载器", to: "/downloaders", icon: "⇣" },
   { label: "任务", shortLabel: "任务", to: "/tasks", icon: "✓" },
@@ -151,7 +151,7 @@ const workNavItems: NavItem[] = [
 ];
 const systemNavItems: NavItem[] = [
   { label: "日志", shortLabel: "日志", to: "/logs", icon: "≡" },
-  { label: "系统设置", shortLabel: "设置", to: "/settings", icon: "⚙" },
+  { label: "系统", shortLabel: "系统", to: "/settings", icon: "⚙" },
 ];
 const allNavItems = [...workNavItems, ...systemNavItems];
 const mobileNavItems = [

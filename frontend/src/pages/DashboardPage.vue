@@ -165,11 +165,17 @@
                   :label="downloaderStatusMeta(displayStatus(downloader)).label"
                   :tone="downloaderTone(displayStatus(downloader))"
                 /><span class="is-success">{{
-                  formatBytes(statusById[downloader.id]?.uploadSpeed, "/s")
+                  formatBytes(displaySpeed(downloader.id, "upload"), "/s")
                 }}</span
                 ><span>{{
-                  formatBytes(statusById[downloader.id]?.downloadSpeed, "/s")
+                  formatBytes(displaySpeed(downloader.id, "download"), "/s")
                 }}</span>
+                <small
+                  v-if="statusById[downloader.id]?.message"
+                  class="cc-downloader-error"
+                  :title="statusById[downloader.id]?.message"
+                  >{{ statusById[downloader.id]?.message }}</small
+                >
               </div>
             </div>
             <CCStateView
@@ -327,7 +333,9 @@ const loading = ref(false);
 const error = ref("");
 const lastUpdatedAt = ref("");
 const statusById = ref<Record<string, DownloaderStatus | undefined>>({});
+const hasLiveSpeedById = ref<Record<string, boolean>>({});
 let statusTimer: number | undefined;
+let statusRefreshInFlight = false;
 
 const currentHour = new Date().getHours();
 const greeting =
@@ -344,8 +352,18 @@ const siteAttentionCount = computed(
     (overview.value?.sites.offline ?? 0),
 );
 const taskAttentionCount = computed(() => overview.value?.tasks.failed ?? 0);
+const downloaderAttentionCount = computed(
+  () =>
+    overview.value?.downloaders.items.filter((item) => {
+      const status = displayStatus(item);
+      return status === "OFFLINE" || status === "AUTH_FAILED";
+    }).length ?? 0,
+);
 const attentionCount = computed(
-  () => siteAttentionCount.value + taskAttentionCount.value,
+  () =>
+    siteAttentionCount.value +
+    downloaderAttentionCount.value +
+    taskAttentionCount.value,
 );
 const statusHeadline = computed(() =>
   attentionCount.value > 0
@@ -360,6 +378,8 @@ const attentionDescription = computed(() => {
   const parts = [];
   if (siteAttentionCount.value)
     parts.push(`${siteAttentionCount.value} 个站点异常`);
+  if (downloaderAttentionCount.value)
+    parts.push(`${downloaderAttentionCount.value} 个下载器异常`);
   if (taskAttentionCount.value)
     parts.push(`${taskAttentionCount.value} 个任务失败`);
   return parts.join("，");
@@ -367,6 +387,8 @@ const attentionDescription = computed(() => {
 const attentionTarget = computed(() =>
   siteAttentionCount.value > 0
     ? "/sites"
+    : downloaderAttentionCount.value > 0
+      ? "/downloaders"
     : taskAttentionCount.value > 0
       ? "/tasks"
       : "/dashboard",
@@ -377,17 +399,28 @@ const onlineDownloaderCount = computed(
       (item) => displayStatus(item) === "ONLINE",
     ).length ?? 0,
 );
+const liveDownloaderStatuses = computed(() =>
+  Object.entries(statusById.value)
+    .filter(
+      ([id, status]) => hasLiveSpeedById.value[id] && status?.status === "ONLINE",
+    )
+    .map(([, status]) => status as DownloaderStatus),
+);
 const totalUploadSpeed = computed(() =>
-  Object.values(statusById.value).reduce(
-    (sum, status) => sum + (status?.uploadSpeed ?? 0),
-    0,
-  ),
+  liveDownloaderStatuses.value.length
+    ? liveDownloaderStatuses.value.reduce(
+        (sum, status) => sum + status.uploadSpeed,
+        0,
+      )
+    : undefined,
 );
 const totalDownloadSpeed = computed(() =>
-  Object.values(statusById.value).reduce(
-    (sum, status) => sum + (status?.downloadSpeed ?? 0),
-    0,
-  ),
+  liveDownloaderStatuses.value.length
+    ? liveDownloaderStatuses.value.reduce(
+        (sum, status) => sum + status.downloadSpeed,
+        0,
+      )
+    : undefined,
 );
 
 function formatBytes(value?: number, suffix = "") {
@@ -434,6 +467,12 @@ function displayStatus(
   downloader: DashboardOverview["downloaders"]["items"][number],
 ) {
   return statusById.value[downloader.id]?.status ?? downloader.status;
+}
+
+function displaySpeed(id: string, direction: "upload" | "download") {
+  if (!hasLiveSpeedById.value[id]) return undefined;
+  const status = statusById.value[id];
+  return direction === "upload" ? status?.uploadSpeed : status?.downloadSpeed;
 }
 
 function jobStatusText(
@@ -509,6 +548,7 @@ async function loadOverview() {
   try {
     overview.value = await getDashboardOverview();
     lastUpdatedAt.value = new Date().toLocaleString("zh-CN");
+    void refreshAllStatuses();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "首页数据加载失败";
   } finally {
@@ -522,16 +562,43 @@ async function refreshDownloaderStatus(
   if (document.hidden) return;
   try {
     const status = await getDownloaderStatus(downloader.id, true);
-    statusById.value = { ...statusById.value, [downloader.id]: status };
+    const previous = statusById.value[downloader.id];
+    const hasLiveSpeed = status.status === "ONLINE";
+    statusById.value = {
+      ...statusById.value,
+      [downloader.id]: hasLiveSpeed
+        ? status
+        : {
+            ...status,
+            uploadSpeed: previous?.uploadSpeed ?? status.uploadSpeed,
+            downloadSpeed: previous?.downloadSpeed ?? status.downloadSpeed,
+          },
+    };
+    if (hasLiveSpeed) {
+      hasLiveSpeedById.value = {
+        ...hasLiveSpeedById.value,
+        [downloader.id]: true,
+      };
+    }
   } catch {
     // skipWrite 轮询静默忽略错误
   }
 }
 
 async function refreshAllStatuses() {
-  if (!overview.value?.downloaders.items.length) return;
-  for (const downloader of overview.value.downloaders.items) {
-    await refreshDownloaderStatus(downloader);
+  if (
+    document.hidden ||
+    statusRefreshInFlight ||
+    !overview.value?.downloaders.items.length
+  )
+    return;
+  statusRefreshInFlight = true;
+  try {
+    await Promise.allSettled(
+      overview.value.downloaders.items.map(refreshDownloaderStatus),
+    );
+  } finally {
+    statusRefreshInFlight = false;
   }
 }
 
@@ -558,7 +625,6 @@ function handleVisibilityChange() {
 onMounted(async () => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   await loadOverview();
-  await refreshAllStatuses();
   startStatusPolling();
 });
 
