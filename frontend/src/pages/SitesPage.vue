@@ -141,6 +141,7 @@
             <span>分享率</span>
             <span>总流量</span>
             <span>今日</span>
+            <span>昨日</span>
             <span>凭证 / 签到</span>
             <span>操作</span>
           </div>
@@ -172,10 +173,6 @@
               <span class="traffic-down"
                 >↓ {{ formatBytes(site.downloaded) }}</span
               >
-              <small
-                >昨日 ↑ {{ formatBytes(site.yesterdayUploaded) }} / ↓
-                {{ formatBytes(site.yesterdayDownloaded) }}</small
-              >
             </span>
             <span class="traffic-pair">
               <span class="traffic-up"
@@ -183,6 +180,14 @@
               >
               <span class="traffic-down"
                 >↓ {{ formatBytes(site.todayDownloaded) }}</span
+              >
+            </span>
+            <span class="traffic-pair">
+              <span class="traffic-up"
+                >↑ {{ formatBytes(site.yesterdayUploaded) }}</span
+              >
+              <span class="traffic-down"
+                >↓ {{ formatBytes(site.yesterdayDownloaded) }}</span
               >
             </span>
             <span class="site-credential-cell">
@@ -239,6 +244,9 @@
               ><small
                 >今日 ↑ {{ formatBytes(site.todayUploaded) }} / ↓
                 {{ formatBytes(site.todayDownloaded) }}</small
+              ><small
+                >昨日 ↑ {{ formatBytes(site.yesterdayUploaded) }} / ↓
+                {{ formatBytes(site.yesterdayDownloaded) }}</small
               >
             </div>
             <p class="cc-mobile-summary">

@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.30
+version=0.6.31
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.30<br/>取消登录态自动过期限制；系统设置移除「基础参数」卡片及无效配置展示。
+changelog=0.6.31<br/>站点列表新增昨日上传、下载流量展示，并优化桌面端与移动端流量布局。
