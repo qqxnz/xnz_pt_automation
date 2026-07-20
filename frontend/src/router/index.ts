@@ -8,6 +8,7 @@ import ModulePage from '../pages/ModulePage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 import SitesPage from '../pages/SitesPage.vue'
 import SiteStatisticsPage from '../pages/SiteStatisticsPage.vue'
+import SiteDailyHistoryPage from '../pages/SiteDailyHistoryPage.vue'
 import TasksPage from '../pages/TasksPage.vue'
 import TorrentsPage from '../pages/TorrentsPage.vue'
 import { useAuthStore } from '../stores/auth'
@@ -28,6 +29,7 @@ export const router = createRouter({
     { path: '/setup', component: SetupPage },
     { path: '/dashboard', component: DashboardPage, meta: { requiresAuth: true } },
     { path: '/sites', name: 'sites', component: SitesPage, meta: { requiresAuth: true } },
+    { path: '/sites/:id/history', name: 'site-daily-history', component: SiteDailyHistoryPage, meta: { requiresAuth: true } },
     { path: '/statistics', name: 'statistics', component: SiteStatisticsPage, meta: { requiresAuth: true } },
     { path: '/downloaders', name: 'downloaders', component: DownloadersPage, meta: { requiresAuth: true } },
     { path: '/tasks', name: 'tasks', component: TasksPage, meta: { requiresAuth: true } },

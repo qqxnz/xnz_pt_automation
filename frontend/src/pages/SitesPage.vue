@@ -758,6 +758,7 @@ function siteMenuItems(site: SiteListItem): AppActionMenuItem[] {
       disabled: site.updating,
     },
     { key: "browse", label: "浏览站点种子", hidden: primary === "browse" },
+    { key: "daily-history", label: "每日数据" },
     { key: "edit", label: "编辑站点" },
     { key: "delete", label: "删除站点", tone: "danger" },
   ];
@@ -767,6 +768,8 @@ function handleSiteMenu(site: SiteListItem, key: string) {
   if (key === "signin") void triggerSignin(site);
   else if (key === "update") void triggerSiteUpdate(site);
   else if (key === "browse") openBrowse(site);
+  else if (key === "daily-history")
+    void router.push({ name: "site-daily-history", params: { id: site.id } });
   else if (key === "edit") void openEdit(site);
   else if (key === "delete") void removeSite(site);
 }

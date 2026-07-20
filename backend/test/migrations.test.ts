@@ -11,6 +11,7 @@ import {
   createIndexIfMissing,
   dropColumnIfExists
 } from '../src/storage/migrations/_helpers.js'
+import { v23 } from '../src/storage/migrations/v23.js'
 
 function openFreshDb(file: string): DatabaseSync {
   rmSync(file, { force: true })
@@ -171,4 +172,47 @@ test('isMigrationStepError detects correctly', () => {
     isMigrationStepError({ type: 'MigrationStepError', version: 3, fromVersion: 2, cause: 'x' }),
     true
   )
+})
+
+test('v23 keeps the latest daily snapshot and adds history schema', () => {
+  const tmpDir = path.join('/tmp', `xnz-mig-v23-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  mkdirSync(tmpDir, { recursive: true })
+  const dbFile = path.join(tmpDir, 'test.db')
+  const db = openFreshDb(dbFile)
+  try {
+    db.exec(`
+      CREATE TABLE site_traffic_snapshots (
+        id TEXT PRIMARY KEY,
+        site_id TEXT NOT NULL,
+        site_name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        uploaded REAL,
+        downloaded REAL,
+        ratio REAL,
+        ratio_infinite INTEGER,
+        synced_at TEXT NOT NULL
+      );
+      INSERT INTO site_traffic_snapshots VALUES
+        ('older', 'site-a', 'A', '2026-07-01', 100, 20, 5, 0, '2026-07-01T01:00:00.000Z'),
+        ('newer', 'site-a', 'A', '2026-07-01', 120, 22, 5.45, 0, '2026-07-01T02:00:00.000Z');
+    `)
+
+    v23.up(db, { dataDir: tmpDir })
+    v23.up(db, { dataDir: tmpDir })
+
+    const rows = db.prepare('SELECT id, uploaded, user_level FROM site_traffic_snapshots').all() as any[]
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].id, 'newer')
+    assert.equal(rows[0].uploaded, 120)
+    assert.equal(rows[0].user_level, null)
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'site_traffic_snapshots'").all() as Array<{ name: string }>
+    assert.ok(indexes.some((item) => item.name === 'idx_site_traffic_snapshots_site_date_unique'))
+    assert.ok(indexes.some((item) => item.name === 'idx_site_traffic_snapshots_site_date_desc'))
+    assert.throws(() => {
+      db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, synced_at) VALUES ('duplicate', 'site-a', 'A', '2026-07-01', '2026-07-01T03:00:00.000Z')`).run()
+    })
+  } finally {
+    db.close()
+    rmSync(tmpDir, { recursive: true, force: true })
+  }
 })

@@ -69,6 +69,31 @@ export type SiteStats = {
   unknown: number
 }
 
+export type SiteDailyHistoryItem = {
+  id: string
+  siteId: string
+  siteName: string
+  date: string
+  uploaded?: number
+  downloaded?: number
+  uploadedDelta?: number
+  downloadedDelta?: number
+  ratio?: number
+  ratioInfinite?: boolean
+  userLevel?: string
+  syncedAt: string
+}
+
+export type SiteDailyHistoryResponse = {
+  site: { id: string; displayName: string; domain: string }
+  startDate: string
+  endDate: string
+  items: SiteDailyHistoryItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export type TestSiteConnectivityResponse = {
   ok: boolean
   status: ConnectivityStatus
@@ -123,6 +148,15 @@ export function getSites(filters: SiteFilter) {
 
 export function getSite(id: string) {
   return apiRequest<SiteDetail>(`/api/sites/${id}`)
+}
+
+export function getSiteDailyHistory(
+  id: string,
+  query: { startDate: string; endDate: string; page: number; pageSize: number }
+) {
+  const params = new URLSearchParams()
+  Object.entries(query).forEach(([key, value]) => params.set(key, String(value)))
+  return apiRequest<SiteDailyHistoryResponse>(`/api/sites/${id}/daily-history?${params.toString()}`)
 }
 
 export function createSite(payload: SiteFormPayload) {

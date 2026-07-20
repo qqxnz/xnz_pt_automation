@@ -275,7 +275,20 @@ export type SiteTrafficSnapshotRecord = {
   downloaded?: number
   ratio?: number
   ratioInfinite?: boolean
+  userLevel?: string
   syncedAt: string
+}
+
+export type SiteDailyHistoryItem = SiteTrafficSnapshotRecord & {
+  uploadedDelta?: number
+  downloadedDelta?: number
+}
+
+export type SiteDailyHistoryResult = {
+  items: SiteDailyHistoryItem[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export type SystemSettings = {
@@ -796,6 +809,7 @@ function createStructuredTables(db: DatabaseSync) {
       downloaded REAL,
       ratio REAL,
       ratio_infinite INTEGER,
+      user_level TEXT,
       synced_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS site_torrent_traffic_daily (
@@ -1016,6 +1030,7 @@ async function ensureStorage() {
       setMeta(db, 'last_migration_error', String(error instanceof Error ? error.message : error))
       throw error
     }
+    runMigrations(db, SCHEMA_VERSION - 1, { dataDir }, SCHEMA_VERSION)
     setMeta(db, 'schema_version', String(SCHEMA_VERSION))
     setMeta(db, 'last_migration_status', 'SUCCESS')
     setMeta(db, 'migrated_at', new Date().toISOString())
@@ -1221,10 +1236,10 @@ function upsertTorrentLog(db: DatabaseSync, item: TorrentLogRecord) {
 }
 
 function upsertSnapshot(db: DatabaseSync, item: SiteTrafficSnapshotRecord) {
-  db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, uploaded, downloaded, ratio, ratio_infinite, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, date = excluded.date, uploaded = excluded.uploaded, downloaded = excluded.downloaded, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, synced_at = excluded.synced_at`)
-    .run(item.id, item.siteId, item.siteName, item.date, optional(item.uploaded), optional(item.downloaded), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), item.syncedAt)
+  db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, uploaded, downloaded, ratio, ratio_infinite, user_level, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET site_id = excluded.site_id, site_name = excluded.site_name, date = excluded.date, uploaded = excluded.uploaded, downloaded = excluded.downloaded, ratio = excluded.ratio, ratio_infinite = excluded.ratio_infinite, user_level = excluded.user_level, synced_at = excluded.synced_at`)
+    .run(item.id, item.siteId, item.siteName, item.date, optional(item.uploaded), optional(item.downloaded), optional(item.ratio), item.ratioInfinite === undefined ? null : bool(item.ratioInfinite), optional(item.userLevel), item.syncedAt)
 }
 
 function usersFromDb(db: DatabaseSync): UserRecord[] {
@@ -1509,6 +1524,7 @@ function snapshotsFromDb(db: DatabaseSync): SiteTrafficSnapshotRecord[] {
     downloaded: row.downloaded ?? undefined,
     ratio: row.ratio ?? undefined,
     ratioInfinite: row.ratio_infinite === null ? undefined : fromBool(row.ratio_infinite),
+    userLevel: row.user_level ?? undefined,
     syncedAt: row.synced_at
   }))
 }
@@ -2391,15 +2407,18 @@ export async function saveSiteTrafficSnapshotToDb(snapshot: SiteTrafficSnapshotR
   const db = await readyDb()
   db.exec('BEGIN IMMEDIATE')
   try {
-    upsertSnapshot(db, snapshot)
-    db.exec(`
-      DELETE FROM site_traffic_snapshots
-      WHERE id NOT IN (
-        SELECT id FROM site_traffic_snapshots
-        ORDER BY date DESC, synced_at DESC
-        LIMIT 3660
-      )
-    `)
+    const existing = db.prepare(
+      'SELECT id FROM site_traffic_snapshots WHERE site_id = ? AND date = ? ORDER BY synced_at DESC LIMIT 1'
+    ).get(snapshot.siteId, snapshot.date) as { id: string } | undefined
+    upsertSnapshot(db, { ...snapshot, id: existing?.id ?? snapshot.id })
+    const cutoff = new Date()
+    cutoff.setFullYear(cutoff.getFullYear() - 10)
+    const cutoffDate = [
+      cutoff.getFullYear(),
+      String(cutoff.getMonth() + 1).padStart(2, '0'),
+      String(cutoff.getDate()).padStart(2, '0')
+    ].join('-')
+    db.prepare('DELETE FROM site_traffic_snapshots WHERE site_id = ? AND date < ?').run(snapshot.siteId, cutoffDate)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
@@ -2410,6 +2429,52 @@ export async function saveSiteTrafficSnapshotToDb(snapshot: SiteTrafficSnapshotR
 export async function listSiteTrafficSnapshotsFromDb(): Promise<SiteTrafficSnapshotRecord[]> {
   const db = await readyDb()
   return snapshotsFromDb(db)
+}
+
+export async function readSiteDailyHistoryFromDb(query: {
+  siteId: string
+  startDate: string
+  endDate: string
+  page: number
+  pageSize: number
+}): Promise<SiteDailyHistoryResult> {
+  const db = await readyDb()
+  const totalRow = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM site_traffic_snapshots
+    WHERE site_id = ? AND date >= ? AND date <= ?
+  `).get(query.siteId, query.startDate, query.endDate) as { total: number }
+  const offset = (query.page - 1) * query.pageSize
+  const rows = db.prepare(`
+    SELECT snapshot.*,
+      CASE WHEN previous.uploaded IS NULL OR snapshot.uploaded IS NULL THEN NULL
+        ELSE snapshot.uploaded - previous.uploaded END AS uploaded_delta,
+      CASE WHEN previous.downloaded IS NULL OR snapshot.downloaded IS NULL THEN NULL
+        ELSE snapshot.downloaded - previous.downloaded END AS downloaded_delta
+    FROM site_traffic_snapshots AS snapshot
+    LEFT JOIN site_traffic_snapshots AS previous
+      ON previous.id = (
+        SELECT candidate.id
+        FROM site_traffic_snapshots AS candidate
+        WHERE candidate.site_id = snapshot.site_id AND candidate.date < snapshot.date
+        ORDER BY candidate.date DESC
+        LIMIT 1
+      )
+    WHERE snapshot.site_id = ? AND snapshot.date >= ? AND snapshot.date <= ?
+    ORDER BY snapshot.date DESC
+    LIMIT ? OFFSET ?
+  `).all(query.siteId, query.startDate, query.endDate, query.pageSize, offset) as any[]
+
+  return {
+    items: rows.map((row) => ({
+      ...snapshotFromRow(row),
+      uploadedDelta: row.uploaded_delta ?? undefined,
+      downloadedDelta: row.downloaded_delta ?? undefined
+    })),
+    total: Number(totalRow.total),
+    page: query.page,
+    pageSize: query.pageSize
+  }
 }
 
 export async function findLatestSiteSnapshotFromDb(siteId: string, date: string): Promise<SiteTrafficSnapshotRecord | undefined> {
@@ -2430,6 +2495,7 @@ function snapshotFromRow(row: any): SiteTrafficSnapshotRecord {
     downloaded: row.downloaded ?? undefined,
     ratio: row.ratio ?? undefined,
     ratioInfinite: row.ratio_infinite === null ? undefined : fromBool(row.ratio_infinite),
+    userLevel: row.user_level ?? undefined,
     syncedAt: row.synced_at
   }
 }

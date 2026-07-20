@@ -364,9 +364,14 @@ const TABLE_SPECS: TableSpec[] = [
       downloaded REAL,
       ratio REAL,
       ratio_infinite INTEGER,
+      user_level TEXT,
       synced_at TEXT NOT NULL
     )`,
-    requiredColumns: ['id', 'site_id', 'site_name', 'date', 'synced_at']
+    requiredColumns: ['id', 'site_id', 'site_name', 'date', 'user_level', 'synced_at'],
+    indexes: [
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_site_traffic_snapshots_site_date_unique ON site_traffic_snapshots(site_id, date)`,
+      `CREATE INDEX IF NOT EXISTS idx_site_traffic_snapshots_site_date_desc ON site_traffic_snapshots(site_id, date DESC)`
+    ]
   },
   {
     name: 'site_torrent_traffic_daily',

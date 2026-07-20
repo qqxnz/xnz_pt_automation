@@ -25,6 +25,7 @@ import {
   deleteSiteFromDb,
   saveSiteTrafficSnapshotToDb,
   listSiteTrafficSnapshotsFromDb,
+  readSiteDailyHistoryFromDb,
   listLatestSigninLogBySiteAndDate
 } from '../../storage.js'
 import { logger, recordOperationLog } from '../../utils/logger.js'
@@ -207,10 +208,8 @@ function shiftDateKey(date: string, offsetDays: number) {
 async function recordSiteTrafficSnapshot(site: SiteRecord, syncedAt: string) {
   if (site.uploaded === undefined && site.downloaded === undefined) return
   const date = dateKey(new Date(syncedAt))
-  const snapshots = await listSiteTrafficSnapshotsFromDb()
-  const existing = snapshots.find((item) => item.siteId === site.id && item.date === date)
   const snapshot: SiteTrafficSnapshotRecord = {
-    id: existing?.id ?? randomUUID(),
+    id: randomUUID(),
     siteId: site.id,
     siteName: siteDisplayName(site),
     date,
@@ -218,6 +217,7 @@ async function recordSiteTrafficSnapshot(site: SiteRecord, syncedAt: string) {
     downloaded: site.downloaded,
     ratio: site.ratio,
     ratioInfinite: site.ratioInfinite,
+    userLevel: site.userLevel,
     syncedAt
   }
   await saveSiteTrafficSnapshotToDb(snapshot)
@@ -566,6 +566,47 @@ sitesRouter.get('/export', requireAuth, async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
   res.json(exportData)
+})
+
+function validHistoryDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return false
+  return dateKey(parsed) === value
+}
+
+sitesRouter.get('/:id/daily-history', requireAuth, async (req, res) => {
+  const site = await getSiteFromDb(String(req.params.id))
+  if (!site) return res.status(404).json({ message: '站点不存在' })
+
+  const startDate = String(req.query.startDate ?? '')
+  const endDate = String(req.query.endDate ?? '')
+  if (!validHistoryDate(startDate) || !validHistoryDate(endDate)) {
+    return res.status(400).json({ message: '请选择有效的开始和结束日期' })
+  }
+  if (startDate > endDate) {
+    return res.status(400).json({ message: '开始日期不能晚于结束日期' })
+  }
+
+  const page = Math.max(Number(req.query.page ?? 1) || 1, 1)
+  const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 30) || 30, 1), 100)
+  const history = await readSiteDailyHistoryFromDb({
+    siteId: site.id,
+    startDate,
+    endDate,
+    page,
+    pageSize
+  })
+  return res.json({
+    site: {
+      id: site.id,
+      displayName: siteDisplayName(site),
+      domain: site.domain
+    },
+    startDate,
+    endDate,
+    ...history
+  })
 })
 
 sitesRouter.post('/import', requireAuth, async (req, res) => {

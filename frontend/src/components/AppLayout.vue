@@ -163,7 +163,11 @@ const mobileNavItems = [
 const moreNavItems = [workNavItems[2], workNavItems[5], ...systemNavItems];
 const currentPage = computed(
   () =>
-    allNavItems.find((item) => item.to === route.path)?.label ?? "运行指挥台",
+    allNavItems.find((item) =>
+      item.to === "/"
+        ? item.to === route.path
+        : route.path === item.to || route.path.startsWith(`${item.to}/`),
+    )?.label ?? "运行指挥台",
 );
 const isMoreActive = computed(() =>
   moreNavItems.some((item) => item.to === route.path),
