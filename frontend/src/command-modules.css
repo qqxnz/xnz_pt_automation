@@ -1335,7 +1335,8 @@
 .site-row {
   grid-template-columns:
     minmax(180px, 1.35fr) 96px 88px minmax(155px, 1fr)
-    minmax(135px, 0.9fr) minmax(135px, 0.9fr) 150px;
+    minmax(135px, 0.9fr) minmax(135px, 0.9fr) 150px
+    minmax(150px, 0.95fr);
 }
 
 .site-row .ratio-value,
@@ -1797,7 +1798,7 @@
   }
 
   .site-row {
-    min-width: 1010px;
+    min-width: 1180px;
   }
   .torrent-row {
     min-width: 1050px;

@@ -69,13 +69,13 @@
 
         <div v-else class="history-desktop-table">
           <div class="history-row history-head">
-            <span>日期</span><span>累计上传</span><span>上传变化</span><span>累计下载</span><span>下载变化</span><span>分享率</span><span>等级</span><span>最后同步</span>
+            <span>日期</span><span>累计上传</span><span>累计下载</span><span>上传变化</span><span>下载变化</span><span>分享率</span><span>等级</span><span>最后同步</span>
           </div>
           <div v-for="item in result.items" :key="item.id" class="history-row">
             <strong>{{ item.date }}</strong>
             <span>{{ formatBytes(item.uploaded) }}</span>
-            <span :class="deltaClass(item.uploadedDelta)">{{ formatDelta(item.uploadedDelta) }}</span>
             <span>{{ formatBytes(item.downloaded) }}</span>
+            <span :class="deltaClass(item.uploadedDelta)">{{ formatDelta(item.uploadedDelta) }}</span>
             <span :class="deltaClass(item.downloadedDelta)">{{ formatDelta(item.downloadedDelta) }}</span>
             <span>{{ formatRatio(item) }}</span>
             <span>{{ item.userLevel || '-' }}</span>
@@ -232,7 +232,7 @@ onMounted(loadHistory);
 .history-toolbar { grid-template-columns: repeat(2, minmax(220px, 320px)); }
 .history-list-panel { overflow-x: auto; }
 .history-desktop-table { min-width: 1080px; }
-.history-row { display: grid; grid-template-columns: 120px 1.1fr 1fr 1.1fr 1fr .7fr 1fr 1.1fr; gap: 14px; align-items: center; min-height: 62px; padding: 0 20px; border-top: 1px solid #edf1f7; font-size: 14px; }
+.history-row { display: grid; grid-template-columns: 120px 1.1fr 1.1fr 1fr 1fr .7fr 1fr 1.1fr; gap: 14px; align-items: center; min-height: 62px; padding: 0 20px; border-top: 1px solid #edf1f7; font-size: 14px; }
 .history-head { min-height: 46px; border-top: 0; background: #f8fafc; color: #64748b; font-size: 12px; font-weight: 700; }
 .history-delta { color: #64748b; font-weight: 700; }
 .history-delta.is-positive { color: #059669; }

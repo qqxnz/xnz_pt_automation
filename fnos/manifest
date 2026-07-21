@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.32
+version=0.6.33
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.32<br/>新增站点每日数据历史，支持累计流量、日变化、分享率和等级的长期分析。
+changelog=0.6.33<br/>优化站点每日记录字段顺序，修复桌面端站点列表操作按钮换行问题。
