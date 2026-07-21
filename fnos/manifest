@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.33
+version=0.6.34
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.33<br/>优化站点每日记录字段顺序，修复桌面端站点列表操作按钮换行问题。
+changelog=0.6.34<br/>站点列表升级为响应式卡片布局，桌面端平铺全部操作，移动端优化流量展示与操作菜单。

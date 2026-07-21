@@ -111,7 +111,7 @@
         />
       </section>
 
-      <section class="sites-table cc-card cc-list-surface">
+      <section class="sites-table sites-card-list-surface">
         <div v-if="error" class="error-banner">
           {{ error }}
           <button type="button" @click="loadSites">重试</button>
@@ -134,87 +134,118 @@
           </button>
         </CCStateView>
 
-        <div v-else class="desktop-table">
-          <div class="site-row table-head">
-            <span>站点</span>
-            <span>连通状态</span>
-            <span>分享率</span>
-            <span>总流量</span>
-            <span>今日</span>
-            <span>昨日</span>
-            <span>凭证 / 签到</span>
-            <span>操作</span>
-          </div>
-          <div v-for="site in items" :key="site.id" class="site-row">
-            <div class="site-name-cell" @click="openSite(site)">
-              <strong>{{ site.displayName }}</strong>
-              <small>{{ site.domain }}</small>
+        <div v-else class="desktop-site-list">
+          <article
+            v-for="site in items"
+            :key="site.id"
+            class="cc-card desktop-site-card"
+          >
+            <header class="site-card-header">
+              <div class="site-name-cell" @click="openSite(site)">
+                <strong>{{ site.displayName }}</strong>
+                <small>{{ site.domain }}</small>
+              </div>
+              <span
+                class="chip"
+                :class="statusMeta(site.connectivityStatus).className"
+                >{{ statusMeta(site.connectivityStatus).label }}</span
+              >
+            </header>
+
+            <div class="site-card-metrics">
+              <div class="site-card-metric">
+                <span>分享率 / 等级</span>
+                <strong
+                  class="ratio-value"
+                  :class="{
+                    good: Boolean(site.ratioInfinite || (site.ratio ?? 0) >= 2),
+                    warning:
+                      !site.ratioInfinite &&
+                      (site.ratio ?? 0) > 0 &&
+                      (site.ratio ?? 0) < 1,
+                  }"
+                >
+                  {{ formatRatio(site) }} · {{ site.userLevel || "等级未知" }}
+                </strong>
+              </div>
+              <div class="site-card-metric">
+                <span>总流量</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.uploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.downloaded) }}</strong>
+                </div>
+              </div>
+              <div class="site-card-metric">
+                <span>今日</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.todayUploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.todayDownloaded) }}</strong>
+                </div>
+              </div>
+              <div class="site-card-metric">
+                <span>昨日</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.yesterdayUploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.yesterdayDownloaded) }}</strong>
+                </div>
+              </div>
+              <div class="site-card-metric">
+                <span>凭证 / 签到</span>
+                <strong class="site-card-credential">
+                  {{ credentialLabel(site) }} ·
+                  <em :class="signinStatusMeta(site).className">
+                    {{ signinStatusMeta(site).label
+                    }}<template v-if="site.signinSupported && site.signinEnabled">
+                      · {{ site.signinTime }}</template
+                    >
+                  </em>
+                </strong>
+              </div>
             </div>
-            <span
-              class="chip"
-              :class="statusMeta(site.connectivityStatus).className"
-              >{{ statusMeta(site.connectivityStatus).label }}</span
-            >
-            <span
-              class="ratio-value"
-              :class="{
-                good: Boolean(site.ratioInfinite || (site.ratio ?? 0) >= 2),
-                warning:
-                  !site.ratioInfinite &&
-                  (site.ratio ?? 0) > 0 &&
-                  (site.ratio ?? 0) < 1,
-              }"
-            >
-              {{ formatRatio(site) }}
-              <small>{{ site.userLevel || "等级未知" }}</small>
-            </span>
-            <span class="traffic-pair">
-              <span class="traffic-up">↑ {{ formatBytes(site.uploaded) }}</span>
-              <span class="traffic-down"
-                >↓ {{ formatBytes(site.downloaded) }}</span
-              >
-            </span>
-            <span class="traffic-pair">
-              <span class="traffic-up"
-                >↑ {{ formatBytes(site.todayUploaded) }}</span
-              >
-              <span class="traffic-down"
-                >↓ {{ formatBytes(site.todayDownloaded) }}</span
-              >
-            </span>
-            <span class="traffic-pair">
-              <span class="traffic-up"
-                >↑ {{ formatBytes(site.yesterdayUploaded) }}</span
-              >
-              <span class="traffic-down"
-                >↓ {{ formatBytes(site.yesterdayDownloaded) }}</span
-              >
-            </span>
-            <span class="site-credential-cell">
-              <span class="chip muted-chip">{{ credentialLabel(site) }}</span>
-              <small :class="signinStatusMeta(site).className"
-                >{{ signinStatusMeta(site).label
-                }}<template v-if="site.signinSupported && site.signinEnabled">
-                  · {{ site.signinTime }}</template
-                ></small
-              >
-            </span>
-            <div class="row-actions compact-actions">
+
+            <p v-if="site.lastConnectError" class="site-card-error">
+              {{ site.lastConnectError }}
+            </p>
+
+            <footer class="site-card-actions">
               <button
-                class="row-primary-action"
                 type="button"
-                :disabled="sitePrimaryDisabled(site)"
-                @click="runSitePrimaryAction(site)"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'signin' }"
+                :disabled="!site.signinSupported || site.signinRunning"
+                :title="!site.signinSupported ? '此站点不支持签到' : undefined"
+                @click="triggerSignin(site)"
               >
-                {{ sitePrimaryLabel(site) }}
+                {{ site.signinRunning ? "签到中..." : "签到" }}
               </button>
-              <AppActionMenu
-                :items="siteMenuItems(site)"
-                :label="`${site.displayName} 的更多操作`"
-                @select="handleSiteMenu(site, $event)"
-              />
-            </div>
-          </div>
+              <button
+                type="button"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'update' }"
+                :disabled="site.updating"
+                @click="triggerSiteUpdate(site)"
+              >
+                {{ site.updating ? "更新中..." : "更新站点信息" }}
+              </button>
+              <button
+                type="button"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'browse' }"
+                @click="openBrowse(site)"
+              >
+                浏览站点种子
+              </button>
+              <button type="button" class="site-card-action" @click="openDailyHistory(site)">
+                每日数据
+              </button>
+              <button type="button" class="site-card-action" @click="openEdit(site)">
+                编辑
+              </button>
+              <button type="button" class="site-card-action is-danger" @click="removeSite(site)">
+                删除
+              </button>
+            </footer>
+          </article>
         </div>
 
         <div class="mobile-site-list">
@@ -223,37 +254,47 @@
             :key="site.id"
             class="cc-card cc-mobile-card cc-site-mobile-card"
           >
-            <div class="site-name-cell" @click="openSite(site)">
-              <strong>{{ site.displayName }}</strong>
+            <div class="site-card-header">
+              <div class="site-name-cell" @click="openSite(site)">
+                <strong>{{ site.displayName }}</strong>
+                <small>{{ site.domain }}</small>
+              </div>
               <span
                 class="chip"
                 :class="statusMeta(site.connectivityStatus).className"
                 >{{ statusMeta(site.connectivityStatus).label }}</span
               >
             </div>
-            <p class="site-domain-cell" @click="openSite(site)">
-              {{ site.domain }}
-            </p>
             <p class="cc-mobile-summary">
               分享率 {{ formatRatio(site) }} ·
               {{ site.userLevel || "等级未知" }}
             </p>
-            <div class="cc-mobile-traffic">
-              <strong>↑ {{ formatBytes(site.uploaded) }}</strong
-              ><span>↓ {{ formatBytes(site.downloaded) }}</span
-              ><small
-                >今日 ↑ {{ formatBytes(site.todayUploaded) }} / ↓
-                {{ formatBytes(site.todayDownloaded) }}</small
-              ><small
-                >昨日 ↑ {{ formatBytes(site.yesterdayUploaded) }} / ↓
-                {{ formatBytes(site.yesterdayDownloaded) }}</small
-              >
+            <div class="site-mobile-metrics">
+              <div class="site-card-metric">
+                <span>总流量</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.uploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.downloaded) }}</strong>
+                </div>
+              </div>
+              <div class="site-card-metric">
+                <span>今日</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.todayUploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.todayDownloaded) }}</strong>
+                </div>
+              </div>
             </div>
             <p class="cc-mobile-summary">
               {{ credentialLabel(site) }} · {{ signinStatusMeta(site).label
               }}<span v-if="site.signinSupported && site.signinEnabled">
                 {{ site.signinTime }}</span
               >
+            </p>
+            <p class="site-mobile-yesterday">
+              昨日
+              <span><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.yesterdayUploaded) }}</span>
+              <span><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.yesterdayDownloaded) }}</span>
             </p>
             <p v-if="site.lastConnectError" class="cc-mobile-error">
               {{ site.lastConnectError }}
@@ -768,8 +809,7 @@ function handleSiteMenu(site: SiteListItem, key: string) {
   if (key === "signin") void triggerSignin(site);
   else if (key === "update") void triggerSiteUpdate(site);
   else if (key === "browse") openBrowse(site);
-  else if (key === "daily-history")
-    void router.push({ name: "site-daily-history", params: { id: site.id } });
+  else if (key === "daily-history") openDailyHistory(site);
   else if (key === "edit") void openEdit(site);
   else if (key === "delete") void removeSite(site);
 }
@@ -1050,6 +1090,10 @@ async function openBrowse(site: SiteListItem) {
   browseFilters.category = "";
   browseFilters.page = 1;
   await loadBrowseTorrents();
+}
+
+function openDailyHistory(site: SiteListItem) {
+  void router.push({ name: "site-daily-history", params: { id: site.id } });
 }
 
 async function loadBrowseTorrents() {
