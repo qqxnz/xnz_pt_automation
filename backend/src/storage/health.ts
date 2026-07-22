@@ -354,6 +354,44 @@ const TABLE_SPECS: TableSpec[] = [
     ]
   },
   {
+    name: 'notification_configs',
+    ddl: `CREATE TABLE notification_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      enabled INTEGER NOT NULL,
+      token TEXT NOT NULL,
+      events_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    requiredColumns: ['id', 'name', 'provider', 'enabled', 'token', 'events_json', 'created_at', 'updated_at']
+  },
+  {
+    name: 'notification_logs',
+    ddl: `CREATE TABLE notification_logs (
+      id TEXT PRIMARY KEY,
+      config_id TEXT,
+      config_name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      event TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL,
+      http_status INTEGER,
+      provider_code INTEGER,
+      provider_message TEXT,
+      error_message TEXT,
+      duration_ms INTEGER,
+      created_at TEXT NOT NULL
+    )`,
+    requiredColumns: ['id', 'config_name', 'provider', 'event', 'title', 'message', 'status', 'created_at'],
+    indexes: [
+      `CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_notification_logs_config_created ON notification_logs(config_id, created_at DESC)`
+    ]
+  },
+  {
     name: 'site_traffic_snapshots',
     ddl: `CREATE TABLE site_traffic_snapshots (
       id TEXT PRIMARY KEY,

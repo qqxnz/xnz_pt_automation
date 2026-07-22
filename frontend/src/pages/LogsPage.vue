@@ -3,7 +3,7 @@
     <CCPageHeader
       eyebrow="运行记录"
       title="日志"
-      description="查看系统操作、任务运行、调度、签到与种子事件。"
+      description="查看系统操作、任务运行、调度、签到、种子与通知发送结果。"
       :meta="lastUpdatedAt ? `最近更新：${lastUpdatedAt}` : undefined"
     >
       <template #actions>
@@ -77,6 +77,7 @@
           >
             种子日志
           </button>
+          <button type="button" :class="{ active: activeType === 'notification' }" @click="switchType('notification')">通知日志</button>
         </div>
         <label class="log-mobile-source">
           <span>日志分类</span>
@@ -86,6 +87,7 @@
             <option value="schedule">定时日志</option>
             <option value="signin">签到日志</option>
             <option value="torrent">种子日志</option>
+            <option value="notification">通知日志</option>
           </select>
         </label>
         <span>{{ loading ? "加载中..." : `${total} 条记录` }}</span>
@@ -155,6 +157,7 @@ import {
   exportLogs,
   getLogs,
   type LogType,
+  type NotificationLog,
   type OperationLog,
   type ScheduleLog,
   type SigninLog,
@@ -172,13 +175,16 @@ const initialType: LogType =
         ? "signin"
         : route.query.type === "torrent"
           ? "torrent"
-          : "operation";
+          : route.query.type === "notification"
+            ? "notification"
+            : "operation";
 const activeType = ref<LogType>(initialType);
 const operationLogs = ref<OperationLog[]>([]);
 const taskLogs = ref<TaskLog[]>([]);
 const scheduleLogs = ref<ScheduleLog[]>([]);
 const signinLogs = ref<SigninLog[]>([]);
 const torrentLogs = ref<TorrentLog[]>([]);
+const notificationLogs = ref<NotificationLog[]>([]);
 const loading = ref(false);
 const exporting = ref(false);
 const clearing = ref(false);
@@ -194,6 +200,7 @@ const items = computed(() => {
   if (activeType.value === "schedule") return scheduleLogs.value;
   if (activeType.value === "signin") return signinLogs.value;
   if (activeType.value === "torrent") return torrentLogs.value;
+  if (activeType.value === "notification") return notificationLogs.value;
   return taskLogs.value;
 });
 const totalPages = computed(() =>
@@ -204,6 +211,7 @@ const activeTypeText = computed(() => {
   if (activeType.value === "schedule") return "定时日志";
   if (activeType.value === "signin") return "签到日志";
   if (activeType.value === "torrent") return "种子日志";
+  if (activeType.value === "notification") return "通知日志";
   return "任务日志";
 });
 const emptyText = computed(() => `暂无${activeTypeText.value}。`);
@@ -249,7 +257,8 @@ function statusText(
     | OperationLog["status"]
     | TaskLog["status"]
     | ScheduleLog["status"]
-    | SigninLog["status"],
+    | SigninLog["status"]
+    | NotificationLog["status"],
 ) {
   const map = {
     SUCCESS: "成功",
@@ -261,17 +270,18 @@ function statusText(
 }
 
 function primaryText(
-  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog,
+  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog | NotificationLog,
 ) {
   if (item.type === "OPERATION") return item.action;
   if (item.type === "SCHEDULE") return scheduleJobText(item.jobName);
   if (item.type === "SIGNIN") return item.siteName;
   if (item.type === "TORRENT") return torrentEventText(item.event);
+  if (item.type === "NOTIFICATION") return `${notificationEventText(item.event)} · ${item.configName}`;
   return item.taskName;
 }
 
 function secondaryText(
-  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog,
+  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog | NotificationLog,
 ) {
   if (item.type === "TASK") {
     return [
@@ -323,6 +333,15 @@ function secondaryText(
       .filter(Boolean)
       .join(" / ");
   }
+  if (item.type === "NOTIFICATION") {
+    return [
+      `渠道：爱语飞飞`,
+      item.httpStatus === undefined ? "" : `HTTP：${item.httpStatus}`,
+      item.providerCode === undefined ? "" : `响应码：${item.providerCode}`,
+      item.providerMessage ? `渠道消息：${item.providerMessage}` : "",
+      item.durationMs === undefined ? "" : `耗时：${formatDuration(item.durationMs)}`,
+    ].filter(Boolean).join(" / ");
+  }
   return [
     item.actorName ? `操作者：${item.actorName}` : "操作者：未知",
     item.ip ? `IP：${item.ip}` : "",
@@ -367,6 +386,17 @@ function torrentSourceText(source: NonNullable<TorrentLog["source"]>) {
   return map[source] ?? source;
 }
 
+function notificationEventText(event: NotificationLog["event"]) {
+  const map: Record<NotificationLog["event"], string> = {
+    SITE_SIGNIN: "站点签到",
+    TASK_TRIGGERED: "任务触发",
+    TORRENT_ADDED: "种子添加",
+    TORRENT_DELETED: "种子删除",
+    TEST: "测试通知",
+  };
+  return map[event];
+}
+
 function runModeText(mode: NonNullable<TaskLog["runMode"]>) {
   const map = {
     AUTO: "自动执行",
@@ -391,7 +421,7 @@ function taskResultText(item: TaskLog) {
 }
 
 function failureDetails(
-  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog,
+  item: OperationLog | TaskLog | ScheduleLog | SigninLog | TorrentLog | NotificationLog,
 ) {
   if (item.type === "SCHEDULE") {
     return item.details ? [JSON.stringify(item.details)] : [];
@@ -401,6 +431,9 @@ function failureDetails(
   }
   if (item.type === "TORRENT") {
     return item.reason ? [`原因：${item.reason}`] : [];
+  }
+  if (item.type === "NOTIFICATION") {
+    return item.errorMessage ? [`发送失败：${item.errorMessage}`] : [];
   }
   if (item.type !== "TASK") return [];
   const details = [
@@ -477,6 +510,11 @@ async function loadLogs() {
       const result = await getLogs("torrent", requestedPage, pageSize);
       if (requestId !== loadRequestId) return;
       torrentLogs.value = result.items;
+      total.value = result.total;
+    } else if (requestedType === "notification") {
+      const result = await getLogs("notification", requestedPage, pageSize);
+      if (requestId !== loadRequestId) return;
+      notificationLogs.value = result.items;
       total.value = result.total;
     } else {
       const result = await getLogs("task", requestedPage, pageSize);

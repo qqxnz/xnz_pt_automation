@@ -96,7 +96,25 @@ export type TorrentLog = {
   createdAt: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent'
+export type NotificationLog = {
+  id: string
+  type: 'NOTIFICATION'
+  configId?: string
+  configName: string
+  provider: 'IYUU'
+  event: 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED' | 'TEST'
+  title: string
+  message: string
+  status: 'SUCCESS' | 'FAILED'
+  httpStatus?: number
+  providerCode?: number
+  providerMessage?: string
+  errorMessage?: string
+  durationMs?: number
+  createdAt: string
+}
+
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent' | 'notification'
 
 export type LogsResponse<T extends LogType> = {
   type: T
@@ -109,8 +127,10 @@ export type LogsResponse<T extends LogType> = {
       ? ScheduleLog[]
       : T extends 'signin'
         ? SigninLog[]
-        : T extends 'torrent'
-          ? TorrentLog[]
+      : T extends 'torrent'
+        ? TorrentLog[]
+        : T extends 'notification'
+          ? NotificationLog[]
           : OperationLog[]
 }
 

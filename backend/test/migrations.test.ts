@@ -12,6 +12,7 @@ import {
   dropColumnIfExists
 } from '../src/storage/migrations/_helpers.js'
 import { v23 } from '../src/storage/migrations/v23.js'
+import { v24 } from '../src/storage/migrations/v24.js'
 
 function openFreshDb(file: string): DatabaseSync {
   rmSync(file, { force: true })
@@ -211,6 +212,25 @@ test('v23 keeps the latest daily snapshot and adds history schema', () => {
     assert.throws(() => {
       db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, synced_at) VALUES ('duplicate', 'site-a', 'A', '2026-07-01', '2026-07-01T03:00:00.000Z')`).run()
     })
+  } finally {
+    db.close()
+    rmSync(tmpDir, { recursive: true, force: true })
+  }
+})
+
+test('v24 creates notification configuration and log tables idempotently', () => {
+  const tmpDir = path.join('/tmp', `xnz-mig-v24-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  mkdirSync(tmpDir, { recursive: true })
+  const dbFile = path.join(tmpDir, 'test.db')
+  const db = openFreshDb(dbFile)
+  try {
+    v24.up(db, { dataDir: tmpDir })
+    v24.up(db, { dataDir: tmpDir })
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'notification_%'").all() as Array<{ name: string }>
+    assert.deepEqual(new Set(tables.map((item) => item.name)), new Set(['notification_configs', 'notification_logs']))
+    const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'notification_logs'").all() as Array<{ name: string }>
+    assert.ok(indexes.some((item) => item.name === 'idx_notification_logs_created'))
+    assert.ok(indexes.some((item) => item.name === 'idx_notification_logs_config_created'))
   } finally {
     db.close()
     rmSync(tmpDir, { recursive: true, force: true })

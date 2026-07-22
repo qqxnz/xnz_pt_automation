@@ -150,6 +150,7 @@ const workNavItems: NavItem[] = [
   { label: "流量", shortLabel: "流量", to: "/statistics", icon: "⌁" },
 ];
 const systemNavItems: NavItem[] = [
+  { label: "通知", shortLabel: "通知", to: "/notifications", icon: "◆" },
   { label: "日志", shortLabel: "日志", to: "/logs", icon: "≡" },
   { label: "系统", shortLabel: "系统", to: "/settings", icon: "⚙" },
 ];

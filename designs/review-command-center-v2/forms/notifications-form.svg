@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1280" viewBox="0 0 1900 1280">
+  <style>
+    text{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}.ink{fill:#142033}.muted{fill:#718096}.white{fill:#fff}.blue{fill:#3478f6}.green{fill:#14a675}.orange{fill:#ef9b26}.red{fill:#e05263}.tiny{font-size:10px;letter-spacing:1px}.small{font-size:12px}.label{font-size:13px;font-weight:700}.title{font-size:18px;font-weight:800}
+  </style>
+  <rect width="1900" height="1280" fill="#e7edf4"/>
+  <text x="20" y="24" class="muted tiny">桌面端 · 新增 / 编辑通知配置弹窗与校验状态</text>
+  <text x="1398" y="24" class="muted tiny">移动端 · 全屏通知配置表单</text>
+
+  <!-- Desktop modal -->
+  <g transform="translate(0 44)">
+    <rect width="1360" height="1210" rx="18" fill="#17263f"/>
+    <rect x="145" y="24" width="1070" height="1150" rx="18" fill="#fff"/>
+    <text x="181" y="70" class="ink title">新增通知配置</text>
+    <text x="181" y="96" class="muted small">配置爱语飞飞 Token，并选择需要接收的业务事件。</text>
+    <text x="1175" y="70" text-anchor="end" class="muted title">×</text>
+    <line x1="145" y1="116" x2="1215" y2="116" stroke="#e5ebf2"/>
+
+    <text x="181" y="160" class="ink title">基础信息</text>
+    <text x="181" y="198" class="ink label">配置名称<tspan fill="#e05263"> *</tspan></text>
+    <rect x="181" y="210" width="380" height="40" rx="8" fill="#fff" stroke="#3478f6" stroke-width="2"/>
+    <text x="193" y="236" class="ink small">微信通知</text>
+    <text x="590" y="198" class="ink label">通知渠道</text>
+    <rect x="590" y="210" width="380" height="40" rx="8" fill="#f1f5f9" stroke="#dce5ee"/>
+    <text x="602" y="236" class="muted small">爱语飞飞（首期固定）</text><text x="946" y="237" class="muted title">⌄</text>
+    <rect x="181" y="280" width="18" height="18" rx="4" fill="#3478f6" stroke="#3478f6"/>
+    <text x="190" y="294" text-anchor="middle" class="white small">✓</text><text x="209" y="293" class="ink small">启用此通知配置</text>
+
+    <text x="181" y="354" class="ink title">连接凭证</text>
+    <text x="181" y="392" class="ink label">IYUU Token<tspan fill="#e05263"> *</tspan></text>
+    <rect x="181" y="404" width="789" height="40" rx="8" fill="#fff" stroke="#dce5ee"/>
+    <text x="193" y="430" class="ink small">••••••••••••••••••••••••</text><text x="922" y="430" text-anchor="end" class="blue small">显示</text>
+    <text x="181" y="470" class="muted small">前往 iyuu.cn 获取 Token。编辑已有配置时留空表示保留已保存 Token。</text>
+    <rect x="181" y="490" width="789" height="66" rx="10" fill="#f8fbff" stroke="#d8e6fa"/>
+    <text x="200" y="518" class="blue label">安全说明</text>
+    <text x="200" y="542" class="muted small">Token 仅用于服务端发送通知，不在配置列表、操作日志或通知日志中回显。</text>
+
+    <text x="181" y="620" class="ink title">通知事件</text>
+    <text x="181" y="648" class="muted small">至少选择一个事件；成功与失败结果都会通知，批量操作按业务批次汇总。</text>
+    <rect x="181" y="674" width="380" height="86" rx="10" fill="#f8fbff" stroke="#bcd3fb"/>
+    <rect x="201" y="696" width="18" height="18" rx="4" fill="#3478f6" stroke="#3478f6"/><text x="210" y="710" text-anchor="middle" class="white small">✓</text>
+    <text x="231" y="710" class="ink label">站点签到</text><text x="231" y="735" class="muted small">手动、批量及自动签到结果</text>
+    <rect x="590" y="674" width="380" height="86" rx="10" fill="#f8fbff" stroke="#bcd3fb"/>
+    <rect x="610" y="696" width="18" height="18" rx="4" fill="#3478f6" stroke="#3478f6"/><text x="619" y="710" text-anchor="middle" class="white small">✓</text>
+    <text x="640" y="710" class="ink label">任务触发</text><text x="640" y="735" class="muted small">自动或手动任务的最终执行结果</text>
+    <rect x="181" y="778" width="380" height="86" rx="10" fill="#fff" stroke="#dce5ee"/>
+    <rect x="201" y="800" width="18" height="18" rx="4" fill="#fff" stroke="#b9c6d5"/>
+    <text x="231" y="814" class="ink label">种子添加</text><text x="231" y="839" class="muted small">推送到下载器的成功或失败结果</text>
+    <rect x="590" y="778" width="380" height="86" rx="10" fill="#fff" stroke="#dce5ee"/>
+    <rect x="610" y="800" width="18" height="18" rx="4" fill="#fff" stroke="#b9c6d5"/>
+    <text x="640" y="814" class="ink label">种子删除</text><text x="640" y="839" class="muted small">手动或自动删除下载器任务结果</text>
+
+    <text x="181" y="920" class="ink title">测试与校验状态</text>
+    <rect x="181" y="940" width="380" height="54" rx="10" fill="#e8f8f2"/>
+    <text x="200" y="973" class="green label">✓ 测试通知发送成功</text>
+    <rect x="590" y="940" width="380" height="54" rx="10" fill="#fce9ec"/>
+    <text x="609" y="973" class="red label">! Token 无效或爱语飞飞拒绝请求</text>
+    <rect x="181" y="1010" width="380" height="54" rx="10" fill="#fff7ed"/>
+    <text x="200" y="1043" class="orange label">请选择至少一个通知事件</text>
+
+    <line x1="145" y1="1100" x2="1215" y2="1100" stroke="#e5ebf2"/>
+    <text x="181" y="1143" class="muted small">取消</text>
+    <rect x="914" y="1118" width="128" height="42" rx="9" fill="#fff" stroke="#3478f6"/><text x="978" y="1145" text-anchor="middle" class="blue label">发送测试通知</text>
+    <rect x="1058" y="1118" width="118" height="42" rx="9" fill="#3478f6"/><text x="1117" y="1145" text-anchor="middle" class="white label">保存配置</text>
+  </g>
+
+  <!-- Mobile full-screen form -->
+  <g transform="translate(1400 44)">
+    <rect width="460" height="1210" rx="24" fill="#f2f5f9"/>
+    <rect x="35" width="390" height="1210" rx="24" fill="#fff"/>
+    <text x="57" y="48" class="ink title">新增通知配置</text><text x="57" y="74" class="muted small">爱语飞飞</text><text x="399" y="48" text-anchor="end" class="muted title">×</text>
+    <text x="57" y="122" class="ink title">基础信息</text>
+    <text x="57" y="160" class="ink label">配置名称<tspan fill="#e05263"> *</tspan></text>
+    <rect x="57" y="172" width="326" height="40" rx="8" fill="#fff" stroke="#3478f6" stroke-width="2"/><text x="69" y="198" class="ink small">微信通知</text>
+    <text x="57" y="250" class="ink label">通知渠道</text>
+    <rect x="57" y="262" width="326" height="40" rx="8" fill="#f1f5f9" stroke="#dce5ee"/><text x="69" y="288" class="muted small">爱语飞飞（固定）</text>
+    <rect x="57" y="328" width="18" height="18" rx="4" fill="#3478f6"/><text x="66" y="342" text-anchor="middle" class="white small">✓</text><text x="85" y="341" class="ink small">启用此通知配置</text>
+    <text x="57" y="398" class="ink title">连接凭证</text>
+    <text x="57" y="436" class="ink label">IYUU Token<tspan fill="#e05263"> *</tspan></text>
+    <rect x="57" y="448" width="326" height="40" rx="8" fill="#fff" stroke="#dce5ee"/><text x="69" y="474" class="ink small">••••••••••••••••••</text><text x="358" y="474" text-anchor="end" class="blue small">显示</text>
+    <text x="57" y="512" class="muted small">编辑时留空表示保留原 Token</text>
+    <text x="57" y="570" class="ink title">通知事件</text>
+    <rect x="57" y="594" width="326" height="64" rx="10" fill="#f8fbff" stroke="#bcd3fb"/><rect x="75" y="617" width="18" height="18" rx="4" fill="#3478f6"/><text x="84" y="631" text-anchor="middle" class="white small">✓</text><text x="105" y="630" class="ink label">站点签到</text><text x="359" y="630" text-anchor="end" class="muted small">成功 / 失败</text>
+    <rect x="57" y="670" width="326" height="64" rx="10" fill="#f8fbff" stroke="#bcd3fb"/><rect x="75" y="693" width="18" height="18" rx="4" fill="#3478f6"/><text x="84" y="707" text-anchor="middle" class="white small">✓</text><text x="105" y="706" class="ink label">任务触发</text><text x="359" y="706" text-anchor="end" class="muted small">自动 / 手动</text>
+    <rect x="57" y="746" width="326" height="64" rx="10" fill="#fff" stroke="#dce5ee"/><rect x="75" y="769" width="18" height="18" rx="4" fill="#fff" stroke="#b9c6d5"/><text x="105" y="782" class="ink label">种子添加</text><text x="359" y="782" text-anchor="end" class="muted small">下载器任务</text>
+    <rect x="57" y="822" width="326" height="64" rx="10" fill="#fff" stroke="#dce5ee"/><rect x="75" y="845" width="18" height="18" rx="4" fill="#fff" stroke="#b9c6d5"/><text x="105" y="858" class="ink label">种子删除</text><text x="359" y="858" text-anchor="end" class="muted small">手动 / 自动</text>
+    <rect x="57" y="916" width="326" height="52" rx="10" fill="#e8f8f2"/><text x="75" y="948" class="green label">✓ 测试通知发送成功</text>
+    <rect x="57" y="990" width="326" height="42" rx="9" fill="#fff" stroke="#3478f6"/><text x="220" y="1017" text-anchor="middle" class="blue label">发送测试通知</text>
+    <rect x="35" y="1118" width="390" height="92" fill="#fff"/><line x1="35" y1="1118" x2="425" y2="1118" stroke="#e5ebf2"/>
+    <text x="65" y="1166" class="muted label">取消</text><rect x="257" y="1140" width="126" height="44" rx="9" fill="#3478f6"/><text x="320" y="1168" text-anchor="middle" class="white label">保存配置</text>
+  </g>
+</svg>

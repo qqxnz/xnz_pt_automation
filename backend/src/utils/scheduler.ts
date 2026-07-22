@@ -4,6 +4,7 @@ import { isSiteSigninSupported, siteDisplayName, syncSiteTrafficStats } from '..
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
+import { dispatchNotification } from './notifications.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 import { syncTorrentDownloadStats } from './torrentSync.js'
 import { localDateKey } from './time.js'
@@ -355,6 +356,12 @@ export async function runDueSignins() {
     }
   }
 
+  const detail = details.slice(0, 5).map((item) => `${item.siteName}：${item.message}`).join('\n')
+  await dispatchNotification({
+    event: 'SITE_SIGNIN',
+    title: failedCount ? '自动站点签到完成（含失败）' : '自动站点签到完成',
+    message: `共 ${due.length} 个站点，成功 ${successCount}，失败 ${failedCount}，跳过 ${skippedCount}${detail ? `\n${detail}` : ''}${details.length > 5 ? `\n另有 ${details.length - 5} 个站点` : ''}`
+  })
   return { scheduledCount: due.length, successCount, failedCount, skippedCount, backfilledCount, details }
 }
 

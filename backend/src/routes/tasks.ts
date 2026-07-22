@@ -20,6 +20,7 @@ import {
   updateTaskFieldsInDb
 } from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog, recordTorrentLog } from '../utils/logger.js'
+import { dispatchNotification } from '../utils/notifications.js'
 import { addTorrentUrlToQb, QbittorrentError } from '../utils/qbittorrent.js'
 import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites/index.js'
 
@@ -915,6 +916,18 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         }
       })
     }
+    await dispatchNotification({
+      event: 'TASK_TRIGGERED',
+      title: `任务【${task.name}】执行成功`,
+      message: `方式：${runMode === 'AUTO' ? '自动执行' : '手动运行'}\n${summary}`
+    })
+    if (task.autoPush && pushable.length > 0) {
+      await dispatchNotification({
+        event: 'TORRENT_ADDED',
+        title: pushFailedCount ? `种子添加完成（含失败）` : '种子添加成功',
+        message: `来源任务：${task.name}\n共尝试 ${pushable.length} 个，成功 ${pushedCount}，失败 ${pushFailedCount}${pushErrorMessages.length ? `\n${pushErrorMessages.slice(0, 3).join('\n')}` : ''}`
+      })
+    }
     return { task, fetchedCount: fetched.length, matchedCount: matched.length, skippedExistingCount: dedupedCount, pushedCount, pushFailedCount, summary }
   } catch (error) {
     const finishedAt = new Date().toISOString()
@@ -971,6 +984,11 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
         }
       })
     }
+    await dispatchNotification({
+      event: 'TASK_TRIGGERED',
+      title: `任务【${task.name}】执行失败`,
+      message: `方式：${runMode === 'AUTO' ? '自动执行' : '手动运行'}\n原因：${message}`
+    })
     throw error
   } finally {
     runningTaskIds.delete(taskId)
@@ -1037,6 +1055,11 @@ export async function resetStuckRunningTasks(options: ResetStuckTasksOptions): P
       summary: reason,
       errorMessage: reason,
       failureDetails: [reason]
+    })
+    await dispatchNotification({
+      event: 'TASK_TRIGGERED',
+      title: `任务【${task.name}】执行失败`,
+      message: `方式：${task.lastRunMode === 'AUTO' ? '自动执行' : '手动运行'}\n原因：${reason}`
     })
     logger.warn('task', `任务【${task.name}】运行状态已重置`, {
       taskId: task.id,

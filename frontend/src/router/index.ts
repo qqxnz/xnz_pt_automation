@@ -4,6 +4,7 @@ import SetupPage from '../pages/SetupPage.vue'
 import DashboardPage from '../pages/DashboardPage.vue'
 import DownloadersPage from '../pages/DownloadersPage.vue'
 import LogsPage from '../pages/LogsPage.vue'
+import NotificationsPage from '../pages/NotificationsPage.vue'
 import ModulePage from '../pages/ModulePage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 import SitesPage from '../pages/SitesPage.vue'
@@ -35,6 +36,7 @@ export const router = createRouter({
     { path: '/tasks', name: 'tasks', component: TasksPage, meta: { requiresAuth: true } },
     { path: '/torrents', name: 'torrents', component: TorrentsPage, meta: { requiresAuth: true } },
     { path: '/logs', name: 'logs', component: LogsPage, meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: NotificationsPage, meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: SettingsPage, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' }
   ]

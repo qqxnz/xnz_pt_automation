@@ -29,6 +29,7 @@ import {
   listLatestSigninLogBySiteAndDate
 } from '../../storage.js'
 import { logger, recordOperationLog } from '../../utils/logger.js'
+import { dispatchNotification } from '../../utils/notifications.js'
 import { isoOnLocalDate } from '../../utils/time.js'
 import { isSiteSigninRunning, signinSiteById } from '../signin/index.js'
 import { isSiteSigninSupported, pickAdapter, siteDisplayNameByDomain, siteTorrentPathByDomain } from './adapters.js'
@@ -771,6 +772,11 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
   if (!site) return res.status(404).json({ message: '站点不存在' })
 
   if (!isSiteSigninSupported(site.domain)) {
+    await dispatchNotification({
+      event: 'SITE_SIGNIN',
+      title: '站点签到不支持',
+      message: `站点「${siteDisplayName(site)}」暂不支持签到功能。`
+    })
     return res.status(409).json({
       ok: false,
       status: 'UNSUPPORTED',
@@ -795,6 +801,11 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
       ip: req.ip,
       userAgent: req.get('user-agent')
     })
+    await dispatchNotification({
+      event: 'SITE_SIGNIN',
+      title: `站点签到${result.status === 'SUCCESS' ? '成功' : result.status === 'SKIPPED' ? '已跳过' : '失败'}`,
+      message: `站点：${result.siteName}\n方式：手动签到\n结果：${result.message}${result.errorMessage ? `\n原因：${result.errorMessage}` : ''}`
+    })
     const ok = result.status !== 'FAILED'
     return res.json({
       ok,
@@ -817,6 +828,11 @@ sitesRouter.post('/:id/signin', requireAuth, async (req, res) => {
       actorName: actor?.username,
       ip: req.ip,
       userAgent: req.get('user-agent')
+    })
+    await dispatchNotification({
+      event: 'SITE_SIGNIN',
+      title: '站点签到失败',
+      message: `站点：${siteDisplayName(site)}\n方式：手动签到\n原因：${message}`
     })
     return res.status(400).json({ ok: false, status: 'FAILED', message, errorMessage: message })
   }
@@ -858,6 +874,15 @@ sitesRouter.post('/signin-all', requireAuth, async (req, res) => {
     actorName: actor?.username,
     ip: req.ip,
     userAgent: req.get('user-agent')
+  })
+  const successCount = results.filter((item) => item.status === 'SUCCESS').length
+  const failedCount = results.filter((item) => item.status === 'FAILED').length
+  const skippedCount = results.filter((item) => item.status === 'SKIPPED' || item.status === 'UNSUPPORTED').length
+  const detail = results.slice(0, 5).map((item) => `${item.siteName}：${item.message}`).join('\n')
+  await dispatchNotification({
+    event: 'SITE_SIGNIN',
+    title: failedCount ? '批量站点签到完成（含失败）' : '批量站点签到完成',
+    message: `共 ${results.length} 个站点，成功 ${successCount}，失败 ${failedCount}，跳过 ${skippedCount}${detail ? `\n${detail}` : ''}${results.length > 5 ? `\n另有 ${results.length - 5} 个站点` : ''}`
   })
   res.json({ total: results.length, results })
 })

@@ -124,6 +124,39 @@ export type TorrentLogRecord = {
   createdAt: string
 }
 
+export type NotificationProvider = 'IYUU'
+
+export type NotificationEvent = 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED'
+
+export type NotificationConfigRecord = {
+  id: string
+  name: string
+  provider: NotificationProvider
+  enabled: boolean
+  token: string
+  events: NotificationEvent[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type NotificationLogRecord = {
+  id: string
+  type: 'NOTIFICATION'
+  configId?: string
+  configName: string
+  provider: NotificationProvider
+  event: NotificationEvent | 'TEST'
+  title: string
+  message: string
+  status: 'SUCCESS' | 'FAILED'
+  httpStatus?: number
+  providerCode?: number
+  providerMessage?: string
+  errorMessage?: string
+  durationMs?: number
+  createdAt: string
+}
+
 export type TaskSortRule =
   | 'SEEDERS_ASC'
   | 'SEEDERS_DESC'
@@ -334,7 +367,7 @@ type AppStateMigrationPayload = {
   systemSettingsUpdatedAt?: string
 }
 
-export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent'
+export type LogType = 'operation' | 'task' | 'schedule' | 'signin' | 'torrent' | 'notification'
 
 export type LogQuery = {
   type: LogType
@@ -800,6 +833,32 @@ function createStructuredTables(db: DatabaseSync) {
       actor_name TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notification_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      enabled INTEGER NOT NULL,
+      token TEXT NOT NULL,
+      events_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notification_logs (
+      id TEXT PRIMARY KEY,
+      config_id TEXT,
+      config_name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      event TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      status TEXT NOT NULL,
+      http_status INTEGER,
+      provider_code INTEGER,
+      provider_message TEXT,
+      error_message TEXT,
+      duration_ms INTEGER,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS site_traffic_snapshots (
       id TEXT PRIMARY KEY,
       site_id TEXT NOT NULL,
@@ -852,6 +911,8 @@ function createStructuredTables(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_site_signin_logs_site ON site_signin_logs(site_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_torrent_logs_created ON torrent_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_torrent_logs_torrent ON torrent_logs(torrent_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notification_logs_config_created ON notification_logs(config_id, created_at DESC);
   `)
 }
 
@@ -1235,6 +1296,19 @@ function upsertTorrentLog(db: DatabaseSync, item: TorrentLogRecord) {
     .run(item.id, optional(item.torrentId), optional(item.siteId), optional(item.siteName), item.torrentTitle, item.event, item.status, item.message, optional(item.reason), optional(item.source), optional(item.actorId), optional(item.actorName), item.createdAt)
 }
 
+function upsertNotificationConfig(db: DatabaseSync, item: NotificationConfigRecord) {
+  db.prepare(`INSERT INTO notification_configs (id, name, provider, enabled, token, events_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, provider = excluded.provider, enabled = excluded.enabled, token = excluded.token, events_json = excluded.events_json, updated_at = excluded.updated_at`)
+    .run(item.id, item.name, item.provider, bool(item.enabled), item.token, json(item.events), item.createdAt, item.updatedAt)
+}
+
+function upsertNotificationLog(db: DatabaseSync, item: NotificationLogRecord) {
+  db.prepare(`INSERT INTO notification_logs (id, config_id, config_name, provider, event, title, message, status, http_status, provider_code, provider_message, error_message, duration_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(item.id, optional(item.configId), item.configName, item.provider, item.event, item.title, item.message, item.status, optional(item.httpStatus), optional(item.providerCode), optional(item.providerMessage), optional(item.errorMessage), optional(item.durationMs), item.createdAt)
+}
+
 function upsertSnapshot(db: DatabaseSync, item: SiteTrafficSnapshotRecord) {
   db.prepare(`INSERT INTO site_traffic_snapshots (id, site_id, site_name, date, uploaded, downloaded, ratio, ratio_infinite, user_level, synced_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1514,6 +1588,39 @@ function torrentLogFromRow(row: any): TorrentLogRecord {
   }
 }
 
+function notificationConfigFromRow(row: any): NotificationConfigRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    enabled: fromBool(row.enabled),
+    token: row.token,
+    events: parseJson<NotificationEvent[]>(row.events_json, []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function notificationLogFromRow(row: any): NotificationLogRecord {
+  return {
+    id: row.id,
+    type: 'NOTIFICATION',
+    configId: row.config_id ?? undefined,
+    configName: row.config_name,
+    provider: row.provider,
+    event: row.event,
+    title: row.title,
+    message: row.message,
+    status: row.status,
+    httpStatus: row.http_status ?? undefined,
+    providerCode: row.provider_code ?? undefined,
+    providerMessage: row.provider_message ?? undefined,
+    errorMessage: row.error_message ?? undefined,
+    durationMs: row.duration_ms ?? undefined,
+    createdAt: row.created_at
+  }
+}
+
 function snapshotsFromDb(db: DatabaseSync): SiteTrafficSnapshotRecord[] {
   return (db.prepare('SELECT * FROM site_traffic_snapshots ORDER BY date DESC, id').all() as any[]).map((row) => ({
     id: row.id,
@@ -1550,7 +1657,9 @@ function logTable(type: LogType) {
         ? 'site_signin_logs'
         : type === 'torrent'
           ? 'torrent_logs'
-          : 'operation_logs'
+          : type === 'notification'
+            ? 'notification_logs'
+            : 'operation_logs'
 }
 
 function logWhere(query: LogQuery) {
@@ -1596,6 +1705,11 @@ function logWhere(query: LogQuery) {
   } else if (query.type === 'torrent') {
     if (keyword) {
       clauses.push("lower(torrent_title || ' ' || coalesce(site_name, '') || ' ' || message || ' ' || coalesce(reason, '') || ' ' || coalesce(event, '') || ' ' || coalesce(actor_name, '')) LIKE ?")
+      params.push(`%${keyword}%`)
+    }
+  } else if (query.type === 'notification') {
+    if (keyword) {
+      clauses.push("lower(config_name || ' ' || event || ' ' || title || ' ' || message || ' ' || coalesce(provider_message, '') || ' ' || coalesce(error_message, '')) LIKE ?")
       params.push(`%${keyword}%`)
     }
   } else if (keyword) {
@@ -1734,6 +1848,57 @@ export async function appendTorrentLog(payload: Omit<TorrentLogRecord, 'id' | 't
   return log
 }
 
+export async function appendNotificationLog(payload: Omit<NotificationLogRecord, 'id' | 'type' | 'createdAt'>) {
+  const db = await readyDb()
+  const log: NotificationLogRecord = {
+    id: randomUUID(),
+    type: 'NOTIFICATION',
+    createdAt: new Date().toISOString(),
+    ...payload
+  }
+  upsertNotificationLog(db, log)
+  pruneLogTable(db, 'notification_logs')
+  return log
+}
+
+export async function listNotificationConfigsFromDb(): Promise<NotificationConfigRecord[]> {
+  const db = await readyDb()
+  return (db.prepare('SELECT * FROM notification_configs ORDER BY created_at DESC, id DESC').all() as any[]).map(notificationConfigFromRow)
+}
+
+export async function getNotificationConfigFromDb(id: string): Promise<NotificationConfigRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM notification_configs WHERE id = ?').get(id) as any
+  return row ? notificationConfigFromRow(row) : undefined
+}
+
+export async function saveNotificationConfigInDb(config: NotificationConfigRecord): Promise<void> {
+  const db = await readyDb()
+  upsertNotificationConfig(db, config)
+}
+
+export async function deleteNotificationConfigFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  return Number(db.prepare('DELETE FROM notification_configs WHERE id = ?').run(id).changes ?? 0) > 0
+}
+
+export async function listLatestNotificationLogsByConfig(): Promise<Map<string, NotificationLogRecord>> {
+  const db = await readyDb()
+  const rows = db.prepare(`SELECT n.* FROM notification_logs n
+    INNER JOIN (
+      SELECT config_id, MAX(created_at) AS max_created_at
+      FROM notification_logs
+      WHERE config_id IS NOT NULL
+      GROUP BY config_id
+    ) latest ON latest.config_id = n.config_id AND latest.max_created_at = n.created_at
+    ORDER BY n.id DESC`).all() as any[]
+  const result = new Map<string, NotificationLogRecord>()
+  for (const row of rows) {
+    if (row.config_id && !result.has(row.config_id)) result.set(row.config_id, notificationLogFromRow(row))
+  }
+  return result
+}
+
 export async function listLatestSigninLogBySiteAndDate(siteId: string, dateKey: string): Promise<SigninLogRecord | undefined> {
   const db = await readyDb()
   const { startIso, endIso } = localDayRangeIso(dateKey)
@@ -1766,7 +1931,7 @@ export async function clearLogsByType(type: LogType) {
   return { clearedCount: Number(row.total ?? 0) }
 }
 
-export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord>(query: LogQuery) {
+export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord | NotificationLogRecord>(query: LogQuery) {
   const db = await readyDb()
   const table = logTable(query.type)
   const where = logWhere(query)
@@ -1784,11 +1949,13 @@ export async function queryLogs<T extends OperationLogRecord | TaskLogRecord | S
           ? rows.map(signinLogFromRow)
           : query.type === 'torrent'
             ? rows.map(torrentLogFromRow)
-            : rows.map(operationLogFromRow)
+            : query.type === 'notification'
+              ? rows.map(notificationLogFromRow)
+              : rows.map(operationLogFromRow)
   return { items: items as T[], total: Number(totalRow.total ?? 0), page, pageSize }
 }
 
-export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord>(type: LogType) {
+export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord | ScheduleLogRecord | SigninLogRecord | TorrentLogRecord | NotificationLogRecord>(type: LogType) {
   const db = await readyDb()
   const rows = db.prepare(`SELECT * FROM ${logTable(type)} ORDER BY created_at DESC, id DESC`).all() as any[]
   const items =
@@ -1800,7 +1967,9 @@ export async function queryAllLogs<T extends OperationLogRecord | TaskLogRecord 
           ? rows.map(signinLogFromRow)
           : type === 'torrent'
             ? rows.map(torrentLogFromRow)
-            : rows.map(operationLogFromRow)
+            : type === 'notification'
+              ? rows.map(notificationLogFromRow)
+              : rows.map(operationLogFromRow)
   return items as T[]
 }
 

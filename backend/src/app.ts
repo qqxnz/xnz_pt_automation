@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js'
 import { backupRouter } from './routes/backup.js'
 import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
+import { notificationsRouter } from './routes/notifications.js'
 import { settingsRouter } from './routes/settings.js'
 import { sitesRouter } from './routes/sites/index.js'
 import { siteStatisticsRouter } from './routes/siteStatistics.js'
@@ -85,6 +86,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/backup', backupRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/notifications', notificationsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/sites', sitesRouter)
 app.use('/api/site-statistics', siteStatisticsRouter)
