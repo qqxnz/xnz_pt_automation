@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.35
+version=0.6.36
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.35<br/>新增独立通知模块，支持爱语飞飞、多事件通知、批量汇总与通知发送日志。
+changelog=0.6.36<br/>通知模块按设计稿完善概览、固定表单操作栏、配置启停与通知日志展示。

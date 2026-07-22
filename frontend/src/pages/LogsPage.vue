@@ -93,6 +93,11 @@
         <span>{{ loading ? "加载中..." : `${total} 条记录` }}</span>
       </div>
 
+      <div v-if="activeType === 'notification'" class="notification-log-heading">
+        <h2>通知日志</h2>
+        <p>每条记录对应一次配置发送尝试；批量业务展示汇总通知内容。</p>
+      </div>
+
       <CCStateView
         v-if="loading"
         title="日志加载中..."
@@ -108,8 +113,12 @@
             }}</span>
           </div>
           <div>
-            <strong>{{ primaryText(item) }}</strong>
-            <p>{{ item.message }}</p>
+            <strong :class="{ 'notification-log-primary': item.type === 'NOTIFICATION' }">{{ primaryText(item) }}</strong>
+            <template v-if="item.type === 'NOTIFICATION'">
+              <p class="notification-log-title">{{ item.title }}</p>
+              <p class="notification-log-message">{{ item.message }}</p>
+            </template>
+            <p v-else>{{ item.message }}</p>
             <div v-if="failureDetails(item).length" class="log-details">
               <span v-for="detail in failureDetails(item)" :key="detail">{{
                 detail
@@ -122,7 +131,7 @@
       <CCStateView
         v-else
         :title="emptyText"
-        description="切换分类或刷新后再查看。"
+        :description="emptyDescription"
       />
 
       <div v-if="!loading" class="pager">
@@ -215,6 +224,11 @@ const activeTypeText = computed(() => {
   return "任务日志";
 });
 const emptyText = computed(() => `暂无${activeTypeText.value}。`);
+const emptyDescription = computed(() =>
+  activeType.value === "notification"
+    ? "发送测试通知或业务事件触发后，发送结果会显示在这里。"
+    : "切换分类或刷新后再查看。",
+);
 
 function switchType(type: LogType) {
   if (activeType.value === type) {
@@ -334,13 +348,15 @@ function secondaryText(
       .join(" / ");
   }
   if (item.type === "NOTIFICATION") {
+    const result = item.status === "SUCCESS" ? "发送成功" : "发送失败";
     return [
-      `渠道：爱语飞飞`,
-      item.httpStatus === undefined ? "" : `HTTP：${item.httpStatus}`,
-      item.providerCode === undefined ? "" : `响应码：${item.providerCode}`,
-      item.providerMessage ? `渠道消息：${item.providerMessage}` : "",
-      item.durationMs === undefined ? "" : `耗时：${formatDuration(item.durationMs)}`,
-    ].filter(Boolean).join(" / ");
+      result,
+      item.providerCode === undefined ? "" : `errcode ${item.providerCode}`,
+      item.providerMessage || "",
+      item.httpStatus === undefined ? "" : `HTTP ${item.httpStatus}`,
+      item.durationMs === undefined ? "" : `耗时 ${formatDuration(item.durationMs)}`,
+      "Token 不在日志中展示",
+    ].filter(Boolean).join(" · ");
   }
   return [
     item.actorName ? `操作者：${item.actorName}` : "操作者：未知",
