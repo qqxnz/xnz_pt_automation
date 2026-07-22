@@ -284,36 +284,75 @@
                   <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.todayDownloaded) }}</strong>
                 </div>
               </div>
-            </div>
-            <p class="cc-mobile-summary">
-              {{ credentialLabel(site) }} · {{ signinStatusMeta(site).label
-              }}<span v-if="site.signinSupported && site.signinEnabled">
-                {{ site.signinTime }}</span
+              <div class="site-card-metric">
+                <span>昨日</span>
+                <div class="site-traffic-values">
+                  <strong><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.yesterdayUploaded) }}</strong>
+                  <strong><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.yesterdayDownloaded) }}</strong>
+                </div>
+              </div>
+              <div
+                class="site-card-metric site-mobile-credential"
+                :class="`is-${signinStatusMeta(site).className}`"
               >
-            </p>
-            <p class="site-mobile-yesterday">
-              昨日
-              <span><i class="traffic-up-arrow">↑</i>{{ formatBytes(site.yesterdayUploaded) }}</span>
-              <span><i class="traffic-down-arrow">↓</i>{{ formatBytes(site.yesterdayDownloaded) }}</span>
-            </p>
+                <span>凭证 / 签到</span>
+                <strong>
+                  {{ credentialLabel(site) }} · {{ signinStatusMeta(site).label
+                  }}<template v-if="site.signinSupported && site.signinEnabled">
+                    · {{ site.signinTime }}</template
+                  >
+                </strong>
+              </div>
+            </div>
             <p v-if="site.lastConnectError" class="cc-mobile-error">
               {{ site.lastConnectError }}
             </p>
-            <div class="row-actions compact-actions">
+            <footer class="site-mobile-actions">
               <button
-                class="row-primary-action"
                 type="button"
-                :disabled="sitePrimaryDisabled(site)"
-                @click="runSitePrimaryAction(site)"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'signin' }"
+                :disabled="!site.signinSupported || site.signinRunning"
+                :title="!site.signinSupported ? '此站点不支持签到' : undefined"
+                @click="triggerSignin(site)"
               >
-                {{ sitePrimaryLabel(site) }}
+                {{ site.signinRunning ? "签到中..." : "签到" }}
               </button>
-              <AppActionMenu
-                :items="siteMenuItems(site)"
-                :label="`${site.displayName} 的更多操作`"
-                @select="handleSiteMenu(site, $event)"
-              />
-            </div>
+              <button
+                type="button"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'update' }"
+                :disabled="site.updating"
+                @click="triggerSiteUpdate(site)"
+              >
+                {{ site.updating ? "更新中..." : "更新站点信息" }}
+              </button>
+              <button
+                type="button"
+                class="site-card-action"
+                :class="{ 'is-primary': sitePrimaryKey(site) === 'browse' }"
+                @click="openBrowse(site)"
+              >
+                浏览站点种子
+              </button>
+              <button
+                type="button"
+                class="site-card-action"
+                @click="openDailyHistory(site)"
+              >
+                每日数据
+              </button>
+              <button type="button" class="site-card-action" @click="openEdit(site)">
+                编辑站点
+              </button>
+              <button
+                type="button"
+                class="site-card-action is-danger"
+                @click="removeSite(site)"
+              >
+                删除站点
+              </button>
+            </footer>
           </article>
         </div>
       </section>
@@ -532,9 +571,6 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppLayout from "../components/AppLayout.vue";
 import AppSelect from "../components/AppSelect.vue";
-import AppActionMenu, {
-  type AppActionMenuItem,
-} from "../components/AppActionMenu.vue";
 import CCPageHeader from "../components/CCPageHeader.vue";
 import CCStateView from "../components/CCStateView.vue";
 import { useMediaQuery } from "../composables/useMediaQuery";
@@ -733,12 +769,6 @@ function signinStatusMeta(site: SiteListItem) {
   return { label: "待签到", className: "unknown-chip" };
 }
 
-function signinButtonLabel(site: SiteListItem) {
-  if (site.signinRunning) return "签到中...";
-  if (!site.signinSupported) return "不支持";
-  return "签到";
-}
-
 function sitePrimaryKey(site: SiteListItem) {
   if (
     site.connectivityStatus === "AUTH_FAILED" ||
@@ -752,66 +782,6 @@ function sitePrimaryKey(site: SiteListItem) {
   )
     return "signin";
   return "browse";
-}
-
-function sitePrimaryLabel(site: SiteListItem) {
-  const key = sitePrimaryKey(site);
-  if (key === "update")
-    return site.updating
-      ? "更新中..."
-      : site.connectivityStatus === "AUTH_FAILED"
-        ? "更新凭证"
-        : "重新检测";
-  if (key === "signin") return signinButtonLabel(site);
-  return "浏览";
-}
-
-function sitePrimaryDisabled(site: SiteListItem) {
-  const key = sitePrimaryKey(site);
-  return key === "update"
-    ? Boolean(site.updating)
-    : key === "signin"
-      ? Boolean(site.signinRunning)
-      : false;
-}
-
-function runSitePrimaryAction(site: SiteListItem) {
-  const key = sitePrimaryKey(site);
-  if (key === "update") void triggerSiteUpdate(site);
-  else if (key === "signin") void triggerSignin(site);
-  else openBrowse(site);
-}
-
-function siteMenuItems(site: SiteListItem): AppActionMenuItem[] {
-  const primary = sitePrimaryKey(site);
-  return [
-    {
-      key: "signin",
-      label: signinButtonLabel(site),
-      hidden: primary === "signin",
-      disabled: !site.signinSupported || site.signinRunning,
-      disabledReason: !site.signinSupported ? "此站点不支持签到" : undefined,
-    },
-    {
-      key: "update",
-      label: site.updating ? "更新中..." : "更新站点信息",
-      hidden: primary === "update",
-      disabled: site.updating,
-    },
-    { key: "browse", label: "浏览站点种子", hidden: primary === "browse" },
-    { key: "daily-history", label: "每日数据" },
-    { key: "edit", label: "编辑站点" },
-    { key: "delete", label: "删除站点", tone: "danger" },
-  ];
-}
-
-function handleSiteMenu(site: SiteListItem, key: string) {
-  if (key === "signin") void triggerSignin(site);
-  else if (key === "update") void triggerSiteUpdate(site);
-  else if (key === "browse") openBrowse(site);
-  else if (key === "daily-history") openDailyHistory(site);
-  else if (key === "edit") void openEdit(site);
-  else if (key === "delete") void removeSite(site);
 }
 
 function formatDate(value?: string) {

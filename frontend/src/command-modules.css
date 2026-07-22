@@ -1431,8 +1431,7 @@
   gap: 7px 13px;
 }
 
-.site-traffic-values strong,
-.site-mobile-yesterday span {
+.site-traffic-values strong {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -1443,8 +1442,7 @@
   white-space: nowrap;
 }
 
-.site-traffic-values i,
-.site-mobile-yesterday i {
+.site-traffic-values i {
   font-style: normal;
   font-size: 15px;
   font-weight: 900;
@@ -1541,7 +1539,7 @@
 }
 
 .site-mobile-metrics,
-.site-mobile-yesterday {
+.site-mobile-actions {
   display: none;
 }
 
@@ -2098,7 +2096,9 @@
   }
 
   .site-mobile-metrics .site-card-metric {
+    min-height: 58px;
     padding: 11px 10px;
+    border: 1px solid transparent;
     border-radius: 9px;
     background: #f8fafc;
   }
@@ -2115,24 +2115,51 @@
     font-size: 12px;
   }
 
-  .site-mobile-yesterday {
+  .site-mobile-credential strong {
+    color: var(--cc-text);
+    font-size: 12px;
+  }
+
+  .site-mobile-credential.is-online-chip {
+    border-color: #ccefe2;
+    background: #eef9f5;
+  }
+
+  .site-mobile-credential.is-online-chip strong {
+    color: var(--cc-success);
+  }
+
+  .site-mobile-credential.is-auth-chip,
+  .site-mobile-credential.is-unknown-chip {
+    border-color: #fde4bd;
+    background: #fff8ed;
+  }
+
+  .site-mobile-credential.is-auth-chip strong,
+  .site-mobile-credential.is-unknown-chip strong {
+    color: var(--cc-warning);
+  }
+
+  .site-mobile-credential.is-disabled-chip,
+  .site-mobile-credential.is-muted-chip {
+    border-color: var(--cc-border);
+  }
+
+  .site-mobile-actions {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 7px 0 10px;
-    color: var(--cc-muted);
-    font-size: 11px;
-  }
-
-  .site-mobile-yesterday span {
-    gap: 3px;
-    font-size: 11px;
-  }
-
-  .cc-site-mobile-card > .compact-actions {
+    flex-wrap: wrap;
+    gap: 8px;
     margin-top: 4px;
     padding-top: 12px;
     border-top: 1px solid var(--cc-border);
+  }
+
+  .site-mobile-actions .site-card-action {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 92px;
+    padding: 0 8px;
+    font-size: 12px;
   }
 
   .dashboard-head {

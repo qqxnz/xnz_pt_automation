@@ -9,7 +9,7 @@
 
   <rect width="2020" height="1400" fill="#e7edf4"/>
   <text x="20" y="24" class="muted tiny">桌面端 · 单列通栏卡片设计提案</text>
-  <text x="1502" y="24" class="muted tiny">移动端 · 保持现有卡片与操作菜单</text>
+  <text x="1502" y="24" class="muted tiny">移动端 · 四项独立指标卡 + 底部平铺操作</text>
 
   <!-- Desktop -->
   <g transform="translate(0 40)">
@@ -131,10 +131,10 @@
     <text x="1114" y="1268" class="red small">删除始终保持危险操作样式。</text>
   </g>
 
-  <!-- Mobile preserved -->
+  <!-- Mobile: independent metric tiles and wrapped footer actions -->
   <g transform="translate(1482 40)">
-    <rect width="478" height="1080" rx="18" fill="#f2f5f9"/>
-    <rect x="44" width="390" height="1080" rx="24" fill="#f2f5f9"/>
+    <rect width="478" height="1320" rx="18" fill="#f2f5f9"/>
+    <rect x="44" width="390" height="1320" rx="24" fill="#f2f5f9"/>
     <rect x="44" width="390" height="62" rx="24" fill="#fff"/>
     <text x="64" y="39" class="ink title">☰</text>
     <rect x="102" y="17" width="30" height="30" rx="9" fill="#3478f6"/><text x="117" y="38" text-anchor="middle" class="white tiny">PT</text>
@@ -142,34 +142,46 @@
     <text x="60" y="92" class="muted tiny">站点</text><text x="60" y="120" class="ink title">管理 PT 站点</text>
     <rect x="60" y="140" width="358" height="42" rx="9" fill="#fff" stroke="#dce5ee"/><text x="76" y="166" class="muted small">搜索站点 / 域名　　筛选⌄</text>
     <!-- Mobile card: auth failed -->
-    <g filter="url(#cardShadow)"><rect x="60" y="200" width="358" height="238" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
+    <g filter="url(#cardShadow)"><rect x="60" y="200" width="358" height="396" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
     <text x="78" y="232" class="ink title">HDHome</text><rect x="330" y="216" width="70" height="22" rx="11" fill="#fff3de"/><text x="365" y="231" text-anchor="middle" class="orange pill">认证失败</text>
     <text x="78" y="256" class="muted small">pt.hdhome.org</text><text x="78" y="278" class="ink small">分享率 3.24 · Power User</text>
     <rect x="78" y="292" width="154" height="58" rx="9" fill="#f8fafc"/>
     <text x="90" y="310" class="metric-label">总流量</text><text x="90" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 12.6 TB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.9 TB</tspan></text>
     <rect x="242" y="292" width="158" height="58" rx="9" fill="#f8fafc"/>
     <text x="254" y="310" class="metric-label">今日</text><text x="254" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 21 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 2 GB</tspan></text>
-    <text x="78" y="374" class="orange small">Cookie 已过期 · 待签到 09:00</text>
-    <rect x="78" y="390" width="136" height="32" rx="8" fill="#3478f6"/><text x="146" y="411" text-anchor="middle" class="white small">更新凭证</text>
-    <rect x="224" y="390" width="48" height="32" rx="8" fill="#fff" stroke="#dce5ee"/><text x="248" y="411" text-anchor="middle" class="blue title">···</text>
+    <rect x="78" y="360" width="154" height="58" rx="9" fill="#f8fafc"/>
+    <text x="90" y="378" class="metric-label">昨日</text><text x="90" y="402" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-empty"> -</tspan><tspan dx="28" class="down-arrow">↓</tspan><tspan class="traffic-empty"> -</tspan></text>
+    <rect x="242" y="360" width="158" height="58" rx="9" fill="#fff8ed" stroke="#fde4bd"/>
+    <text x="254" y="378" class="metric-label">凭证 / 签到</text><text x="254" y="402" class="orange small" font-weight="700">Cookie · 待签到 09:00</text>
+    <line x1="78" y1="434" x2="400" y2="434" stroke="#edf1f5"/>
+    <rect x="78" y="448" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="471" text-anchor="middle" class="blue small">签到</text>
+    <rect x="184" y="448" width="108" height="36" rx="8" fill="#3478f6"/><text x="238" y="471" text-anchor="middle" class="white small">更新站点信息</text>
+    <rect x="300" y="448" width="100" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="350" y="471" text-anchor="middle" class="blue small">浏览种子</text>
+    <rect x="78" y="492" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="515" text-anchor="middle" class="blue small">每日数据</text>
+    <rect x="184" y="492" width="108" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="238" y="515" text-anchor="middle" class="blue small">编辑站点</text>
+    <rect x="300" y="492" width="100" height="36" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="350" y="515" text-anchor="middle" class="red small">删除站点</text>
+    <text x="78" y="557" class="orange small">Cookie 已过期，请优先更新凭证</text>
+    <text x="78" y="580" class="muted tiny">操作始终位于卡片底部；按可用宽度自动换行</text>
 
     <!-- Mobile card: online -->
-    <g filter="url(#cardShadow)"><rect x="60" y="454" width="358" height="220" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
-    <text x="78" y="486" class="ink title">OurBits</text><rect x="350" y="470" width="50" height="22" rx="11" fill="#e8f8f2"/><text x="375" y="485" text-anchor="middle" class="green pill">在线</text>
-    <text x="78" y="510" class="muted small">ourbits.club</text><text x="78" y="532" class="ink small">分享率 2.18 · Elite User</text>
-    <rect x="78" y="546" width="154" height="58" rx="9" fill="#f8fafc"/>
-    <text x="90" y="564" class="metric-label">总流量</text><text x="90" y="588" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 8.1 TB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.7 TB</tspan></text>
-    <rect x="242" y="546" width="158" height="58" rx="9" fill="#f8fafc"/>
-    <text x="254" y="564" class="metric-label">今日</text><text x="254" y="588" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 12 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 2 GB</tspan></text>
-    <text x="78" y="626" class="green small">API Key · 今日已签到 09:00</text>
-    <rect x="78" y="638" width="88" height="32" rx="8" fill="#3478f6"/><text x="122" y="659" text-anchor="middle" class="white small">浏览</text>
-    <rect x="176" y="638" width="48" height="32" rx="8" fill="#fff" stroke="#dce5ee"/><text x="200" y="659" text-anchor="middle" class="blue title">···</text>
-
-    <!-- Mobile action sheet -->
-    <rect x="44" y="704" width="390" height="336" rx="20" fill="#fff" filter="url(#cardShadow)"/>
-    <rect x="190" y="717" width="100" height="4" rx="2" fill="#d4dce6"/>
-    <text x="68" y="758" class="ink title">HDHome</text><text x="68" y="786" class="muted small">站点操作 · 所有次级操作集中于此</text>
-    <text x="68" y="828" class="blue label">签到</text><text x="68" y="866" class="ink label">更新站点信息</text><text x="68" y="904" class="ink label">浏览站点种子</text><text x="68" y="942" class="ink label">每日数据</text><text x="68" y="980" class="ink label">编辑站点</text>
-    <line x1="68" y1="998" x2="410" y2="998" stroke="#e5ebf2"/><text x="68" y="1026" class="red label">删除站点</text>
+    <g filter="url(#cardShadow)"><rect x="60" y="616" width="358" height="374" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
+    <text x="78" y="648" class="ink title">OurBits</text><rect x="350" y="632" width="50" height="22" rx="11" fill="#e8f8f2"/><text x="375" y="647" text-anchor="middle" class="green pill">在线</text>
+    <text x="78" y="672" class="muted small">ourbits.club</text><text x="78" y="694" class="ink small">分享率 2.18 · Elite User</text>
+    <rect x="78" y="708" width="154" height="58" rx="9" fill="#f8fafc"/>
+    <text x="90" y="726" class="metric-label">总流量</text><text x="90" y="750" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 8.1 TB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.7 TB</tspan></text>
+    <rect x="242" y="708" width="158" height="58" rx="9" fill="#f8fafc"/>
+    <text x="254" y="726" class="metric-label">今日</text><text x="254" y="750" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 12 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 2 GB</tspan></text>
+    <rect x="78" y="776" width="154" height="58" rx="9" fill="#f8fafc"/>
+    <text x="90" y="794" class="metric-label">昨日</text><text x="90" y="818" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 18 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 4 GB</tspan></text>
+    <rect x="242" y="776" width="158" height="58" rx="9" fill="#eef9f5" stroke="#ccefe2"/>
+    <text x="254" y="794" class="metric-label">凭证 / 签到</text><text x="254" y="818" class="green small" font-weight="700">API Key · 已签到 09:00</text>
+    <line x1="78" y1="850" x2="400" y2="850" stroke="#edf1f5"/>
+    <rect x="78" y="864" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="887" text-anchor="middle" class="blue small">签到</text>
+    <rect x="184" y="864" width="108" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="238" y="887" text-anchor="middle" class="blue small">更新站点信息</text>
+    <rect x="300" y="864" width="100" height="36" rx="8" fill="#3478f6"/><text x="350" y="887" text-anchor="middle" class="white small">浏览种子</text>
+    <rect x="78" y="908" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="931" text-anchor="middle" class="blue small">每日数据</text>
+    <rect x="184" y="908" width="108" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="238" y="931" text-anchor="middle" class="blue small">编辑站点</text>
+    <rect x="300" y="908" width="100" height="36" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="350" y="931" text-anchor="middle" class="red small">删除站点</text>
+    <text x="78" y="972" class="muted tiny">两列指标网格；操作按钮保持等高并自然换行</text>
   </g>
 </svg>

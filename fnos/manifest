@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.36
+version=0.6.37
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.36<br/>通知模块按设计稿完善概览、固定表单操作栏、配置启停与通知日志展示。
+changelog=0.6.37<br/>优化移动端站点卡片：总流量、今日、昨日与签到状态独立展示，操作按钮在卡片底部平铺并自动换行。
