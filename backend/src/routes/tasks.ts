@@ -20,7 +20,7 @@ import {
   updateTaskFieldsInDb
 } from '../storage.js'
 import { logger, recordOperationLog, recordScheduleLog, recordTaskLog, recordTorrentLog } from '../utils/logger.js'
-import { dispatchNotification } from '../utils/notifications.js'
+import { dispatchNotification, formatNotificationTorrentNames } from '../utils/notifications.js'
 import { addTorrentUrlToQb, QbittorrentError } from '../utils/qbittorrent.js'
 import { browseTorrents, normalizeSiteDomain, resolveSiteUrl, siteDisplayName, type TorrentListItem } from './sites/index.js'
 
@@ -925,7 +925,7 @@ async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRu
       await dispatchNotification({
         event: 'TORRENT_ADDED',
         title: pushFailedCount ? `种子添加完成（含失败）` : '种子添加成功',
-        message: `来源任务：${task.name}\n共尝试 ${pushable.length} 个，成功 ${pushedCount}，失败 ${pushFailedCount}${pushErrorMessages.length ? `\n${pushErrorMessages.slice(0, 3).join('\n')}` : ''}`
+        message: `来源任务：${task.name}\n${formatNotificationTorrentNames(pushable.map((item) => item.title))}\n共尝试 ${pushable.length} 个，成功 ${pushedCount}，失败 ${pushFailedCount}${pushErrorMessages.length ? `\n${pushErrorMessages.slice(0, 3).join('\n')}` : ''}`
       })
     }
     return { task, fetchedCount: fetched.length, matchedCount: matched.length, skippedExistingCount: dedupedCount, pushedCount, pushFailedCount, summary }

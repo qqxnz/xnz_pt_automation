@@ -12,7 +12,7 @@ import {
 } from '../storage.js'
 import type { DownloaderRecord, SiteRecord, TorrentRecord } from '../storage.js'
 import { recordOperationLog, recordTorrentLog } from '../utils/logger.js'
-import { dispatchNotification } from '../utils/notifications.js'
+import { dispatchNotification, formatNotificationTorrentName, formatNotificationTorrentNames } from '../utils/notifications.js'
 import { addTorrentUrlToQb, deleteTorrentFromQb, QbittorrentError } from '../utils/qbittorrent.js'
 import { syncTorrentDownloadStats } from '../utils/torrentSync.js'
 
@@ -227,15 +227,15 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   const downloader = downloaders.find((item) => item.id === (requestedDownloaderId || torrent.downloaderId))
   const site = sites.find((item) => item.id === torrent.siteId)
   if (!downloader) {
-    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `种子：${torrent.title}\n原因：请选择下载器` })
+    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `${formatNotificationTorrentName(torrent.title)}\n原因：请选择下载器` })
     return res.status(400).json({ message: '请选择下载器' })
   }
   if (!downloader.enabled) {
-    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：下载器已禁用` })
+    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：下载器已禁用` })
     return res.status(400).json({ message: '下载器已禁用' })
   }
   if (!site) {
-    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `种子：${torrent.title}\n原因：种子来源站点不存在` })
+    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `${formatNotificationTorrentName(torrent.title)}\n原因：种子来源站点不存在` })
     return res.status(400).json({ message: '种子来源站点不存在' })
   }
   if (hasSavePathOverride) torrent.taskSavePath = savePathOverride
@@ -258,7 +258,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
       actorName: res.locals.user?.username,
       message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
     })
-    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：${torrent.errorMessage}` })
+    await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：${torrent.errorMessage}` })
     return res.status(400).json({ message: torrent.errorMessage })
   }
   try {
@@ -293,7 +293,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
         actorName: res.locals.user?.username,
         message: `推送种子「${torrent.title}」失败：${torrent.errorMessage}`
       })
-      await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：${torrent.errorMessage}` })
+      await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：${torrent.errorMessage}` })
       return res.status(400).json({ message: torrent.errorMessage })
     }
   }
@@ -330,7 +330,7 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
     actorName: res.locals.user?.username,
     message: pushLogMessage
   })
-  await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加成功', message: `种子：${torrent.title}\n下载器：${downloader.name}${torrent.taskSavePath ? `\n保存位置：${torrent.taskSavePath}` : ''}` })
+  await dispatchNotification({ event: 'TORRENT_ADDED', title: '种子添加成功', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}${torrent.taskSavePath ? `\n保存位置：${torrent.taskSavePath}` : ''}` })
   res.json(safeTorrent(syncedTorrent))
 })
 
@@ -342,13 +342,16 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
   const siteById = new Map(sites.map((site: SiteRecord) => [site.id, site]))
   const downloaderById = new Map(downloaders.map((downloader: DownloaderRecord) => [downloader.id, downloader]))
   const torrents: TorrentRecord[] = []
-  const failed: Array<{ id: string; message: string }> = []
+  const notificationNames: string[] = []
+  const failed: Array<{ id: string; title?: string; message: string }> = []
   for (const id of ids) {
     const torrent = await getTorrentById(id)
     if (!torrent) {
+      notificationNames.push(id)
       failed.push({ id, message: '种子不存在' })
       continue
     }
+    notificationNames.push(torrent.title)
     torrents.push(torrent)
   }
   const updateBuffer: TorrentRecord[] = []
@@ -361,7 +364,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       torrent.currentState = 'PUSH_FAILED'
       torrent.errorMessage = !downloader?.enabled ? '下载器不可用' : !site ? '种子来源站点不存在' : '缺少真实种子下载链接'
       updateBuffer.push(torrent)
-      failed.push({ id: torrent.id, message: torrent.errorMessage })
+      failed.push({ id: torrent.id, title: torrent.title, message: torrent.errorMessage })
       await recordTorrentLog({
         torrentId: torrent.id,
         siteId: torrent.siteId,
@@ -394,7 +397,7 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
         torrent.currentState = 'PUSH_FAILED'
         torrent.errorMessage = error instanceof Error ? error.message : '推送到下载器失败'
         updateBuffer.push(torrent)
-        failed.push({ id: torrent.id, message: torrent.errorMessage })
+        failed.push({ id: torrent.id, title: torrent.title, message: torrent.errorMessage })
         await recordTorrentLog({
           torrentId: torrent.id,
           siteId: torrent.siteId,
@@ -446,11 +449,11 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
     status: failed.length ? 'FAILED' : 'SUCCESS',
     ...operationActor(res, req)
   })
-  const batchAddFailures = failed.slice(0, 3).map((item) => `${item.id}：${item.message}`).join('\n')
+  const batchAddFailures = failed.slice(0, 3).map((item) => `${item.title ?? item.id}：${item.message}`).join('\n')
   await dispatchNotification({
     event: 'TORRENT_ADDED',
     title: failed.length ? '批量种子添加完成（含失败）' : '批量种子添加成功',
-    message: `共尝试 ${ids.length} 个，成功 ${successCount}，失败 ${failed.length}${batchAddFailures ? `\n${batchAddFailures}` : ''}`
+    message: `${formatNotificationTorrentNames(notificationNames)}\n共尝试 ${ids.length} 个，成功 ${successCount}，失败 ${failed.length}${batchAddFailures ? `\n${batchAddFailures}` : ''}`
   })
   res.json({ successCount, failedCount: failed.length, failed })
 })
@@ -494,7 +497,8 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
   const downloaderById = new Map(downloaders.map((downloader) => [downloader.id, downloader]))
   const updateBuffer: TorrentRecord[] = []
   let successCount = 0
-  const failed: Array<{ id: string; message: string }> = []
+  const notificationNames: string[] = []
+  const failed: Array<{ id: string; title?: string; message: string }> = []
 
   const affectedDownloaderIds = new Set<string>()
   for (const id of ids) {
@@ -510,12 +514,14 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
   for (const id of ids) {
     const torrent = await getTorrentById(id)
     if (!torrent) {
+      notificationNames.push(id)
       failed.push({ id, message: '种子不存在' })
       continue
     }
+    notificationNames.push(torrent.title)
     const downloader = downloaderById.get(torrent.downloaderId ?? '')
     if (!downloader) {
-      failed.push({ id, message: '种子绑定下载器不存在' })
+      failed.push({ id, title: torrent.title, message: '种子绑定下载器不存在' })
       await recordTorrentLog({
         torrentId: torrent.id,
         siteId: torrent.siteId,
@@ -531,7 +537,7 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
       continue
     }
     if (!downloader.enabled) {
-      failed.push({ id, message: '下载器已禁用' })
+      failed.push({ id, title: torrent.title, message: '下载器已禁用' })
       await recordTorrentLog({
         torrentId: torrent.id,
         siteId: torrent.siteId,
@@ -547,7 +553,7 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
       continue
     }
     if (!torrent.torrentHash) {
-      failed.push({ id, message: '缺少下载器任务 Hash，无法删除' })
+      failed.push({ id, title: torrent.title, message: '缺少下载器任务 Hash，无法删除' })
       await recordTorrentLog({
         torrentId: torrent.id,
         siteId: torrent.siteId,
@@ -566,7 +572,7 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
       await deleteTorrentFromQb(downloader, torrent.torrentHash, true)
     } catch (error) {
       const msg = error instanceof Error ? error.message : '删除下载器任务失败'
-      failed.push({ id, message: msg })
+      failed.push({ id, title: torrent.title, message: msg })
       await recordTorrentLog({
         torrentId: torrent.id,
         siteId: torrent.siteId,
@@ -608,11 +614,11 @@ torrentsRouter.post('/batch-delete-from-downloader', requireAuth, async (req, re
     status: failed.length ? 'FAILED' : 'SUCCESS',
     ...operationActor(res, req)
   })
-  const batchDeleteFailures = failed.slice(0, 3).map((item) => `${item.id}：${item.message}`).join('\n')
+  const batchDeleteFailures = failed.slice(0, 3).map((item) => `${item.title ?? item.id}：${item.message}`).join('\n')
   await dispatchNotification({
     event: 'TORRENT_DELETED',
     title: failed.length ? '批量种子删除完成（含失败）' : '批量种子删除成功',
-    message: `共尝试 ${ids.length} 个，成功 ${successCount}，失败 ${failed.length}${batchDeleteFailures ? `\n${batchDeleteFailures}` : ''}`
+    message: `${formatNotificationTorrentNames(notificationNames)}\n共尝试 ${ids.length} 个，成功 ${successCount}，失败 ${failed.length}${batchDeleteFailures ? `\n${batchDeleteFailures}` : ''}`
   })
   res.json({ successCount, failedCount: failed.length, failed })
 })
@@ -682,15 +688,15 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
   const downloaders = await listDownloadersFromDb()
   const downloader = downloaders.find((item) => item.id === torrent.downloaderId)
   if (!downloader) {
-    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `种子：${torrent.title}\n原因：种子绑定下载器不存在` })
+    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `${formatNotificationTorrentName(torrent.title)}\n原因：种子绑定下载器不存在` })
     return res.status(400).json({ message: '种子绑定下载器不存在' })
   }
   if (!downloader.enabled) {
-    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：下载器已禁用` })
+    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：下载器已禁用` })
     return res.status(400).json({ message: '下载器已禁用' })
   }
   if (!torrent.torrentHash) {
-    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：缺少下载器任务 Hash` })
+    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：缺少下载器任务 Hash` })
     return res.status(400).json({ message: '缺少下载器任务 Hash，无法删除' })
   }
   await syncTorrentDownloadStats(downloader.id).catch(() => undefined)
@@ -717,7 +723,7 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
       actorName: res.locals.user?.username,
       message: `删除下载器任务「${torrent.title}」失败：${message}`
     })
-    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `种子：${torrent.title}\n下载器：${downloader.name}\n原因：${message}` })
+    await dispatchNotification({ event: 'TORRENT_DELETED', title: '种子删除失败', message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}\n原因：${message}` })
     return res.status(400).json({ message })
   }
   torrent.pushStatus = 'DELETED'
@@ -747,7 +753,7 @@ torrentsRouter.post('/:id/delete-from-downloader', requireAuth, async (req, res)
   await dispatchNotification({
     event: 'TORRENT_DELETED',
     title: '种子删除成功',
-    message: `种子：${torrent.title}\n下载器：${downloader.name}${deleteResult.alreadyMissing ? '\n下载器任务已不存在，已同步本地状态' : ''}`
+    message: `${formatNotificationTorrentName(torrent.title)}\n下载器：${downloader.name}${deleteResult.alreadyMissing ? '\n下载器任务已不存在，已同步本地状态' : ''}`
   })
   res.json(safeTorrent(torrent))
 })

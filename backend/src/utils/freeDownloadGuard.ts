@@ -1,7 +1,7 @@
 import { listAllTorrents, listDownloadersFromDb, updateTorrents, type TorrentRecord } from '../storage.js'
 import { deleteTorrentFromQb } from './qbittorrent.js'
 import { recordTorrentLog } from './logger.js'
-import { dispatchNotification } from './notifications.js'
+import { dispatchNotification, formatNotificationTorrentNames } from './notifications.js'
 
 export type FreeDownloadGuardSummary = {
   checkedCount: number
@@ -213,7 +213,7 @@ export async function cleanupExpiredFreeDownloads(): Promise<FreeDownloadGuardSu
       await dispatchNotification({
         event: 'TORRENT_DELETED',
         title: summary.failedCount ? '自动种子删除完成（含失败）' : '自动种子删除成功',
-        message: `共检查 ${summary.checkedCount} 个，删除成功 ${summary.deletedCount}，失败 ${summary.failedCount}，跳过 ${summary.skippedCount}${failures ? `\n${failures}` : ''}`
+        message: `${formatNotificationTorrentNames(summary.details.filter((item) => item.status !== 'SKIPPED').map((item) => item.title))}\n共检查 ${summary.checkedCount} 个，删除成功 ${summary.deletedCount}，失败 ${summary.failedCount}，跳过 ${summary.skippedCount}${failures ? `\n${failures}` : ''}`
       })
     }
 

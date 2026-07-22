@@ -1,6 +1,18 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { sendIyuuNotification } from '../src/utils/notifications.js'
+import { formatNotificationTorrentName, formatNotificationTorrentNames, sendIyuuNotification } from '../src/utils/notifications.js'
+
+test('formatNotificationTorrentName normalizes and truncates torrent names', () => {
+  assert.equal(formatNotificationTorrentName('  测试   种子  '), '种子名称：测试 种子')
+  assert.equal(formatNotificationTorrentName('   '), '种子名称：未知种子')
+  assert.equal(formatNotificationTorrentName('a'.repeat(81)), `种子名称：${'a'.repeat(80)}...`)
+})
+
+test('formatNotificationTorrentNames lists at most three names and reports the remainder', () => {
+  assert.equal(formatNotificationTorrentNames(['A']), '种子名称：\n1. A')
+  assert.equal(formatNotificationTorrentNames(['A', 'B', 'C']), '种子名称：\n1. A\n2. B\n3. C')
+  assert.equal(formatNotificationTorrentNames(['A', 'B', 'C', 'D', 'E']), '种子名称：\n1. A\n2. B\n3. C\n另有 2 个')
+})
 
 test('sendIyuuNotification sends official JSON payload and accepts errcode 0', async () => {
   let requestUrl = ''

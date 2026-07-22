@@ -27,6 +27,23 @@ export type NotificationSendResult = {
   durationMs: number
 }
 
+function readableNotificationTorrentName(title: string) {
+  const normalized = title.replace(/\s+/g, ' ').trim()
+  return normalized.length > 80 ? `${normalized.slice(0, 80)}...` : normalized || '未知种子'
+}
+
+export function formatNotificationTorrentName(title: string) {
+  return `种子名称：${readableNotificationTorrentName(title)}`
+}
+
+export function formatNotificationTorrentNames(titles: string[], limit = 3) {
+  const safeLimit = Math.max(1, Math.floor(limit))
+  const readableTitles = titles.map(readableNotificationTorrentName)
+  const lines = readableTitles.slice(0, safeLimit).map((title, index) => `${index + 1}. ${title}`)
+  const remaining = readableTitles.length - lines.length
+  return `种子名称：\n${lines.join('\n')}${remaining > 0 ? `\n另有 ${remaining} 个` : ''}`
+}
+
 function safeErrorMessage(error: unknown) {
   if (error instanceof DOMException && error.name === 'AbortError') return '通知请求超时'
   if (error instanceof Error && error.name === 'AbortError') return '通知请求超时'
