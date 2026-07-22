@@ -13,13 +13,24 @@
       </CCPageHeader>
 
       <section class="notification-overview cc-card" aria-label="通知配置概览">
-        <div class="overview-heading">
-          <span class="page-eyebrow">配置概览</span>
-        </div>
-        <div class="notification-overview-metrics">
-          <article><strong>{{ stats.total }}</strong><span>已配置</span></article>
-          <article><strong class="success">{{ stats.enabled }}</strong><span>已启用</span></article>
-          <article><strong class="danger">{{ stats.failed }}</strong><span>最近失败</span></article>
+        <div class="notification-overview-primary">
+          <div class="overview-heading">
+            <span class="page-eyebrow">配置概览</span>
+          </div>
+          <div class="notification-overview-metrics">
+            <article>
+              <strong>{{ stats.total }}</strong>
+              <span class="desktop-label">已配置</span><span class="mobile-label">配置</span>
+            </article>
+            <article>
+              <strong class="success">{{ stats.enabled }}</strong>
+              <span class="desktop-label">已启用</span><span class="mobile-label">启用</span>
+            </article>
+            <article>
+              <strong class="danger">{{ stats.failed }}</strong>
+              <span class="desktop-label">最近失败</span><span class="mobile-label">失败</span>
+            </article>
+          </div>
         </div>
         <div class="notification-event-summary">
           <span>已订阅事件</span>

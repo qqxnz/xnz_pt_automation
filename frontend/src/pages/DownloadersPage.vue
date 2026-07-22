@@ -39,27 +39,31 @@
         </template>
       </CCPageHeader>
 
-      <section class="downloader-overview cc-card">
-        <div class="overview-heading">
-          <span class="page-eyebrow">连接概览</span><small>状态每秒刷新</small>
+      <section class="downloader-overview cc-card" aria-label="下载器连接概览">
+        <div class="downloader-overview-primary">
+          <div class="overview-heading">
+            <span class="page-eyebrow">连接概览</span>
+          </div>
+          <div class="downloader-overview-metrics">
+            <article>
+              <strong>{{ stats.total }}</strong><span>已配置</span>
+            </article>
+            <article>
+              <strong class="success">{{ stats.online }}</strong><span>在线</span>
+            </article>
+            <article>
+              <strong class="danger">{{ stats.authFailed + stats.offline }}</strong><span>异常</span>
+            </article>
+          </div>
         </div>
-        <article>
-          <strong>{{ stats.total }}</strong
-          ><span>已配置</span>
-        </article>
-        <article>
-          <strong class="success">{{ stats.online }}</strong
-          ><span>在线</span>
-        </article>
-        <article>
-          <strong class="danger">{{ stats.authFailed + stats.offline }}</strong
-          ><span>异常</span>
-        </article>
         <article class="overview-rate">
-          <span>全部实时速率</span
-          ><strong><i>↑</i> {{ formatSpeed(totalUploadSpeed) }}</strong
-          ><strong><i>↓</i> {{ formatSpeed(totalDownloadSpeed) }}</strong>
+          <span>全部实时速率</span>
+          <div>
+            <strong><i>↑</i> {{ formatSpeed(totalUploadSpeed) }}</strong>
+            <strong><i>↓</i> {{ formatSpeed(totalDownloadSpeed) }}</strong>
+          </div>
         </article>
+        <small class="downloader-overview-refresh">状态每秒刷新</small>
       </section>
 
       <section class="downloaders-layout">
