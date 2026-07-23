@@ -204,6 +204,8 @@ a {
 
 .primary-button.compact {
   min-height: 46px;
+  padding: 0 24px;
+  border-radius: 999px;
 }
 
 .login-note {

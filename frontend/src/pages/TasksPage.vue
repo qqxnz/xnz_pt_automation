@@ -423,7 +423,7 @@
           <div class="row-actions">
             <button
               type="button"
-              class="secondary-button"
+              class="secondary-button outline"
               @click="formVisible = false"
             >
               取消
