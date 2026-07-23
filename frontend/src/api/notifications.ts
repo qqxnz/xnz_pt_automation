@@ -1,7 +1,7 @@
 import { apiRequest } from './client'
 
 export type NotificationProvider = 'IYUU'
-export type NotificationEvent = 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED'
+export type NotificationEvent = 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED' | 'DAILY_TRAFFIC'
 
 export type NotificationListItem = {
   id: string

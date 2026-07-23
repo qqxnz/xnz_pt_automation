@@ -15,7 +15,7 @@ import { sendNotificationToConfig } from '../utils/notifications.js'
 
 export const notificationsRouter = Router()
 
-const notificationEvents: NotificationEvent[] = ['SITE_SIGNIN', 'TASK_TRIGGERED', 'TORRENT_ADDED', 'TORRENT_DELETED']
+const notificationEvents: NotificationEvent[] = ['SITE_SIGNIN', 'TASK_TRIGGERED', 'TORRENT_ADDED', 'TORRENT_DELETED', 'DAILY_TRAFFIC']
 
 type NotificationPayload = {
   name?: unknown

@@ -239,7 +239,8 @@ const eventOptions: Array<{ value: NotificationEvent; label: string; shortLabel:
   { value: 'SITE_SIGNIN', label: '站点签到', shortLabel: '签到', description: '手动、批量及自动签到结果' },
   { value: 'TASK_TRIGGERED', label: '任务触发', shortLabel: '任务', description: '自动或手动任务的最终结果' },
   { value: 'TORRENT_ADDED', label: '种子添加', shortLabel: '添加', description: '推送下载器的成功或失败结果' },
-  { value: 'TORRENT_DELETED', label: '种子删除', shortLabel: '删除', description: '手动或自动删除下载器任务' }
+  { value: 'TORRENT_DELETED', label: '种子删除', shortLabel: '删除', description: '手动或自动删除下载器任务' },
+  { value: 'DAILY_TRAFFIC', label: '每日流量通知', shortLabel: '流量', description: '每日 00:05 推送昨日各站点上传/下载量' }
 ]
 const cardMenuItems: AppActionMenuItem[] = [
   { key: 'edit', label: '编辑配置' },
@@ -260,14 +261,15 @@ const editingId = ref('')
 const tokenVisible = ref(false)
 const formFeedback = ref<FormFeedback>()
 const form = reactive<{ name: string; provider: 'IYUU'; enabled: boolean; token: string; events: NotificationEvent[] }>({
-  name: '', provider: 'IYUU', enabled: true, token: '', events: ['SITE_SIGNIN', 'TASK_TRIGGERED']
+  name: '', provider: 'IYUU', enabled: true, token: '', events: ['SITE_SIGNIN', 'TASK_TRIGGERED', 'TORRENT_ADDED', 'TORRENT_DELETED', 'DAILY_TRAFFIC']
 })
 const validationHint = ref('Token 不会回显；编辑时留空表示保留原值。')
 const eventCounts = computed<Record<NotificationEvent, number>>(() => ({
   SITE_SIGNIN: items.value.filter((item) => item.events.includes('SITE_SIGNIN')).length,
   TASK_TRIGGERED: items.value.filter((item) => item.events.includes('TASK_TRIGGERED')).length,
   TORRENT_ADDED: items.value.filter((item) => item.events.includes('TORRENT_ADDED')).length,
-  TORRENT_DELETED: items.value.filter((item) => item.events.includes('TORRENT_DELETED')).length
+  TORRENT_DELETED: items.value.filter((item) => item.events.includes('TORRENT_DELETED')).length,
+  DAILY_TRAFFIC: items.value.filter((item) => item.events.includes('DAILY_TRAFFIC')).length
 }))
 
 function eventText(event: NotificationEvent) { return eventOptions.find((item) => item.value === event)?.label ?? event }
@@ -277,7 +279,7 @@ function resetForm() {
   tokenVisible.value = false
   formFeedback.value = undefined
   validationHint.value = 'Token 不会回显；编辑时留空表示保留原值。'
-  Object.assign(form, { name: '', provider: 'IYUU', enabled: true, token: '', events: ['SITE_SIGNIN', 'TASK_TRIGGERED'] as NotificationEvent[] })
+  Object.assign(form, { name: '', provider: 'IYUU', enabled: true, token: '', events: ['SITE_SIGNIN', 'TASK_TRIGGERED', 'TORRENT_ADDED', 'TORRENT_DELETED', 'DAILY_TRAFFIC'] as NotificationEvent[] })
 }
 function openCreate() { resetForm(); formVisible.value = true }
 function openEdit(item: NotificationListItem) {

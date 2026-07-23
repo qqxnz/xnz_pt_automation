@@ -44,6 +44,33 @@ export function formatNotificationTorrentNames(titles: string[], limit = 3) {
   return `种子名称：\n${lines.join('\n')}${remaining > 0 ? `\n另有 ${remaining} 个` : ''}`
 }
 
+export type DailyTrafficSiteItem = {
+  siteName: string
+  uploaded: number
+  downloaded: number
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / 1024 ** index).toFixed(index > 2 ? 2 : 1)} ${units[index]}`
+}
+
+export function buildDailyTrafficMessage(items: DailyTrafficSiteItem[], dateKey: string) {
+  if (!items.length) return ''
+  const lines = items.map((item, index) => {
+    const uploaded = formatBytes(item.uploaded)
+    const downloaded = formatBytes(item.downloaded)
+    const name = item.siteName?.trim() || '未知站点'
+    return `${index + 1}. ${name}：↑ ${uploaded} / ↓ ${downloaded}`
+  })
+  const totalUploaded = items.reduce((sum, item) => sum + (Number(item.uploaded) || 0), 0)
+  const totalDownloaded = items.reduce((sum, item) => sum + (Number(item.downloaded) || 0), 0)
+  const summary = `汇总：↑ ${formatBytes(totalUploaded)} / ↓ ${formatBytes(totalDownloaded)}`
+  return `数据日期：${dateKey}\n${lines.join('\n')}\n${summary}`
+}
+
 function safeErrorMessage(error: unknown) {
   if (error instanceof DOMException && error.name === 'AbortError') return '通知请求超时'
   if (error instanceof Error && error.name === 'AbortError') return '通知请求超时'

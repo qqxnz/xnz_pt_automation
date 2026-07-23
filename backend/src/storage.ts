@@ -126,7 +126,12 @@ export type TorrentLogRecord = {
 
 export type NotificationProvider = 'IYUU'
 
-export type NotificationEvent = 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED'
+export type NotificationEvent =
+  | 'SITE_SIGNIN'
+  | 'TASK_TRIGGERED'
+  | 'TORRENT_ADDED'
+  | 'TORRENT_DELETED'
+  | 'DAILY_TRAFFIC'
 
 export type NotificationConfigRecord = {
   id: string
@@ -420,6 +425,13 @@ export type SiteStatisticsQuery = {
   siteId?: string
   page: number
   pageSize: number
+}
+
+export type DailyTrafficRow = {
+  siteId: string
+  siteName: string
+  uploaded: number
+  downloaded: number
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -2163,6 +2175,27 @@ export async function readSiteStatistics(query: SiteStatisticsQuery) {
         }))
     }))
   }
+}
+
+export async function readDailyTrafficByDate(date: string): Promise<DailyTrafficRow[]> {
+  const db = await readyDb()
+  const rows = db.prepare(`
+    SELECT daily.site_id AS siteId,
+      MAX(daily.site_name) AS siteName,
+      SUM(daily.uploaded) AS uploaded,
+      SUM(daily.downloaded) AS downloaded
+    FROM site_torrent_traffic_daily daily
+    WHERE daily.date = ?
+    GROUP BY daily.site_id
+    HAVING uploaded > 0 OR downloaded > 0
+    ORDER BY (uploaded + downloaded) DESC, siteName
+  `).all(date) as any[]
+  return rows.map((row) => ({
+    siteId: String(row.siteId),
+    siteName: String(row.siteName),
+    uploaded: Number(row.uploaded ?? 0),
+    downloaded: Number(row.downloaded ?? 0)
+  }))
 }
 
 export async function listTasksFromDb(): Promise<TaskRecord[]> {

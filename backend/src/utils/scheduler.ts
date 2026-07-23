@@ -1,16 +1,15 @@
-import { appendSigninLog, listLatestSigninLogBySiteAndDate, listSitesFromDb, type SiteRecord } from '../storage.js'
+import { appendSigninLog, getCurrentDatabase, listLatestSigninLogBySiteAndDate, listSitesFromDb, readDailyTrafficByDate, storagePaths, type SiteRecord } from '../storage.js'
 import { performSiteSignin } from '../routes/signin/index.js'
 import { isSiteSigninSupported, siteDisplayName, syncSiteTrafficStats } from '../routes/sites/index.js'
 import { resetStuckRunningTasks, runDueTasks } from '../routes/tasks.js'
 import { cleanupExpiredFreeDownloads } from './freeDownloadGuard.js'
 import { logger, recordScheduleLog } from './logger.js'
-import { dispatchNotification } from './notifications.js'
+import { buildDailyTrafficMessage, dispatchNotification } from './notifications.js'
 import { syncTorrentIpv6Peers } from './peerSync.js'
 import { syncTorrentDownloadStats } from './torrentSync.js'
 import { localDateKey } from './time.js'
 import { createManualBackup } from '../storage/backup.js'
-import { getCurrentDatabase, storagePaths } from '../storage.js'
-import { getMeta } from '../storage/_meta.js'
+import { getMeta, setMeta } from '../storage/_meta.js'
 import path from 'node:path'
 
 const SCHEDULER_TICK_INTERVAL_MS = 1000
@@ -22,6 +21,11 @@ const EXPIRED_FREE_DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 1000
 const SITE_TRAFFIC_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 const SITE_AUTO_SIGNIN_SCAN_INTERVAL_MS = 10 * 60 * 1000
 const AUTO_BACKUP_SCAN_INTERVAL_MS = 60 * 1000
+
+const DAILY_TRAFFIC_NOTIFY_TARGET_HOUR = 0
+const DAILY_TRAFFIC_NOTIFY_TARGET_MINUTE = 5
+const DAILY_TRAFFIC_NOTIFY_INTERVAL_MS = 60 * 1000
+const DAILY_TRAFFIC_NOTIFY_META_KEY = 'last_daily_traffic_notify_date'
 
 type SchedulerJob = {
   name: string
@@ -50,7 +54,8 @@ function readableJobName(name: string) {
     'expired-free-download-cleanup': '下载器自动清理',
     'site-traffic-sync': '站点流量统计同步',
     'site-auto-signin': '站点自动签到',
-    'auto-backup': '数据库自动备份'
+    'auto-backup': '数据库自动备份',
+    'daily-traffic-notify': '每日流量通知'
   }
   return map[name] ?? name
 }
@@ -185,8 +190,18 @@ const jobs: SchedulerJob[] = [
       const result = createManualBackup(db, storagePaths.dataDir)
       return { backupCreated: true, name: path.basename(result.path), sizeBytes: result.sizeBytes }
     }
+  },
+  {
+    name: 'daily-traffic-notify',
+    intervalMs: DAILY_TRAFFIC_NOTIFY_INTERVAL_MS,
+    nextRunAt: Date.now() + DAILY_TRAFFIC_NOTIFY_INTERVAL_MS,
+    running: false,
+    logStart: false,
+    shouldLogSuccess: (result) => result.pushed === true || result.reason === 'outside-trigger-window' || result.reason === 'already-sent-today',
+    run: async () => runDailyTrafficNotify()
   }
 ]
+
 
 async function runJob(job: SchedulerJob, scheduledAt: number) {
   const startedAt = Date.now()
@@ -266,6 +281,61 @@ function tick() {
     if (job.running || now < job.nextRunAt) continue
     void runJob(job, job.nextRunAt)
   }
+}
+
+function shiftLocalDateKey(dateKey: string, offsetDays: number) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+  if (!match) throw new Error(`日期键无效（应为 YYYY-MM-DD）：${dateKey}`)
+  const target = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  target.setDate(target.getDate() + offsetDays)
+  return localDateKey(target)
+}
+
+export async function runDailyTrafficNotify(now: Date = new Date()) {
+  const currentHour = now.getHours()
+  const currentMinute = now.getMinutes()
+  if (currentHour !== DAILY_TRAFFIC_NOTIFY_TARGET_HOUR || currentMinute !== DAILY_TRAFFIC_NOTIFY_TARGET_MINUTE) {
+    return { pushed: false, reason: 'outside-trigger-window' }
+  }
+
+  const todayKey = localDateKey(now)
+  const yesterdayKey = shiftLocalDateKey(todayKey, -1)
+  const db = getCurrentDatabase()
+  const lastSentDate = getMeta(db, DAILY_TRAFFIC_NOTIFY_META_KEY)
+  if (lastSentDate === todayKey) {
+    return { pushed: false, reason: 'already-sent-today', date: todayKey }
+  }
+
+  const items = await readDailyTrafficByDate(yesterdayKey)
+  if (!items.length) {
+    setMeta(db, DAILY_TRAFFIC_NOTIFY_META_KEY, todayKey)
+    logger.info('scheduler', '每日流量通知跳过（昨日无流量数据）', { date: yesterdayKey })
+    return { pushed: false, reason: 'no-data', date: yesterdayKey }
+  }
+
+  const message = buildDailyTrafficMessage(items, yesterdayKey) ?? ''
+  if (!message) {
+    setMeta(db, DAILY_TRAFFIC_NOTIFY_META_KEY, todayKey)
+    return { pushed: false, reason: 'empty-message', date: yesterdayKey }
+  }
+
+  const logs = await dispatchNotification({
+    event: 'DAILY_TRAFFIC',
+    title: `${yesterdayKey} 每日流量汇总`,
+    message
+  })
+  setMeta(db, DAILY_TRAFFIC_NOTIFY_META_KEY, todayKey)
+  const siteCount = items.length
+  const totalUploaded = items.reduce((sum, item) => sum + item.uploaded, 0)
+  const totalDownloaded = items.reduce((sum, item) => sum + item.downloaded, 0)
+  logger.info('scheduler', '每日流量通知已发送', {
+    date: yesterdayKey,
+    siteCount,
+    totalUploaded,
+    totalDownloaded,
+    configCount: logs.length
+  })
+  return { pushed: true, date: yesterdayKey, siteCount, totalUploaded, totalDownloaded, configCount: logs.length }
 }
 
 export async function runDueSignins() {

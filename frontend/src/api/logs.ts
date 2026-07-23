@@ -102,7 +102,7 @@ export type NotificationLog = {
   configId?: string
   configName: string
   provider: 'IYUU'
-  event: 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED' | 'TEST'
+  event: 'SITE_SIGNIN' | 'TASK_TRIGGERED' | 'TORRENT_ADDED' | 'TORRENT_DELETED' | 'DAILY_TRAFFIC' | 'TEST'
   title: string
   message: string
   status: 'SUCCESS' | 'FAILED'

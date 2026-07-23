@@ -408,6 +408,7 @@ function notificationEventText(event: NotificationLog["event"]) {
     TASK_TRIGGERED: "任务触发",
     TORRENT_ADDED: "种子添加",
     TORRENT_DELETED: "种子删除",
+    DAILY_TRAFFIC: "每日流量通知",
     TEST: "测试通知",
   };
   return map[event];
