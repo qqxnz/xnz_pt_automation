@@ -1,6 +1,6 @@
 services:
   xnz-pt-automation:
-    image: qqxnz/xnz-pt-automation:0.6.39
+    image: qqxnz/xnz-pt-automation:0.6.40
     container_name: xnz-pt-automation
     restart: on-failure:5
     ports:
