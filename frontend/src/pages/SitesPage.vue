@@ -212,7 +212,7 @@
               </div>
             </div>
 
-            <p v-if="site.lastConnectError" class="site-card-error">
+            <p v-if="site.lastConnectError && site.enabled" class="site-card-error">
               {{ site.lastConnectError }}
             </p>
             <p v-if="!site.enabled" class="site-card-disabled-hint">
@@ -328,7 +328,7 @@
                 </strong>
               </div>
             </div>
-            <p v-if="site.lastConnectError" class="cc-mobile-error">
+            <p v-if="site.lastConnectError && site.enabled" class="cc-mobile-error">
               {{ site.lastConnectError }}
             </p>
             <p v-if="!site.enabled" class="site-card-disabled-hint">

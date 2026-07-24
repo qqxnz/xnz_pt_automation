@@ -134,6 +134,7 @@
     <rect x="798" y="1228" width="250" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="923" y="1250" text-anchor="middle" class="red small">删除</text>
 
     <rect x="1090" y="1020" width="298" height="320" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    <rect x="1090" y="1020" width="298" height="320" rx="14" fill="#fff" stroke="#e5ebf2"/>
     <text x="1114" y="1056" class="ink title">响应式规则</text>
     <text x="1114" y="1094" class="blue label">宽屏</text><text x="1114" y="1118" class="muted small">六项操作保持单行，左对齐。</text>
     <text x="1114" y="1156" class="blue label">中等桌面</text><text x="1114" y="1180" class="muted small">三列两行，全部留在卡片内部。</text>
@@ -142,7 +143,7 @@
     <line x1="1114" y1="1280" x2="1364" y2="1280" stroke="#edf1f5"/>
     <rect x="1114" y="1294" width="64" height="20" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="1146" y="1308" text-anchor="middle" class="muted pill" fill="#6b7280">已禁用</text>
     <text x="1188" y="1308" class="muted small">徽标紧贴标题</text>
-    <text x="1114" y="1330" class="muted small">整卡降透明度 0.62；自动同步跳过。</text>
+    <text x="1114" y="1330" class="muted small">标题/指标/说明降透明度；编辑/删除/每日数据保持正常。</text>
   </g>
 
   <!-- Mobile: independent metric tiles and wrapped footer actions -->

@@ -1355,7 +1355,16 @@
   background: #fbfcfd;
   border-color: #e2e8f0;
   box-shadow: none;
+}
+
+.desktop-site-card.is-disabled .site-card-header .site-name-cell strong,
+.desktop-site-card.is-disabled .site-card-metrics,
+.desktop-site-card.is-disabled .site-card-disabled-hint,
+.cc-site-mobile-card.is-disabled .site-name-cell strong,
+.cc-site-mobile-card.is-disabled .site-mobile-metrics,
+.cc-site-mobile-card.is-disabled .site-card-disabled-hint {
   opacity: 0.62;
+  filter: grayscale(0.3);
 }
 
 .desktop-site-card.is-disabled .site-card-header .site-name-cell strong,
