@@ -1350,6 +1350,19 @@
   box-shadow: 0 2px 8px rgb(17 28 46 / 6%);
 }
 
+.desktop-site-card.is-disabled,
+.cc-site-mobile-card.is-disabled {
+  background: #fbfcfd;
+  border-color: #e2e8f0;
+  box-shadow: none;
+  opacity: 0.62;
+}
+
+.desktop-site-card.is-disabled .site-card-header .site-name-cell strong,
+.cc-site-mobile-card.is-disabled .site-name-cell strong {
+  color: #6b7280;
+}
+
 .site-card-header {
   display: flex;
   min-width: 0;
@@ -1379,6 +1392,27 @@
 
 .site-card-header > .chip {
   flex: 0 0 auto;
+}
+
+.site-card-header-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.site-disabled-badge {
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  font-weight: 700;
+}
+
+.site-card-disabled-hint {
+  margin: -4px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .site-card-metrics {

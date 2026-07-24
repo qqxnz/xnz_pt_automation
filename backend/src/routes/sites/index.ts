@@ -255,6 +255,9 @@ async function updateSiteStats(siteId: string): Promise<SiteUpdateResult> {
   const work = (async (): Promise<SiteUpdateResult> => {
     const requestedSite = await getSiteFromDb(siteId)
     if (!requestedSite) return { siteId, siteName: siteId, ok: false, errorMessage: '站点不存在' }
+    if (!requestedSite.enabled) {
+      return { siteId, siteName: siteDisplayName(requestedSite), ok: false, errorMessage: '站点已禁用' }
+    }
 
     try {
       const result = await testSite(requestedSite)
@@ -736,6 +739,14 @@ sitesRouter.delete('/:id', requireAuth, async (req, res) => {
 sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
   const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
+  if (!site.enabled) {
+    return res.status(409).json({
+      ok: false,
+      status: site.connectivityStatus,
+      message: '站点已禁用，请先启用后再手动更新',
+      reason: 'DISABLED'
+    })
+  }
 
   const result = await updateSiteStats(site.id)
   const updated = await getSiteFromDb(site.id)
@@ -755,6 +766,14 @@ sitesRouter.post('/:id/test-connectivity', requireAuth, async (req, res) => {
 sitesRouter.post('/:id/update', requireAuth, async (req, res) => {
   const site = await getSiteFromDb(String(req.params.id))
   if (!site) return res.status(404).json({ message: '站点不存在' })
+  if (!site.enabled) {
+    return res.status(409).json({
+      accepted: false,
+      alreadyRunning: false,
+      reason: 'DISABLED',
+      message: '站点已禁用，请先启用后再手动更新'
+    })
+  }
   return res.status(202).json(queueSiteUpdate(site.id))
 })
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="2020" height="1400" viewBox="0 0 2020 1400">
+<svg xmlns="http://www.w3.org/2000/svg" width="2020" height="1480" viewBox="0 0 2020 1480">
   <defs>
     <filter id="cardShadow" x="-10%" y="-20%" width="120%" height="150%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#111c2e" flood-opacity="0.06"/>
@@ -7,7 +7,7 @@
   </defs>
   <style>text{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}.ink{fill:#142033}.muted{fill:#718096}.white{fill:#fff}.blue{fill:#3478f6}.green{fill:#14a675}.orange{fill:#ef9b26}.red{fill:#e05263}.tiny{font-size:10px;letter-spacing:1.1px}.small{font-size:12px}.label{font-size:13px;font-weight:700}.title{font-size:18px;font-weight:800}.value{font-size:24px;font-weight:800}.pill{font-size:10px;font-weight:800}.metric-label{font-size:10px;letter-spacing:.6px;fill:#718096;font-weight:700}.metric-value{font-size:13px;fill:#142033;font-weight:700}.up-arrow{fill:#14a675;font-weight:800}.down-arrow{fill:#3478f6;font-weight:800}.traffic-text{fill:#142033;font-weight:700}.traffic-empty{fill:#94a3b8;font-weight:700}</style>
 
-  <rect width="2020" height="1400" fill="#e7edf4"/>
+  <rect width="2020" height="1480" fill="#e7edf4"/>
   <text x="20" y="24" class="muted tiny">桌面端 · 单列通栏卡片设计提案</text>
   <text x="1502" y="24" class="muted tiny">移动端 · 四项独立指标卡 + 底部平铺操作</text>
 
@@ -89,23 +89,33 @@
     <rect x="806" y="684" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="849" y="706" text-anchor="middle" class="blue small">编辑</text>
     <rect x="902" y="684" width="86" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="945" y="706" text-anchor="middle" class="red small">删除</text>
 
-    <!-- Card 3: signin disabled -->
-    <g filter="url(#cardShadow)"><rect x="292" y="750" width="1096" height="216" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
-    <text x="316" y="785" class="ink title">PTTime</text><text x="316" y="807" class="muted small">pttime.org</text>
-    <rect x="1300" y="768" width="58" height="24" rx="12" fill="#fce9ec"/><text x="1329" y="784" text-anchor="middle" class="red pill">离线</text>
-    <rect x="316" y="824" width="1048" height="64" rx="10" fill="#f8fafc"/>
-    <text x="336" y="845" class="metric-label">分享率 / 等级</text><text x="336" y="869" class="metric-value">18.11 · Crazy User</text>
-    <text x="548" y="845" class="metric-label">总流量</text><text x="548" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 64.6 TB</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.57 TB</tspan></text>
-    <text x="760" y="845" class="metric-label">今日</text><text x="760" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 0 B</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-text"> 0 B</tspan></text>
-    <text x="952" y="845" class="metric-label">昨日</text><text x="952" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-empty"> -</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-empty"> -</tspan></text>
-    <text x="1140" y="845" class="metric-label">凭证 / 签到</text><text x="1140" y="869" class="muted label">Cookie · 已关闭</text>
+    <!-- Card 3: site disabled (site.enabled = false) -->
+    <g filter="url(#cardShadow)">
+      <rect x="292" y="750" width="1096" height="216" rx="14" fill="#fbfcfd" stroke="#e2e8f0"/>
+    </g>
+    <g opacity="0.62">
+      <text x="316" y="785" class="ink title" fill="#6b7280">PTTime</text>
+      <text x="316" y="807" class="muted small">pttime.org</text>
+    </g>
+    <rect x="412" y="769" width="78" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="451" y="784" text-anchor="middle" class="muted pill" fill="#6b7280">已禁用</text>
+    <rect x="1228" y="768" width="58" height="24" rx="12" fill="#fce9ec"/><text x="1257" y="784" text-anchor="middle" class="red pill">离线</text>
+    <rect x="1296" y="768" width="62" height="24" rx="12" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="1327" y="784" text-anchor="middle" class="muted pill" fill="#6b7280">未同步</text>
+    <g opacity="0.62">
+      <rect x="316" y="824" width="1048" height="64" rx="10" fill="#f8fafc"/>
+      <text x="336" y="845" class="metric-label">分享率 / 等级</text><text x="336" y="869" class="metric-value">18.11 · Crazy User</text>
+      <text x="548" y="845" class="metric-label">总流量</text><text x="548" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 64.6 TB</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.57 TB</tspan></text>
+      <text x="760" y="845" class="metric-label">今日</text><text x="760" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 0 B</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-text"> 0 B</tspan></text>
+      <text x="952" y="845" class="metric-label">昨日</text><text x="952" y="869" class="label"><tspan class="up-arrow">↑</tspan><tspan class="traffic-empty"> -</tspan><tspan dx="10" class="down-arrow">↓</tspan><tspan class="traffic-empty"> -</tspan></text>
+      <text x="1140" y="845" class="metric-label">凭证 / 签到</text><text x="1140" y="869" class="muted label">Cookie · 已关闭</text>
+    </g>
     <line x1="316" y1="904" x2="1364" y2="904" stroke="#edf1f5"/>
     <rect x="316" y="916" width="86" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="359" y="938" text-anchor="middle" class="muted small">签到</text>
-    <rect x="412" y="916" width="132" height="34" rx="8" fill="#3478f6"/><text x="478" y="938" text-anchor="middle" class="white small">更新站点信息</text>
-    <rect x="554" y="916" width="132" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="620" y="938" text-anchor="middle" class="blue small">浏览站点种子</text>
+    <rect x="412" y="916" width="132" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="478" y="938" text-anchor="middle" class="muted small">更新站点信息</text>
+    <rect x="554" y="916" width="132" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="620" y="938" text-anchor="middle" class="muted small">浏览站点种子</text>
     <rect x="696" y="916" width="100" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="746" y="938" text-anchor="middle" class="blue small">每日数据</text>
     <rect x="806" y="916" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="849" y="938" text-anchor="middle" class="blue small">编辑</text>
     <rect x="902" y="916" width="86" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="945" y="938" text-anchor="middle" class="red small">删除</text>
+    <text x="316" y="950" class="muted tiny" fill="#6b7280">已禁用 · 自动同步、签到与浏览种子已停止；编辑/删除仍可用</text>
 
     <!-- Medium desktop responsive example -->
     <text x="292" y="1004" class="muted tiny">中等桌面宽度示意 · 1024PX 内容区</text>
@@ -123,12 +133,16 @@
     <rect x="557" y="1228" width="230" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="672" y="1250" text-anchor="middle" class="blue small">编辑</text>
     <rect x="798" y="1228" width="250" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="923" y="1250" text-anchor="middle" class="red small">删除</text>
 
-    <rect x="1090" y="1020" width="298" height="264" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    <rect x="1090" y="1020" width="298" height="320" rx="14" fill="#fff" stroke="#e5ebf2"/>
     <text x="1114" y="1056" class="ink title">响应式规则</text>
     <text x="1114" y="1094" class="blue label">宽屏</text><text x="1114" y="1118" class="muted small">六项操作保持单行，左对齐。</text>
     <text x="1114" y="1156" class="blue label">中等桌面</text><text x="1114" y="1180" class="muted small">三列两行，全部留在卡片内部。</text>
     <text x="1114" y="1218" class="orange label">主操作</text><text x="1114" y="1242" class="muted small">依据站点状态切换蓝色强调。</text>
     <text x="1114" y="1268" class="red small">删除始终保持危险操作样式。</text>
+    <line x1="1114" y1="1280" x2="1364" y2="1280" stroke="#edf1f5"/>
+    <rect x="1114" y="1294" width="64" height="20" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="1146" y="1308" text-anchor="middle" class="muted pill" fill="#6b7280">已禁用</text>
+    <text x="1188" y="1308" class="muted small">徽标紧贴标题</text>
+    <text x="1114" y="1330" class="muted small">整卡降透明度 0.62；自动同步跳过。</text>
   </g>
 
   <!-- Mobile: independent metric tiles and wrapped footer actions -->
@@ -140,28 +154,35 @@
     <rect x="102" y="17" width="30" height="30" rx="9" fill="#3478f6"/><text x="117" y="38" text-anchor="middle" class="white tiny">PT</text>
     <text x="142" y="37" class="ink label">PT Automation</text>
     <text x="60" y="92" class="muted tiny">站点</text><text x="60" y="120" class="ink title">管理 PT 站点</text>
+    <text x="400" y="120" text-anchor="end" class="muted tiny" fill="#6b7280">停用 = 灰色虚线徽标 + 降透明度</text>
     <rect x="60" y="140" width="358" height="42" rx="9" fill="#fff" stroke="#dce5ee"/><text x="76" y="166" class="muted small">搜索站点 / 域名　　筛选⌄</text>
-    <!-- Mobile card: auth failed -->
-    <g filter="url(#cardShadow)"><rect x="60" y="200" width="358" height="396" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
-    <text x="78" y="232" class="ink title">HDHome</text><rect x="330" y="216" width="70" height="22" rx="11" fill="#fff3de"/><text x="365" y="231" text-anchor="middle" class="orange pill">认证失败</text>
-    <text x="78" y="256" class="muted small">pt.hdhome.org</text><text x="78" y="278" class="ink small">分享率 3.24 · Power User</text>
-    <rect x="78" y="292" width="154" height="58" rx="9" fill="#f8fafc"/>
-    <text x="90" y="310" class="metric-label">总流量</text><text x="90" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 12.6 TB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.9 TB</tspan></text>
-    <rect x="242" y="292" width="158" height="58" rx="9" fill="#f8fafc"/>
-    <text x="254" y="310" class="metric-label">今日</text><text x="254" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 21 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 2 GB</tspan></text>
-    <rect x="78" y="360" width="154" height="58" rx="9" fill="#f8fafc"/>
-    <text x="90" y="378" class="metric-label">昨日</text><text x="90" y="402" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-empty"> -</tspan><tspan dx="28" class="down-arrow">↓</tspan><tspan class="traffic-empty"> -</tspan></text>
-    <rect x="242" y="360" width="158" height="58" rx="9" fill="#fff8ed" stroke="#fde4bd"/>
-    <text x="254" y="378" class="metric-label">凭证 / 签到</text><text x="254" y="402" class="orange small" font-weight="700">Cookie · 待签到 09:00</text>
+    <!-- Mobile card: site disabled (site.enabled = false) -->
+    <g filter="url(#cardShadow)"><rect x="60" y="200" width="358" height="396" rx="14" fill="#fbfcfd" stroke="#e2e8f0"/></g>
+    <g opacity="0.62">
+      <text x="78" y="232" class="ink title" fill="#6b7280">HDHome</text>
+    </g>
+    <rect x="156" y="218" width="68" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="190" y="233" text-anchor="middle" class="muted pill" fill="#6b7280">已停用</text>
+    <rect x="330" y="218" width="70" height="22" rx="11" fill="#f3f4f6"/><text x="365" y="233" text-anchor="middle" class="muted pill">未同步</text>
+    <g opacity="0.62">
+      <text x="78" y="256" class="muted small">pt.hdhome.org</text><text x="78" y="278" class="ink small" fill="#6b7280">分享率 3.24 · Power User</text>
+      <rect x="78" y="292" width="154" height="58" rx="9" fill="#f8fafc"/>
+      <text x="90" y="310" class="metric-label">总流量</text><text x="90" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 12.6 TB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 3.9 TB</tspan></text>
+      <rect x="242" y="292" width="158" height="58" rx="9" fill="#f8fafc"/>
+      <text x="254" y="310" class="metric-label">今日</text><text x="254" y="334" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-text"> 21 GB</tspan><tspan dx="7" class="down-arrow">↓</tspan><tspan class="traffic-text"> 2 GB</tspan></text>
+      <rect x="78" y="360" width="154" height="58" rx="9" fill="#f8fafc"/>
+      <text x="90" y="378" class="metric-label">昨日</text><text x="90" y="402" class="small"><tspan class="up-arrow">↑</tspan><tspan class="traffic-empty"> -</tspan><tspan dx="28" class="down-arrow">↓</tspan><tspan class="traffic-empty"> -</tspan></text>
+      <rect x="242" y="360" width="158" height="58" rx="9" fill="#f3f4f6"/>
+      <text x="254" y="378" class="metric-label">凭证 / 签到</text><text x="254" y="402" class="muted small" font-weight="700">Cookie · 停用期间不签到</text>
+    </g>
     <line x1="78" y1="434" x2="400" y2="434" stroke="#edf1f5"/>
-    <rect x="78" y="448" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="471" text-anchor="middle" class="blue small">签到</text>
-    <rect x="184" y="448" width="108" height="36" rx="8" fill="#3478f6"/><text x="238" y="471" text-anchor="middle" class="white small">更新站点信息</text>
-    <rect x="300" y="448" width="100" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="350" y="471" text-anchor="middle" class="blue small">浏览种子</text>
+    <rect x="78" y="448" width="98" height="36" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="127" y="471" text-anchor="middle" class="muted small">签到</text>
+    <rect x="184" y="448" width="108" height="36" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="238" y="471" text-anchor="middle" class="muted small">更新站点信息</text>
+    <rect x="300" y="448" width="100" height="36" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="350" y="471" text-anchor="middle" class="muted small">浏览种子</text>
     <rect x="78" y="492" width="98" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="127" y="515" text-anchor="middle" class="blue small">每日数据</text>
     <rect x="184" y="492" width="108" height="36" rx="8" fill="#fff" stroke="#dce5ee"/><text x="238" y="515" text-anchor="middle" class="blue small">编辑站点</text>
     <rect x="300" y="492" width="100" height="36" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="350" y="515" text-anchor="middle" class="red small">删除站点</text>
-    <text x="78" y="557" class="orange small">Cookie 已过期，请优先更新凭证</text>
-    <text x="78" y="580" class="muted tiny">操作始终位于卡片底部；按可用宽度自动换行</text>
+    <text x="78" y="557" class="muted small" fill="#6b7280">已停用 · 签到/更新/浏览种子已停止；编辑/删除仍可用</text>
+    <text x="78" y="580" class="muted tiny">停用站点降透明度；操作始终位于卡片底部</text>
 
     <!-- Mobile card: online -->
     <g filter="url(#cardShadow)"><rect x="60" y="616" width="358" height="374" rx="14" fill="#fff" stroke="#e5ebf2"/></g>

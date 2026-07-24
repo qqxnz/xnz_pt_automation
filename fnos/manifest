@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.40
+version=0.6.41
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.40<br/>新增「每日流量通知」事件：在通知管理中可订阅该事件，每天 00:05 自动汇总昨日各站点的上传/下载流量并推送爱语飞飞通知（单位自适应 KB/MB/GB/TB）。
+changelog=0.6.41<br/>站点列表新增「已禁用」状态标识：未启用的站点在卡片上显示灰色「已禁用」徽标，整张卡片降透明度，自动同步、定时签到与浏览种子按钮一并禁用；编辑、删除与每日数据仍可手动操作。

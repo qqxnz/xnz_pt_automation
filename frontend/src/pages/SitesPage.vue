@@ -139,17 +139,26 @@
             v-for="site in items"
             :key="site.id"
             class="cc-card desktop-site-card"
+            :class="{ 'is-disabled': !site.enabled }"
           >
             <header class="site-card-header">
               <div class="site-name-cell" @click="openSite(site)">
                 <strong>{{ site.displayName }}</strong>
                 <small>{{ site.domain }}</small>
               </div>
-              <span
-                class="chip"
-                :class="statusMeta(site.connectivityStatus).className"
-                >{{ statusMeta(site.connectivityStatus).label }}</span
-              >
+              <div class="site-card-header-chips">
+                <span
+                  v-if="!site.enabled"
+                  class="chip site-disabled-badge"
+                  title="自动同步、签到与浏览种子已停止；编辑/删除仍可用"
+                  >已禁用</span
+                >
+                <span
+                  class="chip"
+                  :class="statusMeta(site.connectivityStatus).className"
+                  >{{ statusMeta(site.connectivityStatus).label }}</span
+                >
+              </div>
             </header>
 
             <div class="site-card-metrics">
@@ -206,14 +215,17 @@
             <p v-if="site.lastConnectError" class="site-card-error">
               {{ site.lastConnectError }}
             </p>
+            <p v-if="!site.enabled" class="site-card-disabled-hint">
+              已禁用 · 自动同步、签到与浏览种子已停止；编辑/删除仍可用
+            </p>
 
             <footer class="site-card-actions">
               <button
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'signin' }"
-                :disabled="!site.signinSupported || site.signinRunning"
-                :title="!site.signinSupported ? '此站点不支持签到' : undefined"
+                :disabled="!site.enabled || !site.signinSupported || site.signinRunning"
+                :title="signinButtonTitle(site)"
                 @click="triggerSignin(site)"
               >
                 {{ site.signinRunning ? "签到中..." : "签到" }}
@@ -222,7 +234,8 @@
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'update' }"
-                :disabled="site.updating"
+                :disabled="!site.enabled || site.updating"
+                :title="!site.enabled ? '站点已禁用，启用后再更新' : undefined"
                 @click="triggerSiteUpdate(site)"
               >
                 {{ site.updating ? "更新中..." : "更新站点信息" }}
@@ -231,6 +244,8 @@
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'browse' }"
+                :disabled="!site.enabled"
+                :title="!site.enabled ? '站点已禁用，启用后再浏览种子' : undefined"
                 @click="openBrowse(site)"
               >
                 浏览站点种子
@@ -253,17 +268,26 @@
             v-for="site in items"
             :key="site.id"
             class="cc-card cc-mobile-card cc-site-mobile-card"
+            :class="{ 'is-disabled': !site.enabled }"
           >
             <div class="site-card-header">
               <div class="site-name-cell" @click="openSite(site)">
                 <strong>{{ site.displayName }}</strong>
                 <small>{{ site.domain }}</small>
               </div>
-              <span
-                class="chip"
-                :class="statusMeta(site.connectivityStatus).className"
-                >{{ statusMeta(site.connectivityStatus).label }}</span
-              >
+              <div class="site-card-header-chips">
+                <span
+                  v-if="!site.enabled"
+                  class="chip site-disabled-badge"
+                  title="签到、更新与浏览种子已停止；编辑/删除仍可用"
+                  >已停用</span
+                >
+                <span
+                  class="chip"
+                  :class="statusMeta(site.connectivityStatus).className"
+                  >{{ statusMeta(site.connectivityStatus).label }}</span
+                >
+              </div>
             </div>
             <p class="cc-mobile-summary">
               分享率 {{ formatRatio(site) }} ·
@@ -307,13 +331,16 @@
             <p v-if="site.lastConnectError" class="cc-mobile-error">
               {{ site.lastConnectError }}
             </p>
+            <p v-if="!site.enabled" class="site-card-disabled-hint">
+              已停用 · 签到/更新/浏览种子已停止；编辑/删除仍可用
+            </p>
             <footer class="site-mobile-actions">
               <button
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'signin' }"
-                :disabled="!site.signinSupported || site.signinRunning"
-                :title="!site.signinSupported ? '此站点不支持签到' : undefined"
+                :disabled="!site.enabled || !site.signinSupported || site.signinRunning"
+                :title="signinButtonTitle(site)"
                 @click="triggerSignin(site)"
               >
                 {{ site.signinRunning ? "签到中..." : "签到" }}
@@ -322,7 +349,8 @@
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'update' }"
-                :disabled="site.updating"
+                :disabled="!site.enabled || site.updating"
+                :title="!site.enabled ? '站点已禁用，启用后再更新' : undefined"
                 @click="triggerSiteUpdate(site)"
               >
                 {{ site.updating ? "更新中..." : "更新站点信息" }}
@@ -331,6 +359,8 @@
                 type="button"
                 class="site-card-action"
                 :class="{ 'is-primary': sitePrimaryKey(site) === 'browse' }"
+                :disabled="!site.enabled"
+                :title="!site.enabled ? '站点已禁用，启用后再浏览种子' : undefined"
                 @click="openBrowse(site)"
               >
                 浏览站点种子
@@ -384,6 +414,9 @@
             <label class="inline-check"
               ><input v-model="form.enabled" type="checkbox" /> 启用站点</label
             >
+            <p class="form-hint">
+              关闭后系统自动同步、签到与浏览种子将被跳过；列表中显示「已禁用」徽标并整体降透明度，编辑/删除仍可使用。
+            </p>
           </section>
 
           <section>
@@ -784,6 +817,12 @@ function sitePrimaryKey(site: SiteListItem) {
   return "browse";
 }
 
+function signinButtonTitle(site: SiteListItem) {
+  if (!site.enabled) return "站点已禁用，启用后再签到";
+  if (!site.signinSupported) return "此站点不支持签到";
+  return undefined;
+}
+
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Date(value).toLocaleString("zh-CN", {
@@ -985,6 +1024,10 @@ async function saveSite() {
 
 async function triggerSiteUpdate(site: SiteListItem) {
   if (site.updating) return;
+  if (!site.enabled) {
+    Snackbar.warning("站点已禁用，请先启用后再更新站点信息");
+    return;
+  }
   const target = items.value.find((item) => item.id === site.id);
   if (target) target.updating = true;
   try {
@@ -993,7 +1036,13 @@ async function triggerSiteUpdate(site: SiteListItem) {
     startUpdatePolling();
   } catch (err) {
     if (target) target.updating = false;
-    Snackbar.error(err instanceof Error ? err.message : "更新失败");
+    const message =
+      err instanceof Error ? err.message : "更新失败";
+    if (message.includes("已禁用") || message.includes("DISABLED")) {
+      Snackbar.warning("站点已禁用，请先启用后再更新站点信息");
+    } else {
+      Snackbar.error(message);
+    }
   }
 }
 
@@ -1012,6 +1061,9 @@ function startUpdatePolling() {
 }
 
 async function triggerAutomaticUpdate() {
+  if (filters.enabled === "DISABLED") {
+    return;
+  }
   try {
     const result = await updateAllSites();
     if (result.acceptedCount > 0 || result.alreadyRunning) {
@@ -1024,6 +1076,10 @@ async function triggerAutomaticUpdate() {
 }
 
 async function triggerSignin(site: SiteListItem) {
+  if (!site.enabled) {
+    Snackbar.warning("站点已禁用，请先启用后再签到");
+    return;
+  }
   if (!site.signinSupported) {
     Snackbar.warning("此站点不支持签到功能");
     return;
@@ -1051,6 +1107,10 @@ async function triggerSignin(site: SiteListItem) {
 }
 
 async function openBrowse(site: SiteListItem) {
+  if (!site.enabled) {
+    Snackbar.warning("站点已禁用，请先启用后再浏览种子");
+    return;
+  }
   browsingSite.value = site;
   browseVisible.value = true;
   browseItems.value = [];
