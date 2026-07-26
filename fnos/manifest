@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.42
+version=0.6.43
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.42<br/>优化未启用站点视觉：降透明度仅作用于标题、指标区与底部说明；「每日数据」「编辑」「删除」按钮保持正常外观。连通错误条在未启用站点上不再展示。
+changelog=0.6.43<br/>修复任务模块移动端列表双倍渲染：桌面表格与移动卡片改为 v-if/v-else 互斥渲染，避免 DOM 中存在两份节点导致内容数量翻倍。

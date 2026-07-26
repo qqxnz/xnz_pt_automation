@@ -92,7 +92,7 @@
             新建任务
           </button>
         </CCStateView>
-        <div v-else class="desktop-table task-table task-command-list">
+        <div v-else-if="isDesktop" class="desktop-table task-table task-command-list">
           <article
             v-for="task in items"
             :key="task.id"
@@ -150,7 +150,7 @@
           </article>
         </div>
 
-        <div class="mobile-task-list">
+        <div v-else class="mobile-task-list">
           <article
             v-for="task in items"
             :key="task.id"
