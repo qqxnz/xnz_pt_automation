@@ -4,7 +4,7 @@
       <CCPageHeader
         eyebrow="任务管理"
         title="自动化任务"
-        description="自动执行开关、运行和测试保持高频可见，配置与危险操作统一收纳。"
+        description="抓取规则与运行时数据分卡片呈现；自动执行开关与副标题同行，操作区只放动作。"
       />
 
       <section class="sites-toolbar tasks-toolbar cc-toolbar cc-card">
@@ -92,99 +92,131 @@
             新建任务
           </button>
         </CCStateView>
-        <div v-else-if="isDesktop" class="desktop-table task-table task-command-list">
+
+        <!-- 桌面任务卡片 -->
+        <div v-else-if="isDesktop" class="task-card-list">
           <article
             v-for="task in items"
             :key="task.id"
-            class="task-row task-command-card"
+            class="cc-card task-card"
+            :class="{ 'is-disabled': isTaskDisabled(task) }"
           >
-            <div class="task-command-main">
-              <div class="task-command-title">
-                <strong>{{ task.name }}</strong
-                ><span class="chip" :class="statusClass(task)">{{
+            <header class="task-card-head">
+              <div class="task-card-title">
+                <strong>{{ task.name }}</strong>
+                <span
+                  v-if="isTaskDisabled(task)"
+                  class="chip task-disabled-badge"
+                  title="未启用：自动执行已关闭"
+                  >未启用</span
+                >
+                <span class="chip" :class="statusClass(task)">{{
                   statusText(task)
                 }}</span>
               </div>
-              <p>
-                {{ task.siteName }} · {{ task.downloaderName }} ·
-                {{ rangeText(task) }}
-              </p>
-              <div class="task-command-schedule">
-                <span>自动执行</span>
-                <button
-                  class="switch"
-                  :class="{ on: task.autoRunEnabled }"
-                  type="button"
-                  :disabled="task.running"
-                  @click="toggleAutoRun(task)"
-                >
-                  <span></span>
-                </button>
-                <span>每 {{ task.intervalMinutes }} 分钟</span><i>·</i
-                ><span>下次 {{ formatDate(task.nextRunAt) }}</span
-                ><i>·</i><span>最近：{{ task.lastSummary || "-" }}</span>
-              </div>
-            </div>
-            <div class="row-actions compact-actions task-command-actions">
-              <button
-                type="button"
-                :disabled="task.running || testingTaskId === task.id"
-                @click="testExistingTask(task)"
-              >
-                {{ testingTaskId === task.id ? "测试中..." : "测试" }}
-              </button>
-              <button
-                class="row-primary-action"
-                type="button"
-                :disabled="task.running"
-                @click="runExistingTask(task)"
-              >
-                {{ task.running ? "运行中..." : "运行" }}
-              </button>
-              <AppActionMenu
-                :items="taskMenuItems(task)"
-                :label="`${task.name} 的更多操作`"
-                @select="handleTaskMenu(task, $event)"
-              />
-            </div>
-          </article>
-        </div>
+            </header>
 
-        <div v-else class="mobile-task-list">
-          <article
-            v-for="task in items"
-            :key="task.id"
-            class="cc-card cc-mobile-card task-card"
-          >
-            <div>
-              <strong>{{ task.name }}</strong>
-              <span class="chip" :class="statusClass(task)">{{
-                statusText(task)
-              }}</span>
-            </div>
-            <p>{{ task.siteName }} · {{ task.downloaderName }}</p>
-            <p class="cc-mobile-summary">
-              每 {{ task.intervalMinutes }} 分钟 · {{ rangeText(task) }}
-            </p>
-            <p :class="task.autoRunEnabled ? 'success' : ''">
-              自动执行{{ task.autoRunEnabled ? "开启" : "关闭" }} · 下次
-              {{ formatDate(task.nextRunAt) }}
-            </p>
-            <p class="cc-mobile-summary">最近：{{ task.lastSummary || "-" }}</p>
-            <div class="mobile-task-toggle">
-              <span>自动执行</span>
+            <!-- 副标题:自动执行开关 + 文字 + 站点/下载器/策略 -->
+            <div class="task-card-sub">
               <button
                 class="switch"
                 :class="{ on: task.autoRunEnabled }"
                 type="button"
                 :disabled="task.running"
+                :aria-label="`自动执行${task.autoRunEnabled ? '已开启' : '已关闭'}`"
                 @click="toggleAutoRun(task)"
               >
                 <span></span>
               </button>
+              <span
+                class="task-card-sub-state"
+                :class="{ enabled: task.autoRunEnabled }"
+                >{{ task.autoRunEnabled ? "已开启" : "已关闭" }}</span
+              >
+              <span class="task-card-sub-line">{{ formatSubLine(task) }}</span>
             </div>
-            <div class="row-actions compact-actions">
+
+            <!-- 抓取规则卡片 -->
+            <section class="task-card-rule">
+              <span class="task-card-rule-label">抓取规则</span>
+              <div class="task-card-rule-chips">
+                <span
+                  v-for="d in task.discountTypes"
+                  :key="`d-${d}`"
+                  class="task-chip"
+                  >{{ discountText(d) }}</span
+                >
+                <span
+                  v-if="task.sizeMinGb || task.sizeMaxGb"
+                  class="task-chip"
+                  >{{ sizeRangeText(task) }}</span
+                >
+                <span
+                  v-if="task.seederMin || task.seederMax"
+                  class="task-chip"
+                  >{{ seederRangeText(task) }}</span
+                >
+                <span
+                  v-if="task.torrentCountCondition && (task.torrentCount ?? 0) > 0"
+                  class="task-chip"
+                  >入库 {{ countText(task) }}</span
+                >
+                <span
+                  v-if="task.skipHitAndRun !== false"
+                  class="task-chip warn"
+                  >跳过 HR</span
+                >
+                <span class="task-chip">抓取 {{ task.fetchLimit ?? 100 }}</span>
+                <span v-if="task.sortRule" class="task-chip">{{
+                  sortRuleText(task.sortRule)
+                }}</span>
+              </div>
+            </section>
+
+            <!-- 5 列指标卡片 -->
+            <section class="task-card-metrics">
+              <div class="task-card-metric">
+                <span class="metric-label">执行间隔</span>
+                <strong>{{ formatInterval(task.intervalMinutes) }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">下次执行</span>
+                <strong :class="nextClass(task)">{{
+                  formatNextRun(task)
+                }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">最近一次</span>
+                <strong :class="lastClass(task)">{{ formatLast(task) }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">本次推送</span>
+                <strong :class="{ muted: !task.lastSummary }">{{
+                  formatPushed(task)
+                }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">完成时间</span>
+                <strong :class="{ muted: !task.lastFinishedAt }">{{
+                  formatFinished(task)
+                }}</strong>
+              </div>
+            </section>
+
+            <!-- 失败卡片专用:错误提示 -->
+            <p
+              v-if="task.lastStatus === 'FAILED' && task.lastError"
+              class="task-card-error"
+            >
+              <span class="task-card-error-dot"></span>
+              <strong>抓取失败</strong>
+              <span>· {{ task.lastError }} · 查看站点设置或运行测试定位问题</span>
+            </p>
+
+            <!-- 操作区:5 项 -->
+            <footer class="task-card-actions">
               <button
+                class="task-action"
                 type="button"
                 :disabled="task.running || testingTaskId === task.id"
                 @click="testExistingTask(task)"
@@ -192,24 +224,236 @@
                 {{ testingTaskId === task.id ? "测试中..." : "测试" }}
               </button>
               <button
-                class="row-primary-action"
+                class="task-action primary"
                 type="button"
                 :disabled="task.running"
                 @click="runExistingTask(task)"
               >
                 {{ task.running ? "运行中..." : "运行" }}
               </button>
-              <AppActionMenu
-                :items="taskMenuItems(task)"
-                :label="`${task.name} 的更多操作`"
-                @select="handleTaskMenu(task, $event)"
-              />
+              <button
+                class="task-action"
+                type="button"
+                :disabled="task.running"
+                :title="task.running ? '任务运行中' : ''"
+                @click="openEdit(task)"
+              >
+                编辑
+              </button>
+              <button class="task-action" type="button" @click="goLogs(task)">
+                日志
+              </button>
+              <button
+                v-if="isTaskDisabled(task)"
+                class="task-action primary"
+                type="button"
+                @click="toggleAutoRun(task)"
+              >
+                启用任务
+              </button>
+              <button
+                class="task-action danger"
+                type="button"
+                :disabled="task.running"
+                :title="task.running ? '任务运行中' : ''"
+                @click="removeTask(task)"
+              >
+                删除
+              </button>
+            </footer>
+          </article>
+        </div>
+
+        <!-- 移动端任务卡片 -->
+        <div v-else class="task-card-list-mobile">
+          <article
+            v-for="task in items"
+            :key="task.id"
+            class="cc-card task-card-mobile"
+            :class="{ 'is-disabled': isTaskDisabled(task) }"
+          >
+            <header class="task-card-head">
+              <div class="task-card-title">
+                <strong>{{ task.name }}</strong>
+                <span
+                  v-if="isTaskDisabled(task)"
+                  class="chip task-disabled-badge"
+                  >未启用</span
+                >
+                <span class="chip" :class="statusClass(task)">{{
+                  statusText(task)
+                }}</span>
+              </div>
+            </header>
+
+            <div class="task-card-sub">
+              <button
+                class="switch"
+                :class="{ on: task.autoRunEnabled }"
+                type="button"
+                :disabled="task.running"
+                :aria-label="`自动执行${task.autoRunEnabled ? '已开启' : '已关闭'}`"
+                @click="toggleAutoRun(task)"
+              >
+                <span></span>
+              </button>
+              <span
+                class="task-card-sub-state"
+                :class="{ enabled: task.autoRunEnabled }"
+                >{{ task.autoRunEnabled ? "已开启" : "已关闭" }}</span
+              >
+              <span class="task-card-sub-line">{{ task.siteName }} · {{ task.downloaderName }}</span>
             </div>
+            <p
+              v-if="task.autoPush || task.categoryOverride || task.lowUploadKbps"
+              class="task-card-sub-extra"
+            >
+              {{ formatSubLineExtras(task) }}
+            </p>
+
+            <!-- 抓取规则 chip 卡片(3+3) -->
+            <section class="task-card-rule">
+              <span class="task-card-rule-label">抓取规则</span>
+              <div class="task-card-rule-chips">
+                <span
+                  v-for="(d, i) in task.discountTypes"
+                  :key="`md-${d}`"
+                  class="task-chip"
+                  >{{ discountText(d) }}</span
+                >
+                <span
+                  v-if="task.sizeMinGb || task.sizeMaxGb"
+                  class="task-chip"
+                  >{{ sizeRangeText(task) }}</span
+                >
+                <span
+                  v-if="task.seederMin || task.seederMax"
+                  class="task-chip"
+                  >{{ seederRangeText(task) }}</span
+                >
+                <span
+                  v-if="task.torrentCountCondition && (task.torrentCount ?? 0) > 0"
+                  class="task-chip"
+                  >入库 {{ countText(task) }}</span
+                >
+                <span
+                  v-if="task.skipHitAndRun !== false"
+                  class="task-chip warn"
+                  >跳过 HR</span
+                >
+                <span class="task-chip">抓取 {{ task.fetchLimit ?? 100 }}</span>
+                <span v-if="task.sortRule" class="task-chip">{{
+                  sortRuleShortText(task.sortRule)
+                }}</span>
+              </div>
+            </section>
+
+            <!-- 6 个指标(3 行 2 列) -->
+            <section class="task-card-metrics task-card-metrics-mobile">
+              <div class="task-card-metric">
+                <span class="metric-label">下次执行</span>
+                <strong :class="nextClass(task)">{{
+                  formatNextRun(task)
+                }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">最近一次</span>
+                <strong :class="lastClass(task)">{{ formatLast(task) }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">本次推送</span>
+                <strong :class="{ muted: !task.lastSummary }">{{
+                  formatPushedMobile(task)
+                }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">已推送 / 失败</span>
+                <strong :class="{ muted: !task.lastSummary }">{{
+                  formatPushedFailed(task)
+                }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">执行间隔</span>
+                <strong>{{ formatInterval(task.intervalMinutes) }}</strong>
+              </div>
+              <div class="task-card-metric">
+                <span class="metric-label">完成时间</span>
+                <strong :class="{ muted: !task.lastFinishedAt }">{{
+                  formatFinished(task)
+                }}</strong>
+              </div>
+            </section>
+
+            <p
+              v-if="task.lastStatus === 'FAILED' && task.lastError"
+              class="task-card-error"
+            >
+              <span class="task-card-error-dot"></span>
+              <strong>抓取失败</strong>
+              <span>· {{ task.lastError }}</span>
+            </p>
+
+            <!-- 操作区:6 项 3×2 -->
+            <footer class="task-card-actions task-card-actions-mobile">
+              <button
+                class="task-action"
+                type="button"
+                :disabled="task.running || testingTaskId === task.id"
+                @click="testExistingTask(task)"
+              >
+                {{ testingTaskId === task.id ? "测试中..." : "测试" }}
+              </button>
+              <button
+                class="task-action primary"
+                type="button"
+                :disabled="task.running"
+                @click="runExistingTask(task)"
+              >
+                {{ task.running ? "运行中..." : "运行" }}
+              </button>
+              <button
+                class="task-action"
+                type="button"
+                :disabled="task.running"
+                @click="openEdit(task)"
+              >
+                编辑
+              </button>
+              <button class="task-action" type="button" @click="goLogs(task)">
+                日志
+              </button>
+              <button
+                v-if="isTaskDisabled(task)"
+                class="task-action primary"
+                type="button"
+                @click="toggleAutoRun(task)"
+              >
+                启用任务
+              </button>
+              <button
+                v-else
+                class="task-action mobile-status"
+                type="button"
+                disabled
+                :title="`自动执行已${task.autoRunEnabled ? '开启' : '关闭'}`"
+              >
+                {{ task.autoRunEnabled ? "已开启" : "已停止" }}
+              </button>
+              <button
+                class="task-action danger"
+                type="button"
+                :disabled="task.running"
+                @click="removeTask(task)"
+              >
+                删除
+              </button>
+            </footer>
           </article>
         </div>
       </section>
     </section>
 
+    <!-- 编辑/新建表单弹窗 -->
     <div v-if="formVisible" class="cc-modal-backdrop modal-backdrop">
       <form
         class="cc-form-dialog site-form task-form"
@@ -440,6 +684,7 @@
       </form>
     </div>
 
+    <!-- 测试结果弹窗 -->
     <div v-if="testResult" class="cc-modal-backdrop modal-backdrop">
       <section class="cc-form-dialog site-form test-result-dialog">
         <div class="cc-form-head form-head">
@@ -520,9 +765,6 @@
 import { Snackbar } from "@varlet/ui";
 import { SegmentedButtons } from "@varlet/ui";
 import AppSelect from "../components/AppSelect.vue";
-import AppActionMenu, {
-  type AppActionMenuItem,
-} from "../components/AppActionMenu.vue";
 import CCPageHeader from "../components/CCPageHeader.vue";
 import CCStateView from "../components/CCStateView.vue";
 import { useMediaQuery } from "../composables/useMediaQuery";
@@ -621,14 +863,21 @@ const sortRuleOptions: Array<{ value: TaskSortRule; label: string }> = [
   { value: "SIZE_ASC", label: "种子体积最小在前" },
 ];
 
-// 工具栏过滤器段控件选项
+const sortRuleShortLabels: Record<TaskSortRule, string> = {
+  SEEDERS_ASC: "做种升序",
+  SEEDERS_DESC: "做种降序",
+  CREATED_DESC: "发布新",
+  CREATED_ASC: "发布旧",
+  SIZE_DESC: "体积大",
+  SIZE_ASC: "体积小",
+};
+
 const autoRunFilterOptions = [
   { label: "全部", value: "ALL" },
   { label: "已开启", value: "ON" },
   { label: "已关闭", value: "OFF" },
 ];
 
-// 表单内 Select 选项
 const siteOptions = computed(() =>
   sites.value.map((s) => ({ label: s.displayName, value: s.id })),
 );
@@ -640,18 +889,6 @@ const sortRuleSelectOptions = sortRuleOptions.map((o) => ({
   value: o.value,
 }));
 
-const statCards = computed(() => [
-  { label: "全部任务", value: stats.value.total, className: "" },
-  {
-    label: "自动执行",
-    value: stats.value.autoRunEnabled,
-    className: "success",
-  },
-  { label: "运行中", value: stats.value.running, className: "warning" },
-  { label: "失败", value: stats.value.failed, className: "danger" },
-]);
-
-// 响应式判断：移动端 < 768px 使用 varlet 组件优化体验
 const isDesktop = useMediaQuery("(min-width: 768px)");
 
 function resetForm() {
@@ -878,37 +1115,189 @@ async function removeTask(task: TaskItem) {
   await loadTasks();
 }
 
-function taskMenuItems(task: TaskItem): AppActionMenuItem[] {
-  return [
-    {
-      key: "test",
-      label: testingTaskId.value === task.id ? "测试中..." : "测试规则",
-      mobileOnly: true,
-      disabled: task.running || testingTaskId.value === task.id,
-    },
-    {
-      key: "edit",
-      label: "编辑任务",
-      disabled: task.running,
-      disabledReason: task.running ? "任务运行中" : undefined,
-    },
-    { key: "logs", label: "查看任务日志" },
-    {
-      key: "delete",
-      label: "删除任务",
-      tone: "danger",
-      disabled: task.running,
-      disabledReason: task.running ? "任务运行中" : undefined,
-    },
-  ];
+function goLogs(_task: TaskItem) {
+  void router.push({ path: "/logs", query: { type: "task" } });
 }
 
-function handleTaskMenu(task: TaskItem, key: string) {
-  if (key === "test") void testExistingTask(task);
-  else if (key === "edit") openEdit(task);
-  else if (key === "logs")
-    void router.push({ path: "/logs", query: { type: "task" } });
-  else if (key === "delete") void removeTask(task);
+function isTaskDisabled(task: TaskItem): boolean {
+  // 未启用 = 自动执行关闭 且 从未运行过
+  return !task.autoRunEnabled && !task.lastStatus && !task.running;
+}
+
+// ============ 格式化工具函数(对应设计稿) ============
+
+function discountText(value: string): string {
+  return value === "TWO_X_FREE"
+    ? "2X FREE"
+    : value === "HALF_FREE"
+      ? "50% FREE"
+      : value === "NORMAL"
+        ? "不免费"
+        : value;
+}
+
+function sizeRangeText(task: TaskItem): string {
+  const min = task.sizeMinGb ?? 0;
+  const max = task.sizeMaxGb ?? 0;
+  if (!min && !max) return "不限体积";
+  if (min && max) return `${min}~${max} GB`;
+  if (min) return `≥${min} GB`;
+  return `≤${max} GB`;
+}
+
+function seederRangeText(task: TaskItem): string {
+  const min = task.seederMin ?? 0;
+  const max = task.seederMax ?? 0;
+  if (!min && !max) return "不限做种";
+  if (min && max) return `做种 ${min}~${max}`;
+  if (min) return `做种≥${min}`;
+  return `做种≤${max}`;
+}
+
+function countText(task: TaskItem): string {
+  const c = task.torrentCountCondition;
+  const n = task.torrentCount ?? 0;
+  if (!c || !n) return String(n);
+  return c === "GT" ? `>${n}` : c === "LT" ? `<${n}` : `=${n}`;
+}
+
+function sortRuleText(rule: TaskSortRule): string {
+  return sortRuleOptions.find((o) => o.value === rule)?.label ?? rule;
+}
+
+function sortRuleShortText(rule: TaskSortRule): string {
+  return sortRuleShortLabels[rule] ?? rule;
+}
+
+function formatInterval(min: number): string {
+  if (!min || min < 10) return "— —";
+  if (min < 60) return `每 ${min} 分钟`;
+  if (min < 1440) return `每 ${Math.round(min / 60)} 小时`;
+  return `每日 ${(min / 60).toFixed(1)} 小时`;
+}
+
+function formatNextRun(task: TaskItem): string {
+  if (!task.autoRunEnabled) return "— 已停止 —";
+  if (!task.nextRunAt) return "— —";
+  return formatDate(task.nextRunAt);
+}
+
+function nextClass(task: TaskItem): string {
+  if (!task.autoRunEnabled) return "muted";
+  return "";
+}
+
+function formatLast(task: TaskItem): string {
+  if (task.running) {
+    return task.lastRunMode === "AUTO" ? "定时运行中" : "手动运行中";
+  }
+  if (task.lastStatus === "SUCCESS" && task.lastStartedAt) {
+    return `成功 ${formatDate(task.lastStartedAt)}`;
+  }
+  if (task.lastStatus === "FAILED" && task.lastStartedAt) {
+    return `失败 ${formatDate(task.lastStartedAt)}`;
+  }
+  return "— 从未运行 —";
+}
+
+function lastClass(task: TaskItem): string {
+  if (task.running) return "running";
+  if (task.lastStatus === "FAILED") return "danger";
+  if (task.lastStatus === "SUCCESS") return "success";
+  return "muted";
+}
+
+// 从 lastSummary 提取关键数字(桌面版本)
+function formatPushed(task: TaskItem): string {
+  if (!task.lastSummary) return "— —";
+  // 抓 X · 命 X · 推 X
+  const m = task.lastSummary.match(/抓取\s*(\d+).*?命中\s*(\d+).*?推送\s*(\d+)/);
+  if (m) return `抓 ${m[1]} · 命 ${m[2]} · 推 ${m[3]}`;
+  return "— —";
+}
+
+// 移动端用,只显示"抓 X · 命 X"
+function formatPushedMobile(task: TaskItem): string {
+  if (!task.lastSummary) return "— —";
+  const m = task.lastSummary.match(/抓取\s*(\d+).*?命中\s*(\d+)/);
+  if (m) return `抓 ${m[1]} · 命 ${m[2]}`;
+  return "— —";
+}
+
+// 移动端用,只显示"推 X / 败 Y"
+function formatPushedFailed(task: TaskItem): string {
+  if (!task.lastSummary) return "— / —";
+  const pushed = task.lastSummary.match(/推送\s*(\d+)/);
+  const failed = task.lastSummary.match(/失败\s*(\d+)/);
+  return `${pushed?.[1] ?? "0"} / ${failed?.[1] ?? "0"}`;
+}
+
+function formatFinished(task: TaskItem): string {
+  if (!task.lastFinishedAt) return "— —";
+  return formatDateTime(task.lastFinishedAt);
+}
+
+function formatDate(value?: string): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateTime(value: string): string {
+  const d = new Date(value);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function formatSubLine(task: TaskItem): string {
+  // 桌面副标题:站点 · 下载器 · 策略摘要
+  const parts: string[] = [task.siteName, task.downloaderName];
+  if (task.autoPush) parts.push("自动推送");
+  if (task.categoryOverride) parts.push(`分类 = ${task.categoryOverride}`);
+  if (task.deleteOnFreeExpire) parts.push("免费到期");
+  if (task.onlyFreeDownload) parts.push("仅免费下载");
+  if (task.lowUploadKbps && task.lowUploadMinutes)
+    parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`);
+  return parts.join(" · ");
+}
+
+function formatSubLineExtras(task: TaskItem): string {
+  // 移动端副标题第二行
+  const parts: string[] = [];
+  if (task.autoPush) parts.push("自动推送");
+  if (task.categoryOverride) parts.push(`分类 = ${task.categoryOverride}`);
+  if (task.deleteOnFreeExpire) parts.push("免费到期");
+  if (task.onlyFreeDownload) parts.push("仅免费下载");
+  if (task.lowUploadKbps && task.lowUploadMinutes)
+    parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`);
+  return parts.join(" · ");
+}
+
+function statusText(task: TaskItem): string {
+  if (task.running)
+    return task.lastRunMode === "AUTO" ? "定时运行中" : "手动运行中";
+  if (task.lastStatus === "SUCCESS") return "成功";
+  if (task.lastStatus === "FAILED") return "失败";
+  if (!task.autoRunEnabled) return "未启用";
+  return "未运行";
+}
+
+function statusClass(task: TaskItem): string {
+  if (task.running) return "warning-chip";
+  if (task.lastStatus === "FAILED") return "offline-chip";
+  if (task.lastStatus === "SUCCESS") return "online-chip";
+  if (!task.autoRunEnabled) return "muted-chip";
+  return "muted-chip";
+}
+
+function freeEndText(item: TaskTestResult["items"][number]) {
+  if (item.freeEndAt) return `免费至 ${formatDate(item.freeEndAt)}`;
+  if (item.isFreeNow) return "免费中，未获取到过期时间";
+  return "非免费";
 }
 
 function formatBytes(value?: number) {
@@ -921,80 +1310,6 @@ function formatBytes(value?: number) {
     unitIndex += 1;
   }
   return `${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: unitIndex ? 2 : 0 }).format(size)} ${units[unitIndex]}`;
-}
-
-function formatDate(value?: string) {
-  return value
-    ? new Date(value).toLocaleString("zh-CN", {
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "-";
-}
-
-function discountText(value: string) {
-  return value === "TWO_X_FREE"
-    ? "2X FREE"
-    : value === "HALF_FREE"
-      ? "50% FREE"
-      : value === "NORMAL"
-        ? "不免费"
-        : value;
-}
-
-function freeEndText(item: TaskTestResult["items"][number]) {
-  if (item.freeEndAt) return `免费至 ${formatDate(item.freeEndAt)}`;
-  if (item.isFreeNow) return "免费中，未获取到过期时间";
-  return "非免费";
-}
-
-function rangeText(task: TaskItem) {
-  const parts = [task.discountTypes.map(discountText).join(", ")];
-  if (task.onlyFreeDownload) parts.push("仅免费下载");
-  if (task.deleteOnFreeExpire) parts.push("免费到期");
-  if (task.skipHitAndRun !== false) parts.push("跳过 HR");
-  if (task.lowUploadKbps && task.lowUploadMinutes)
-    parts.push(`低速 ${task.lowUploadKbps}KB/s·${task.lowUploadMinutes}分钟`);
-  const seederMin = task.seederMin ?? 0;
-  const seederMax = task.seederMax ?? 0;
-  if (seederMin > 0 || seederMax > 0) {
-    if (seederMin > 0 && seederMax > 0)
-      parts.push(`做种 ${seederMin}~${seederMax}`);
-    else if (seederMin > 0) parts.push(`做种 ≥ ${seederMin}`);
-    else parts.push(`做种 ≤ ${seederMax}`);
-  }
-  const sizeMin = task.sizeMinGb ?? 0;
-  const sizeMax = task.sizeMaxGb ?? 0;
-  if (sizeMin > 0 || sizeMax > 0) {
-    if (sizeMin > 0 && sizeMax > 0) parts.push(`体积 ${sizeMin}~${sizeMax} GB`);
-    else if (sizeMin > 0) parts.push(`体积 ≥ ${sizeMin} GB`);
-    else parts.push(`体积 ≤ ${sizeMax} GB`);
-  }
-  if (task.torrentCountCondition && (task.torrentCount ?? 0) > 0)
-    parts.push(`入库数量 ${task.torrentCount}`);
-  parts.push(`抓取数量 ${task.fetchLimit ?? 100}`);
-  if (task.sortRule) {
-    const opt = sortRuleOptions.find((item) => item.value === task.sortRule);
-    if (opt) parts.push(`排序：${opt.label}`);
-  }
-  return parts.join(" · ");
-}
-
-function statusText(task: TaskItem) {
-  if (task.running)
-    return task.lastRunMode === "AUTO" ? "定时运行中" : "手动运行中";
-  if (task.lastStatus === "SUCCESS") return "成功";
-  if (task.lastStatus === "FAILED") return "失败";
-  return "未运行";
-}
-
-function statusClass(task: TaskItem) {
-  if (task.running) return "warning-chip";
-  if (task.lastStatus === "FAILED") return "offline-chip";
-  if (task.lastStatus === "SUCCESS") return "online-chip";
-  return "muted-chip";
 }
 
 async function handleExport() {

@@ -2442,3 +2442,321 @@
     word-break: normal;
   }
 }
+
+/* ============================================================
+   任务卡片(对齐 tasks.svg v8 设计稿)
+   ============================================================ */
+.task-card-list {
+  display: grid;
+  gap: 16px;
+}
+
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px 18px;
+  transition: box-shadow 160ms ease;
+}
+.task-card.is-disabled {
+  background: #fbfcfd;
+  border-color: #e2e8f0;
+  opacity: 0.78;
+}
+.task-card.is-disabled .task-chip,
+.task-card.is-disabled .metric-label,
+.task-card.is-disabled strong {
+  color: #6b7280;
+}
+.task-card.is-disabled .task-card-metrics {
+  background: #f3f4f6;
+}
+
+.task-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.task-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.task-card-title strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--cc-text);
+  letter-spacing: -0.01em;
+}
+.task-disabled-badge {
+  background: #f9fafb !important;
+  color: #6b7280 !important;
+  border: 1px dashed #d1d5db;
+  font-weight: 800;
+}
+
+/* 副标题:开关 + 已开启/已关闭 + 站点·下载器·策略 */
+.task-card-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #142033;
+}
+.task-card-sub-state {
+  font-weight: 700;
+  color: #6b7280;
+}
+.task-card-sub-state.enabled {
+  color: #14a675;
+}
+.task-card-sub-line {
+  color: #142033;
+  font-weight: 700;
+  font-size: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* 抓取规则卡片 */
+.task-card-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+.task-card-rule-label {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: #718096;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.task-card-rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.task-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  background: #eef3ff;
+  color: #3478f6;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 13px;
+  white-space: nowrap;
+}
+.task-chip.warn {
+  background: #fff3de;
+  color: #b45309;
+}
+
+/* 5 列指标卡片 */
+.task-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+.task-card-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  min-width: 0;
+}
+.task-card-metric:first-child {
+  padding-left: 0;
+}
+.task-card-metric:last-child {
+  padding-right: 0;
+}
+.metric-label {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: #718096;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.task-card-metric strong {
+  font-size: 13px;
+  color: #142033;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-card-metric strong.muted {
+  color: #6b7280;
+}
+.task-card-metric strong.success {
+  color: #14a675;
+}
+.task-card-metric strong.danger {
+  color: #e05263;
+}
+.task-card-metric strong.running {
+  color: #b45309;
+}
+
+/* 错误提示 */
+.task-card-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+  padding: 4px 0 0;
+}
+.task-card-error-dot {
+  display: inline-block;
+  width: 4px;
+  align-self: stretch;
+  background: #e05263;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.task-card-error strong {
+  color: #e05263;
+  font-weight: 700;
+}
+
+/* 操作区:5 项 + 删除 */
+.task-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+.task-action {
+  padding: 7px 14px;
+  background: #fff;
+  border: 1px solid #dce5ee;
+  color: #3478f6;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.task-action:hover:not(:disabled) {
+  border-color: #3478f6;
+  background: #f2f7ff;
+}
+.task-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.task-action.primary {
+  background: #3478f6;
+  color: #fff;
+  border-color: #3478f6;
+}
+.task-action.primary:hover:not(:disabled) {
+  background: #2860d8;
+  border-color: #2860d8;
+}
+.task-action.danger {
+  background: #fff7f7;
+  color: #e05263;
+  border-color: #fecaca;
+  margin-left: auto;
+}
+.task-action.danger:hover:not(:disabled) {
+  background: #fce9ec;
+  border-color: #e05263;
+}
+
+/* 移动端任务卡片 */
+.task-card-list-mobile {
+  display: grid;
+  gap: 14px;
+}
+.task-card-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 14px;
+}
+.task-card-mobile.is-disabled {
+  background: #fbfcfd;
+  border-color: #e2e8f0;
+  opacity: 0.78;
+}
+.task-card-mobile .task-chip {
+  font-size: 11px;
+  padding: 2px 9px;
+}
+.task-card-sub-extra {
+  margin: -8px 0 0;
+  color: #718096;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.task-card-metrics-mobile {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+.task-card-metrics-mobile .task-card-metric {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 9px;
+}
+.task-card-metrics-mobile .task-card-metric strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.task-card-actions-mobile {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f5;
+}
+.task-card-actions-mobile .task-action {
+  width: 100%;
+  text-align: center;
+  padding: 10px 0;
+}
+.task-card-actions-mobile .task-action.danger {
+  margin-left: 0;
+}
+.task-card-actions-mobile .task-action.mobile-status {
+  background: #f8fafc;
+  color: #6b7280;
+  border-color: #f1f3f5;
+  cursor: default;
+}
+
+@media (max-width: 1280px) {
+  .task-card-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .task-card-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+

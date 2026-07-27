@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.43
+version=0.6.44
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.43<br/>修复任务模块移动端列表双倍渲染：桌面表格与移动卡片改为 v-if/v-else 互斥渲染，避免 DOM 中存在两份节点导致内容数量翻倍。
+changelog=0.6.44<br/>优化任务模块：按 v8 设计稿重做 TasksPage,卡片分抓取规则 chip 卡片 + 5 列指标网格(执行间隔/下次/最近/本次推送/完成时间);自动执行开关移到副标题位置,操作区简化为 5 项(测试/运行/编辑/日志/删除);新增未启用状态视觉(降透明度 + 灰虚线徽标);覆盖定时运行中/手动运行中/成功/失败/未启用 5 种状态。

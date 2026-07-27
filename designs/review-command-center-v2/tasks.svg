@@ -1,5 +1,346 @@
-<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="2020" height="1140" viewBox="0 0 2020 1140"><style>text{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}.ink{fill:#142033}.muted{fill:#718096}.white{fill:#fff}.blue{fill:#3478f6}.green{fill:#14a675}.orange{fill:#ef9b26}.red{fill:#e05263}.tiny{font-size:10px;letter-spacing:1.1px}.small{font-size:12px}.label{font-size:13px;font-weight:700}.title{font-size:18px;font-weight:800}.value{font-size:24px;font-weight:800}.pill{font-size:10px;font-weight:800}</style><rect width="2020" height="1140" fill="#e7edf4"/><text x="20" y="24" class="muted tiny">桌面端 · 任务操作优化</text><text x="1502" y="24" class="muted tiny">移动端 · 任务操作优化</text><g transform="translate(0 40)"><rect width="1440" height="1080" rx="18" fill="#f2f5f9"/><rect width="256" height="1080" rx="18" fill="#111c2e"/><rect x="256" width="1184" height="68" fill="#fff"/><rect x="24" y="22" width="38" height="38" rx="12" fill="#3478f6"/><text x="43" y="48" text-anchor="middle" class="white small" font-weight="800">PT</text><text x="75" y="39" class="white label">PT Automation</text><text x="75" y="55" class="muted small">NAS 运行指挥台</text><text x="26" y="106" class="muted tiny">工作台</text><text x="38" y="142" class="muted label">◈</text><text x="67" y="142" class="muted small">首页概览</text><text x="38" y="186" class="muted label">◉</text><text x="67" y="186" class="muted small">站点</text><rect x="14" y="248" width="228" height="39" rx="9" fill="#203b63"/><text x="38" y="230" class="muted label">⇣</text><text x="67" y="230" class="muted small">下载器</text><text x="38" y="274" class="blue label">✓</text><text x="67" y="274" class="white small">任务</text><text x="38" y="318" class="muted label">◇</text><text x="67" y="318" class="muted small">种子</text><text x="38" y="362" class="muted label">⌁</text><text x="67" y="362" class="muted small">流量</text><text x="38" y="406" class="muted label">≡</text><text x="67" y="406" class="muted small">日志</text><text x="38" y="450" class="muted label">⚙</text><text x="67" y="450" class="muted small">系统设置</text><text x="292" y="108" class="muted tiny">任务管理</text><text x="292" y="143" class="ink value">自动化任务</text><text x="292" y="169" class="muted small">自动执行开关、运行和测试保持高频可见；其余动作收纳。</text>
-<rect x="292" y="202" width="1096" height="62" rx="14" fill="#fff" stroke="#e5ebf2"/><text x="316" y="239" class="muted small">搜索任务 / 站点 / 下载器　　自动执行：全部</text><text x="1060" y="239" class="blue small">刷新　导出　导入</text><rect x="1280" y="214" width="92" height="38" rx="9" fill="#3478f6"/><text x="1326" y="239" text-anchor="middle" class="white label">新建任务</text>
-<rect x="292" y="284" width="1096" height="218" rx="14" fill="#fff" stroke="#e5ebf2"/><text x="316" y="318" class="ink title">免费种子抓取</text><text x="316" y="344" class="muted small">MTeam · NAS QB · 免费 · 体积 10–80 GB</text><text x="316" y="386" class="muted small">自动执行</text><rect x="385" y="369" width="44" height="26" rx="13" fill="#3478f6"/><circle cx="416" cy="382" r="10" fill="#fff"/><text x="476" y="386" class="muted small">间隔 10 分钟　·　下次 10:30　·　最近成功：推送 31</text><rect x="1128" y="362" width="70" height="40" rx="9" fill="#3478f6"/><text x="1163" y="387" text-anchor="middle" class="white label">运行</text><rect x="1208" y="362" width="58" height="40" rx="9" fill="#fff" stroke="#dce5ee"/><text x="1237" y="387" text-anchor="middle" class="blue small">测试</text><rect x="1276" y="362" width="42" height="40" rx="9" fill="#fff" stroke="#dce5ee"/><text x="1297" y="387" text-anchor="middle" class="blue title">···</text><text x="1128" y="442" class="muted small">运行中：运行与开关禁用，显示进度与取消提示</text>
-<rect x="292" y="522" width="1096" height="280" rx="14" fill="#fff" stroke="#e5ebf2"/><text x="316" y="556" class="ink title">更多菜单与测试入口</text><rect x="316" y="578" width="280" height="154" rx="10" fill="#fff" stroke="#dce5ee"/><text x="338" y="612" class="ink label">编辑任务</text><text x="338" y="648" class="ink label">查看任务日志</text><line x1="338" y1="670" x2="576" y2="670" stroke="#e5ebf2"/><text x="338" y="704" class="red label">删除任务</text><text x="636" y="612" class="blue label">测试结果为独立弹窗</text><text x="636" y="644" class="muted small">显示抓取数、去重、命中、H&amp;R 跳过、待入库与结果列表。</text><text x="636" y="674" class="muted small">测试不会推送；运行才按自动化规则写入或推送。</text><text x="636" y="704" class="muted small">移动端保持“运行”主操作，测试与编辑在 Action Sheet。</text></g><g transform="translate(1482 40)"><rect width="478" height="1080" rx="18" fill="#f2f5f9"/><rect x="44" width="390" height="1080" rx="24" fill="#f2f5f9"/><rect x="44" width="390" height="62" rx="24" fill="#fff"/><text x="64" y="39" class="ink title">☰</text><rect x="102" y="17" width="30" height="30" rx="9" fill="#3478f6"/><text x="117" y="38" text-anchor="middle" class="white tiny">PT</text><text x="142" y="37" class="ink label">PT Automation</text>
-<text x="60" y="92" class="muted tiny">任务</text><text x="60" y="120" class="ink title">自动化任务</text><rect x="60" y="140" width="358" height="176" rx="14" fill="#fff" stroke="#e5ebf2"/><text x="78" y="172" class="ink label">免费种子抓取</text><text x="78" y="200" class="muted small">MTeam · NAS QB · 每 10 分钟</text><text x="78" y="230" class="green small">自动执行开启　下次 10:30</text><rect x="78" y="260" width="62" height="32" rx="8" fill="#3478f6"/><text x="109" y="281" text-anchor="middle" class="white small">运行</text><rect x="150" y="260" width="48" height="32" rx="8" fill="#fff" stroke="#dce5ee"/><text x="174" y="281" text-anchor="middle" class="blue title">···</text><rect x="44" y="642" width="390" height="270" rx="20" fill="#fff"/><text x="68" y="696" class="ink title">免费种子抓取</text><text x="68" y="726" class="muted small">任务操作</text><text x="68" y="774" class="blue label">测试规则</text><text x="68" y="814" class="ink label">编辑任务</text><text x="68" y="854" class="ink label">查看任务日志</text><line x1="68" y1="876" x2="410" y2="876" stroke="#e5ebf2"/><text x="68" y="910" class="red label">删除任务</text><rect x="44" y="1018" width="390" height="62" fill="#fff"/><line x1="44" y1="1018" x2="434" y2="1018" stroke="#e1e8f0"/><text x="83" y="1044" text-anchor="middle" class="muted label">◈</text><text x="161" y="1044" text-anchor="middle" class="muted label">◉</text><text x="239" y="1044" text-anchor="middle" class="muted label">✓</text><text x="317" y="1044" text-anchor="middle" class="muted label">◇</text><text x="395" y="1044" text-anchor="middle" class="blue label">•••</text><text x="83" y="1065" text-anchor="middle" class="muted tiny">首页</text><text x="161" y="1065" text-anchor="middle" class="muted tiny">站点</text><text x="239" y="1065" text-anchor="middle" class="muted tiny">任务</text><text x="317" y="1065" text-anchor="middle" class="muted tiny">种子</text><text x="395" y="1065" text-anchor="middle" class="blue tiny">更多</text></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2020" height="1500" viewBox="0 0 2020 1500">
+  <defs>
+    <filter id="cardShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#111c2e" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+  <style>text{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif}.ink{fill:#142033}.muted{fill:#718096}.white{fill:#fff}.blue{fill:#3478f6}.green{fill:#14a675}.orange{fill:#ef9b26}.red{fill:#e05263}.tiny{font-size:10px;letter-spacing:1.1px}.small{font-size:12px}.label{font-size:13px;font-weight:700}.title{font-size:18px;font-weight:800}.value{font-size:24px;font-weight:800}.pill{font-size:10px;font-weight:800}.metric-label{font-size:10px;letter-spacing:.6px;fill:#718096;font-weight:700}.metric-value{font-size:13px;fill:#142033;font-weight:700}.muted-strong{font-size:13px;fill:#6b7280;font-weight:700}.pill-warn{font-size:10px;font-weight:800;fill:#ef9b26}.pill-muted{font-size:10px;font-weight:800;fill:#6b7280}.sub-line{font-size:12px;fill:#142033;font-weight:700}.sub-rule{font-size:12px;fill:#718096;font-weight:400}.chip-text{font-size:12px;fill:#3478f6;font-weight:700}.rule-card-label{font-size:10px;letter-spacing:.6px;fill:#718096;font-weight:700}.switch-label{font-size:12px;font-weight:700}</style>
+
+  <rect width="2020" height="1500" fill="#e7edf4"/>
+  <text x="20" y="24" class="muted tiny">桌面端 · 成功 / 失败 / 未启用 三态 + 操作区 5 项</text>
+  <text x="1502" y="24" class="muted tiny">移动端 · 抓取规则 3+3 chip 卡片 + 6 项操作 3×2</text>
+
+  <!-- ================= Desktop ================= -->
+  <g transform="translate(0 40)">
+    <rect width="1440" height="1460" rx="18" fill="#f2f5f9"/>
+    <rect width="256" height="1460" rx="18" fill="#111c2e"/>
+    <rect x="256" width="1184" height="68" fill="#fff"/>
+
+    <rect x="24" y="22" width="38" height="38" rx="12" fill="#3478f6"/>
+    <text x="43" y="48" text-anchor="middle" class="white small" font-weight="800">PT</text>
+    <text x="75" y="39" class="white label">PT Automation</text>
+    <text x="75" y="55" class="muted small">NAS 运行指挥台</text>
+
+    <text x="26" y="106" class="muted tiny">工作台</text>
+    <text x="38" y="142" class="muted label">◈</text><text x="67" y="142" class="muted small">首页概览</text>
+    <text x="38" y="186" class="muted label">◉</text><text x="67" y="186" class="muted small">站点</text>
+    <text x="38" y="230" class="muted label">⇣</text><text x="67" y="230" class="muted small">下载器</text>
+    <rect x="14" y="248" width="228" height="39" rx="9" fill="#203b63"/>
+    <text x="38" y="274" class="blue label">✓</text><text x="67" y="274" class="white small">任务</text>
+    <text x="38" y="318" class="muted label">◇</text><text x="67" y="318" class="muted small">种子</text>
+    <text x="38" y="362" class="muted label">⌁</text><text x="67" y="362" class="muted small">流量</text>
+    <text x="38" y="406" class="muted label">≡</text><text x="67" y="406" class="muted small">日志</text>
+    <text x="38" y="450" class="muted label">⚙</text><text x="67" y="450" class="muted small">系统设置</text>
+
+    <text x="288" y="28" class="muted tiny">PT AUTOMATION</text>
+    <text x="288" y="51" class="ink label">任务</text>
+    <text x="292" y="108" class="muted tiny">任务管理</text>
+    <text x="292" y="143" class="ink value">自动化任务</text>
+    <text x="292" y="169" class="muted small">抓取规则与运行时数据分卡片呈现；自动执行开关与副标题同行，操作区只放动作。</text>
+
+    <!-- Toolbar -->
+    <rect x="292" y="200" width="1096" height="66" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    <rect x="308" y="214" width="320" height="38" rx="9" fill="#f8fafc" stroke="#dce5ee"/>
+    <text x="324" y="239" class="muted small">搜索任务 / 站点 / 下载器</text>
+    <rect x="640" y="214" width="160" height="38" rx="9" fill="#fff" stroke="#dce5ee"/>
+    <text x="656" y="239" class="muted small">自动执行：全部⌄</text>
+    <text x="900" y="239" class="blue small">刷新</text>
+    <text x="960" y="239" class="blue small">导出</text>
+    <text x="1020" y="239" class="blue small">导入</text>
+    <rect x="1140" y="214" width="132" height="38" rx="9" fill="#3478f6"/>
+    <text x="1206" y="239" text-anchor="middle" class="white label">新建任务</text>
+
+    <!-- ===== Card 1: 成功 / OurBits / 自动执行已关闭 ===== -->
+    <g filter="url(#cardShadow)">
+      <rect x="292" y="286" width="1096" height="252" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    </g>
+    <text x="316" y="318" class="ink title">OurBits 50%FREE 低速清理</text>
+    <rect x="1280" y="302" width="58" height="24" rx="12" fill="#e8f8f2"/><text x="1309" y="318" text-anchor="middle" class="green pill">成功</text>
+
+    <!-- 副标题:自动执行开关 + 站点/下载器/策略 -->
+    <rect x="316" y="332" width="36" height="18" rx="9" fill="#e5e7eb"/><circle cx="326" cy="341" r="7" fill="#fff"/>
+    <text x="342" y="346" class="muted switch-label">已关闭</text>
+    <text x="396" y="346" class="sub-line">OurBits · NAS qBittorrent · 自动推送 · 低速自动删除</text>
+
+    <!-- 抓取规则卡片 -->
+    <rect x="316" y="358" width="1048" height="46" rx="10" fill="#f8fafc"/>
+    <text x="336" y="386" class="rule-card-label">抓取规则</text>
+    <rect x="408" y="368" width="100" height="26" rx="13" fill="#eef3ff"/><text x="458" y="386" text-anchor="middle" class="chip-text">50% FREE</text>
+    <rect x="516" y="368" width="92" height="26" rx="13" fill="#eef3ff"/><text x="562" y="386" text-anchor="middle" class="chip-text">仅免费下载</text>
+    <rect x="616" y="368" width="118" height="26" rx="13" fill="#eef3ff"/><text x="675" y="386" text-anchor="middle" class="chip-text">低速 50KB/s·30分</text>
+    <rect x="742" y="368" width="78" height="26" rx="13" fill="#eef3ff"/><text x="781" y="386" text-anchor="middle" class="chip-text">入库 &lt; 20</text>
+    <rect x="828" y="368" width="78" height="26" rx="13" fill="#eef3ff"/><text x="867" y="386" text-anchor="middle" class="chip-text">抓取 200</text>
+    <rect x="914" y="368" width="124" height="26" rx="13" fill="#eef3ff"/><text x="976" y="386" text-anchor="middle" class="chip-text">排序:做种数最少</text>
+    <text x="1056" y="386" class="muted tiny">5 条</text>
+
+    <!-- 指标卡片 -->
+    <rect x="316" y="416" width="1048" height="66" rx="10" fill="#f8fafc"/>
+    <text x="336" y="437" class="metric-label">执行间隔</text><text x="336" y="461" class="metric-value">每 60 分钟</text>
+    <text x="572" y="437" class="metric-label">下次执行</text><text x="572" y="461" class="muted-strong">— 已停止 —</text>
+    <text x="744" y="437" class="metric-label">最近一次</text><text x="744" y="461" class="green metric-value">成功 10-27 09:00</text>
+    <text x="908" y="437" class="metric-label">本次推送</text><text x="908" y="461" class="metric-value">抓 200 · 命 18 · 推 18</text>
+    <text x="1112" y="437" class="metric-label">完成时间</text><text x="1112" y="461" class="metric-value">10-27 09:00:42</text>
+
+    <line x1="316" y1="496" x2="1364" y2="496" stroke="#edf1f5"/>
+    <text x="316" y="516" class="muted tiny">操作</text>
+    <rect x="316" y="522" width="86" height="34" rx="8" fill="#3478f6"/><text x="359" y="544" text-anchor="middle" class="white small">运行</text>
+    <rect x="412" y="522" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="455" y="544" text-anchor="middle" class="blue small">测试</text>
+    <rect x="508" y="522" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="551" y="544" text-anchor="middle" class="blue small">编辑</text>
+    <rect x="604" y="522" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="647" y="544" text-anchor="middle" class="blue small">日志</text>
+    <rect x="1252" y="522" width="112" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="1308" y="544" text-anchor="middle" class="red small">删除</text>
+
+    <!-- ===== Card 2: 失败 / HDHome ===== -->
+    <g filter="url(#cardShadow)">
+      <rect x="292" y="554" width="1096" height="282" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    </g>
+    <text x="316" y="586" class="ink title">HDHome 大体积跳过HR</text>
+    <rect x="1280" y="570" width="58" height="24" rx="12" fill="#fce9ec"/><text x="1309" y="586" text-anchor="middle" class="red pill">失败</text>
+
+    <rect x="316" y="600" width="36" height="18" rx="9" fill="#3478f6"/><circle cx="346" cy="609" r="7" fill="#fff"/>
+    <text x="362" y="614" class="green switch-label">已开启</text>
+    <text x="416" y="614" class="sub-line">HDHome · NAS qBittorrent · 自动推送 · 分类 = 任务名</text>
+
+    <rect x="316" y="626" width="1048" height="46" rx="10" fill="#f8fafc"/>
+    <text x="336" y="654" class="rule-card-label">抓取规则</text>
+    <rect x="408" y="636" width="68" height="26" rx="13" fill="#eef3ff"/><text x="442" y="654" text-anchor="middle" class="chip-text">FREE</text>
+    <rect x="484" y="636" width="86" height="26" rx="13" fill="#eef3ff"/><text x="527" y="654" text-anchor="middle" class="chip-text">50~200 GB</text>
+    <rect x="578" y="636" width="78" height="26" rx="13" fill="#eef3ff"/><text x="617" y="654" text-anchor="middle" class="chip-text">≤20 做种</text>
+    <rect x="664" y="636" width="68" height="26" rx="13" fill="#fff3de"/><text x="698" y="654" text-anchor="middle" class="pill-warn">跳过 HR</text>
+    <rect x="740" y="636" width="78" height="26" rx="13" fill="#eef3ff"/><text x="779" y="654" text-anchor="middle" class="chip-text">抓取 100</text>
+    <rect x="826" y="636" width="124" height="26" rx="13" fill="#eef3ff"/><text x="888" y="654" text-anchor="middle" class="chip-text">排序:做种数最多</text>
+    <text x="968" y="654" class="muted tiny">5 条</text>
+
+    <rect x="316" y="684" width="1048" height="66" rx="10" fill="#f8fafc"/>
+    <text x="336" y="705" class="metric-label">执行间隔</text><text x="336" y="729" class="metric-value">每 30 分钟</text>
+    <text x="572" y="705" class="metric-label">下次执行</text><text x="572" y="729" class="blue metric-value">10-27 10:30</text>
+    <text x="744" y="705" class="metric-label">最近一次</text><text x="744" y="729" class="red metric-value">失败 10-27 09:30</text>
+    <text x="908" y="705" class="metric-label">本次推送</text><text x="908" y="729" class="muted-strong">抓 0 · 命 0 · 推 0</text>
+    <text x="1112" y="705" class="metric-label">完成时间</text><text x="1112" y="729" class="metric-value">10-27 09:30:08</text>
+
+    <line x1="316" y1="764" x2="1364" y2="764" stroke="#edf1f5"/>
+    <text x="316" y="784" class="muted tiny">操作</text>
+    <rect x="316" y="790" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="359" y="812" text-anchor="middle" class="blue small">测试</text>
+    <rect x="412" y="790" width="86" height="34" rx="8" fill="#3478f6"/><text x="455" y="812" text-anchor="middle" class="white small">运行</text>
+    <rect x="508" y="790" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="551" y="812" text-anchor="middle" class="blue small">编辑</text>
+    <rect x="604" y="790" width="86" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="647" y="812" text-anchor="middle" class="blue small">日志</text>
+    <rect x="1252" y="790" width="112" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="1308" y="812" text-anchor="middle" class="red small">删除</text>
+    <rect x="316" y="830" width="4" height="4" rx="2" fill="#fff"/>
+    <!-- 错误提示行 -->
+    <rect x="316" y="822" width="4" height="14" rx="2" fill="#e05263"/>
+    <text x="332" y="834" class="red small" font-weight="700">抓取失败</text>
+    <text x="392" y="834" class="muted small">· 站点已禁用（认证失败）· 查看站点设置或运行测试定位问题</text>
+
+    <!-- ===== Card 3: 未启用 / TTG 备份(新加) ===== -->
+    <g filter="url(#cardShadow)">
+      <rect x="292" y="852" width="1096" height="252" rx="14" fill="#fbfcfd" stroke="#e2e8f0"/>
+    </g>
+    <g opacity="0.72">
+      <text x="316" y="884" class="ink title" fill="#6b7280">TTG 全量备份</text>
+    </g>
+    <rect x="1140" y="868" width="78" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="1179" y="883" text-anchor="middle" class="pill-muted">未启用</text>
+    <rect x="1226" y="868" width="78" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="1265" y="883" text-anchor="middle" class="pill-muted">未运行</text>
+
+    <g opacity="0.72">
+      <rect x="316" y="900" width="36" height="18" rx="9" fill="#e5e7eb"/><circle cx="326" cy="909" r="7" fill="#fff"/>
+      <text x="342" y="914" class="muted switch-label">已关闭</text>
+      <text x="396" y="914" class="sub-line">TTG · NAS qBittorrent · 备份所有免费种子 · 每日 03:00</text>
+    </g>
+
+    <g opacity="0.72">
+      <rect x="316" y="942" width="1048" height="46" rx="10" fill="#f8fafc"/>
+      <text x="336" y="970" class="rule-card-label">抓取规则</text>
+      <rect x="408" y="952" width="68" height="26" rx="13" fill="#eef3ff"/><text x="442" y="970" text-anchor="middle" class="chip-text">FREE</text>
+      <rect x="484" y="952" width="78" height="26" rx="13" fill="#eef3ff"/><text x="523" y="970" text-anchor="middle" class="chip-text">不限体积</text>
+      <rect x="570" y="952" width="68" height="26" rx="13" fill="#eef3ff"/><text x="604" y="970" text-anchor="middle" class="chip-text">不限做种</text>
+      <rect x="646" y="952" width="78" height="26" rx="13" fill="#fff3de"/><text x="685" y="970" text-anchor="middle" class="pill-warn">跳过 HR</text>
+      <rect x="732" y="952" width="78" height="26" rx="13" fill="#eef3ff"/><text x="771" y="970" text-anchor="middle" class="chip-text">抓取 500</text>
+      <rect x="818" y="952" width="124" height="26" rx="13" fill="#eef3ff"/><text x="880" y="970" text-anchor="middle" class="chip-text">排序:发布时间新</text>
+    </g>
+
+    <g opacity="0.72">
+      <rect x="316" y="1000" width="1048" height="66" rx="10" fill="#f8fafc"/>
+      <text x="336" y="1021" class="metric-label">执行间隔</text><text x="336" y="1045" class="metric-value">每日 03:00</text>
+      <text x="572" y="1021" class="metric-label">下次执行</text><text x="572" y="1045" class="muted-strong">— 启用后重算 —</text>
+      <text x="744" y="1021" class="metric-label">最近一次</text><text x="744" y="1045" class="muted-strong">— 从未运行 —</text>
+      <text x="908" y="1021" class="metric-label">本次推送</text><text x="908" y="1045" class="muted-strong">— —</text>
+      <text x="1112" y="1021" class="metric-label">完成时间</text><text x="1112" y="1045" class="muted-strong">— —</text>
+    </g>
+
+    <line x1="316" y1="1080" x2="1364" y2="1080" stroke="#edf1f5"/>
+    <text x="316" y="1080" class="muted tiny" dy="0">操作</text>
+    <text x="316" y="1100" class="muted tiny">未启用</text>
+    <rect x="316" y="1066" width="86" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="359" y="1088" text-anchor="middle" class="muted small">运行</text>
+    <rect x="412" y="1066" width="86" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="455" y="1088" text-anchor="middle" class="muted small">测试</text>
+    <rect x="508" y="1066" width="86" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="551" y="1088" text-anchor="middle" class="muted small">编辑</text>
+    <rect x="604" y="1066" width="86" height="34" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="647" y="1088" text-anchor="middle" class="muted small">日志</text>
+    <rect x="752" y="1066" width="100" height="34" rx="8" fill="#3478f6"/><text x="802" y="1088" text-anchor="middle" class="white small">启用任务</text>
+    <rect x="1252" y="1066" width="112" height="34" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="1308" y="1088" text-anchor="middle" class="red small">删除</text>
+
+    <!-- ===== 中等桌面响应式 ===== -->
+    <text x="292" y="1124" class="muted tiny">中等桌面宽度示意 · 1024PX 内容区</text>
+    <g filter="url(#cardShadow)"><rect x="292" y="1140" width="780" height="220" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
+    <text x="316" y="1172" class="ink title">OurBits 50%FREE 低速清理</text>
+    <rect x="980" y="1156" width="58" height="24" rx="12" fill="#e8f8f2"/><text x="1009" y="1172" text-anchor="middle" class="green pill">成功</text>
+
+    <rect x="316" y="1188" width="32" height="16" rx="8" fill="#e5e7eb"/><circle cx="332" cy="1196" r="6" fill="#fff"/>
+    <text x="346" y="1200" class="muted switch-label">已关闭</text>
+    <text x="400" y="1200" class="sub-line" font-size="11">OurBits · NAS qBittorrent</text>
+
+    <rect x="316" y="1212" width="732" height="42" rx="10" fill="#f8fafc"/>
+    <text x="336" y="1238" class="rule-card-label">抓取规则</text>
+    <rect x="408" y="1220" width="80" height="22" rx="11" fill="#eef3ff"/><text x="448" y="1236" text-anchor="middle" class="chip-text">50% FREE</text>
+    <rect x="496" y="1220" width="76" height="22" rx="11" fill="#eef3ff"/><text x="534" y="1236" text-anchor="middle" class="chip-text">仅免费下载</text>
+    <rect x="580" y="1220" width="98" height="22" rx="11" fill="#eef3ff"/><text x="629" y="1236" text-anchor="middle" class="chip-text">低速50KB/s</text>
+    <rect x="686" y="1220" width="76" height="22" rx="11" fill="#eef3ff"/><text x="724" y="1236" text-anchor="middle" class="chip-text">入库&lt;20</text>
+    <rect x="770" y="1220" width="62" height="22" rx="11" fill="#eef3ff"/><text x="801" y="1236" text-anchor="middle" class="chip-text">抓200</text>
+    <rect x="840" y="1220" width="80" height="22" rx="11" fill="#eef3ff"/><text x="880" y="1236" text-anchor="middle" class="chip-text">做种最少</text>
+
+    <rect x="316" y="1262" width="732" height="58" rx="10" fill="#f8fafc"/>
+    <text x="336" y="1282" class="metric-label">执行间隔</text><text x="336" y="1304" class="metric-value">每 60 分钟</text>
+    <text x="540" y="1282" class="metric-label">下次</text><text x="540" y="1304" class="muted-strong">— 已停止 —</text>
+    <text x="720" y="1282" class="metric-label">最近</text><text x="720" y="1304" class="green metric-value">成功 09:00</text>
+    <text x="900" y="1282" class="metric-label">推送</text><text x="900" y="1304" class="metric-value">抓200·命18·推18</text>
+
+    <rect x="316" y="1326" width="180" height="34" rx="8" fill="#3478f6"/><text x="406" y="1348" text-anchor="middle" class="white small">运行</text>
+    <rect x="504" y="1326" width="180" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="594" y="1348" text-anchor="middle" class="blue small">测试</text>
+    <rect x="692" y="1326" width="356" height="34" rx="8" fill="#fff" stroke="#dce5ee"/><text x="870" y="1348" text-anchor="middle" class="blue small">编辑 · 日志 · 删除</text>
+
+    <!-- ===== 规范说明 ===== -->
+    <rect x="1090" y="1140" width="298" height="220" rx="14" fill="#fff" stroke="#e5ebf2"/>
+    <text x="1114" y="1172" class="ink title">设计规范</text>
+    <text x="1114" y="1206" class="pill-warn">定时运行中</text><text x="1208" y="1206" class="muted small">运行 + AUTO 模式</text>
+    <text x="1114" y="1228" class="pill-warn">手动运行中</text><text x="1208" y="1228" class="muted small">运行 + 手动模式</text>
+    <text x="1114" y="1250" class="green pill" fill="#14a675">成功</text><text x="1208" y="1250" class="muted small">lastStatus=SUCCESS</text>
+    <text x="1114" y="1272" class="red pill" fill="#e05263">失败</text><text x="1208" y="1272" class="muted small">lastStatus=FAILED</text>
+    <text x="1114" y="1294" class="pill-muted">未运行</text><text x="1208" y="1294" class="muted small">从未触发过 / 未启用</text>
+    <line x1="1114" y1="1310" x2="1364" y2="1310" stroke="#edf1f5"/>
+    <text x="1114" y="1332" class="blue label">未启用视觉</text><text x="1114" y="1352" class="muted small">降透明度 + 灰色虚线徽标 + 主操作=启用</text>
+  </g>
+
+  <!-- ================= Mobile ================= -->
+  <g transform="translate(1482 40)">
+    <rect width="478" height="1460" rx="18" fill="#f2f5f9"/>
+    <rect x="44" width="390" height="1460" rx="24" fill="#f2f5f9"/>
+    <rect x="44" width="390" height="62" rx="24" fill="#fff"/>
+    <text x="64" y="39" class="ink title">☰</text>
+    <rect x="102" y="17" width="30" height="30" rx="9" fill="#3478f6"/><text x="117" y="38" text-anchor="middle" class="white tiny">PT</text>
+    <text x="142" y="37" class="ink label">PT Automation</text>
+
+    <text x="60" y="92" class="muted tiny">任务</text>
+    <text x="60" y="120" class="ink title">自动化任务</text>
+    <text x="400" y="120" text-anchor="end" class="muted tiny" fill="#6b7280">规则 chip + 6 项操作</text>
+    <rect x="60" y="140" width="358" height="42" rx="9" fill="#fff" stroke="#dce5ee"/><text x="76" y="166" class="muted small">搜索任务 / 站点 / 下载器　　自动执行⌄</text>
+
+    <!-- ===== Mobile Card 1: 成功 ===== -->
+    <g filter="url(#cardShadow)"><rect x="60" y="200" width="358" height="540" rx="14" fill="#fff" stroke="#e5ebf2"/></g>
+    <text x="78" y="232" class="ink title">OurBits 50%FREE 低速清理</text>
+    <rect x="338" y="216" width="60" height="22" rx="11" fill="#e8f8f2"/><text x="368" y="231" text-anchor="middle" class="green pill">成功</text>
+
+    <rect x="78" y="248" width="32" height="16" rx="8" fill="#e5e7eb"/><circle cx="94" cy="256" r="6" fill="#fff"/>
+    <text x="108" y="260" class="muted switch-label">已关闭</text>
+    <text x="158" y="260" class="sub-line" font-size="11">OurBits · NAS qBittorrent</text>
+    <text x="78" y="278" class="sub-rule" font-size="11">自动推送 · 低速自动删除</text>
+
+    <!-- 抓取规则 chip 卡片(3+3 整齐布局,内宽 312 够 3 个 chip) -->
+    <rect x="78" y="292" width="324" height="68" rx="9" fill="#f8fafc"/>
+    <text x="90" y="310" class="rule-card-label">抓取规则</text>
+    <rect x="90" y="318" width="92" height="22" rx="11" fill="#eef3ff"/><text x="136" y="334" text-anchor="middle" class="chip-text">50% FREE</text>
+    <rect x="190" y="318" width="92" height="22" rx="11" fill="#eef3ff"/><text x="236" y="334" text-anchor="middle" class="chip-text">仅免费下载</text>
+    <rect x="290" y="318" width="92" height="22" rx="11" fill="#eef3ff"/><text x="336" y="334" text-anchor="middle" class="chip-text">低速50KB</text>
+    <rect x="90" y="344" width="92" height="22" rx="11" fill="#eef3ff"/><text x="136" y="360" text-anchor="middle" class="chip-text">入库&lt;20</text>
+    <rect x="190" y="344" width="92" height="22" rx="11" fill="#eef3ff"/><text x="236" y="360" text-anchor="middle" class="chip-text">抓200</text>
+    <rect x="290" y="344" width="92" height="22" rx="11" fill="#eef3ff"/><text x="336" y="360" text-anchor="middle" class="chip-text">做种最少</text>
+
+    <!-- 指标 6 个(3 行 2 列) -->
+    <rect x="78" y="376" width="154" height="60" rx="9" fill="#f8fafc"/>
+    <text x="90" y="396" class="metric-label">下次执行</text><text x="90" y="420" class="small" font-weight="700" fill="#6b7280">— 已停止 —</text>
+    <rect x="244" y="376" width="158" height="60" rx="9" fill="#f8fafc"/>
+    <text x="256" y="396" class="metric-label">最近一次</text><text x="256" y="420" class="small" font-weight="700" fill="#14a675">成功 09:00</text>
+
+    <rect x="78" y="444" width="154" height="60" rx="9" fill="#f8fafc"/>
+    <text x="90" y="464" class="metric-label">本次推送</text><text x="90" y="488" class="small" font-weight="700">抓 200 · 命 18</text>
+    <rect x="244" y="444" width="158" height="60" rx="9" fill="#f8fafc"/>
+    <text x="256" y="464" class="metric-label">已推送 / 失败</text><text x="256" y="488" class="small" font-weight="700">18 / 0</text>
+
+    <rect x="78" y="512" width="154" height="60" rx="9" fill="#f8fafc"/>
+    <text x="90" y="532" class="metric-label">执行间隔</text><text x="90" y="556" class="small" font-weight="700">每 60 分钟</text>
+    <rect x="244" y="512" width="158" height="60" rx="9" fill="#f8fafc"/>
+    <text x="256" y="532" class="metric-label">完成时间</text><text x="256" y="556" class="small" font-weight="700">10-27 09:00:42</text>
+
+    <line x1="78" y1="586" x2="400" y2="586" stroke="#edf1f5"/>
+    <text x="78" y="606" class="muted tiny">操作 · 3 列 2 行</text>
+
+    <rect x="78" y="618" width="100" height="44" rx="8" fill="#fff" stroke="#dce5ee"/><text x="128" y="645" text-anchor="middle" class="blue small">测试</text>
+    <rect x="188" y="618" width="114" height="44" rx="8" fill="#3478f6"/><text x="245" y="645" text-anchor="middle" class="white small">运行</text>
+    <rect x="312" y="618" width="88" height="44" rx="8" fill="#fff" stroke="#dce5ee"/><text x="356" y="645" text-anchor="middle" class="blue small">编辑</text>
+
+    <rect x="78" y="670" width="100" height="44" rx="8" fill="#fff" stroke="#dce5ee"/><text x="128" y="697" text-anchor="middle" class="blue small">日志</text>
+    <rect x="188" y="670" width="114" height="44" rx="8" fill="#f8fafc"/>
+    <text x="245" y="697" text-anchor="middle" class="muted small" font-weight="700">已停止</text>
+    <rect x="312" y="670" width="88" height="44" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="356" y="697" text-anchor="middle" class="red small">删除</text>
+
+    <!-- ===== Mobile Card 2: 未启用(新加) ===== -->
+    <g filter="url(#cardShadow)"><rect x="60" y="760" width="358" height="478" rx="14" fill="#fbfcfd" stroke="#e2e8f0"/></g>
+    <g opacity="0.72">
+      <text x="78" y="792" class="ink title" fill="#6b7280">TTG 全量备份</text>
+    </g>
+    <rect x="232" y="776" width="68" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="266" y="791" text-anchor="middle" class="pill-muted">未启用</text>
+    <rect x="308" y="776" width="90" height="22" rx="11" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="353" y="791" text-anchor="middle" class="pill-muted">未运行</text>
+
+    <g opacity="0.72">
+      <rect x="78" y="808" width="32" height="16" rx="8" fill="#e5e7eb"/><circle cx="94" cy="816" r="6" fill="#fff"/>
+      <text x="108" y="820" class="muted switch-label">已关闭</text>
+      <text x="158" y="820" class="sub-line" font-size="11">TTG · NAS qBittorrent</text>
+      <text x="78" y="838" class="sub-rule" font-size="11">备份所有免费种子 · 每日 03:00</text>
+    </g>
+
+    <g opacity="0.72">
+      <rect x="78" y="852" width="324" height="68" rx="9" fill="#f8fafc"/>
+      <text x="90" y="870" class="rule-card-label">抓取规则</text>
+      <rect x="90" y="878" width="92" height="22" rx="11" fill="#eef3ff"/><text x="136" y="894" text-anchor="middle" class="chip-text">FREE</text>
+      <rect x="190" y="878" width="92" height="22" rx="11" fill="#eef3ff"/><text x="236" y="894" text-anchor="middle" class="chip-text">不限体积</text>
+      <rect x="290" y="878" width="92" height="22" rx="11" fill="#eef3ff"/><text x="336" y="894" text-anchor="middle" class="chip-text">不限做种</text>
+      <rect x="90" y="904" width="92" height="22" rx="11" fill="#fff3de"/><text x="136" y="920" text-anchor="middle" class="pill-warn">跳过 HR</text>
+      <rect x="190" y="904" width="92" height="22" rx="11" fill="#eef3ff"/><text x="236" y="920" text-anchor="middle" class="chip-text">抓500</text>
+      <rect x="290" y="904" width="92" height="22" rx="11" fill="#eef3ff"/><text x="336" y="920" text-anchor="middle" class="chip-text">发布新</text>
+    </g>
+
+    <g opacity="0.72">
+      <rect x="78" y="936" width="154" height="60" rx="9" fill="#f8fafc"/>
+      <text x="90" y="956" class="metric-label">下次执行</text><text x="90" y="980" class="small" font-weight="700" fill="#6b7280">— 启用后 —</text>
+      <rect x="244" y="936" width="158" height="60" rx="9" fill="#f8fafc"/>
+      <text x="256" y="956" class="metric-label">最近一次</text><text x="256" y="980" class="small" font-weight="700" fill="#6b7280">— 从未运行 —</text>
+
+      <rect x="78" y="1004" width="154" height="60" rx="9" fill="#f8fafc"/>
+      <text x="90" y="1024" class="metric-label">执行间隔</text><text x="90" y="1048" class="small" font-weight="700">每日 03:00</text>
+      <rect x="244" y="1004" width="158" height="60" rx="9" fill="#f8fafc"/>
+      <text x="256" y="1024" class="metric-label">完成时间</text><text x="256" y="1048" class="small" font-weight="700" fill="#6b7280">— —</text>
+    </g>
+
+    <line x1="78" y1="1078" x2="400" y2="1078" stroke="#edf1f5"/>
+    <g opacity="0.72">
+      <text x="78" y="1098" class="muted tiny">操作 · 6 项全显示</text>
+    </g>
+    <rect x="78" y="1108" width="100" height="44" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="128" y="1135" text-anchor="middle" class="muted small">测试</text>
+    <rect x="188" y="1108" width="114" height="44" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="245" y="1135" text-anchor="middle" class="muted small">运行</text>
+    <rect x="312" y="1108" width="88" height="44" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="356" y="1135" text-anchor="middle" class="muted small">编辑</text>
+    <rect x="78" y="1158" width="100" height="44" rx="8" fill="#f5f6f8" stroke="#e5e7eb"/><text x="128" y="1185" text-anchor="middle" class="muted small">日志</text>
+    <rect x="188" y="1158" width="114" height="44" rx="8" fill="#3478f6"/><text x="245" y="1185" text-anchor="middle" class="white small">启用任务</text>
+    <rect x="312" y="1158" width="88" height="44" rx="8" fill="#fff7f7" stroke="#fecaca"/><text x="356" y="1185" text-anchor="middle" class="red small">删除</text>
+
+    <!-- Bottom Tab -->
+    <rect x="44" y="1262" width="390" height="62" fill="#fff"/>
+    <line x1="44" y1="1262" x2="434" y2="1262" stroke="#e1e8f0"/>
+    <text x="83" y="1288" text-anchor="middle" class="muted label">◈</text>
+    <text x="161" y="1288" text-anchor="middle" class="muted label">◉</text>
+    <text x="239" y="1288" text-anchor="middle" class="blue label">✓</text>
+    <text x="317" y="1288" text-anchor="middle" class="muted label">◇</text>
+    <text x="395" y="1288" text-anchor="middle" class="muted label">•••</text>
+    <text x="83" y="1309" text-anchor="middle" class="muted tiny">首页</text>
+    <text x="161" y="1309" text-anchor="middle" class="muted tiny">站点</text>
+    <text x="239" y="1309" text-anchor="middle" class="blue tiny">任务</text>
+    <text x="317" y="1309" text-anchor="middle" class="muted tiny">种子</text>
+    <text x="395" y="1309" text-anchor="middle" class="muted tiny">更多</text>
+  </g>
+</svg>
