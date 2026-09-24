@@ -8,6 +8,13 @@
         meta="系统信息已同步"
       >
         <template #actions>
+          <router-link
+            to="/settings/mcp"
+            class="primary-button compact"
+            aria-label="进入 MCP 接入"
+          >
+            MCP 接入
+          </router-link>
           <button
             class="primary-button compact"
             type="button"
@@ -32,6 +39,9 @@
           <strong>数据库备份</strong><span>自动备份、恢复与删除</span
           ><i>配置</i>
         </button>
+        <router-link to="/settings/mcp">
+          <strong>MCP 接入</strong><span>为 AI Agent 生成 API Token</span><i>新</i>
+        </router-link>
       </nav>
 
       <section

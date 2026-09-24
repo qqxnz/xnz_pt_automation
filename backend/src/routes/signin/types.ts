@@ -4,7 +4,7 @@ export type SigninRunMode = 'AUTO' | 'MANUAL'
 
 export type SigninContext = {
   runMode: SigninRunMode
-  triggerSource: 'scheduler' | 'manual-button'
+  triggerSource: 'scheduler' | 'manual-button' | 'mcp' | 'scheduler-backfill'
   now: Date
 }
 

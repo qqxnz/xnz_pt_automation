@@ -657,7 +657,7 @@ async function persistTaskUpdate(task: TaskRecord) {
   }
 }
 
-async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRunResult> {
+export async function runTaskById(taskId: string, runMode: TaskRunMode): Promise<TaskRunResult> {
   if (runningTaskIds.has(taskId)) throw new Error('任务正在运行')
   runningTaskIds.add(taskId)
 

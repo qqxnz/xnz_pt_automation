@@ -334,24 +334,29 @@ torrentsRouter.post('/:id/push', requireAuth, async (req, res) => {
   res.json(safeTorrent(syncedTorrent))
 })
 
-torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
-  const ids = requestIds(req.body)
-  if (!ids.length) return res.status(400).json({ message: '请选择要推送的种子' })
-  const [downloaders, sites, pageOne] = await Promise.all([listDownloadersFromDb(), listSitesFromDb(), listTorrents({ page: 1, pageSize: 1 })])
-  void pageOne
+export type BatchPushResult = {
+  successCount: number
+  failedCount: number
+  failed: Array<{ id: string; title?: string; message: string }>
+}
+
+export async function batchPushTorrentsCore(
+  ids: string[],
+  actor: { actorId?: string; actorName?: string; source: 'MANUAL' | 'MCP' }
+): Promise<BatchPushResult> {
+  const filteredIds = [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))]
+  if (!filteredIds.length) throw new Error('请选择要推送的种子')
+  const [downloaders, sites] = await Promise.all([listDownloadersFromDb(), listSitesFromDb()])
   const siteById = new Map(sites.map((site: SiteRecord) => [site.id, site]))
   const downloaderById = new Map(downloaders.map((downloader: DownloaderRecord) => [downloader.id, downloader]))
   const torrents: TorrentRecord[] = []
-  const notificationNames: string[] = []
   const failed: Array<{ id: string; title?: string; message: string }> = []
-  for (const id of ids) {
+  for (const id of filteredIds) {
     const torrent = await getTorrentById(id)
     if (!torrent) {
-      notificationNames.push(id)
       failed.push({ id, message: '种子不存在' })
       continue
     }
-    notificationNames.push(torrent.title)
     torrents.push(torrent)
   }
   const updateBuffer: TorrentRecord[] = []
@@ -372,9 +377,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
         torrentTitle: torrent.title,
         event: 'PUSH_FAILED',
         status: 'FAILED',
-        source: 'MANUAL',
-        actorId: res.locals.user?.id,
-        actorName: res.locals.user?.username,
+        source: actor.source,
+        actorId: actor.actorId,
+        actorName: actor.actorName,
         message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
       })
       continue
@@ -405,9 +410,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
           torrentTitle: torrent.title,
           event: 'PUSH_FAILED',
           status: 'FAILED',
-          source: 'MANUAL',
-          actorId: res.locals.user?.id,
-          actorName: res.locals.user?.username,
+          source: actor.source,
+          actorId: actor.actorId,
+          actorName: actor.actorName,
           message: `批量推送种子「${torrent.title}」失败：${torrent.errorMessage}`
         })
         continue
@@ -433,9 +438,9 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
       torrentTitle: torrent.title,
       event: 'PUSHED',
       status: 'SUCCESS',
-      source: 'MANUAL',
-      actorId: res.locals.user?.id,
-      actorName: res.locals.user?.username,
+      source: actor.source,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
       message: batchPushLogMessage
     })
   }
@@ -443,19 +448,31 @@ torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
   for (const downloaderId of [...new Set(updateBuffer.filter((torrent) => torrent.pushStatus === 'PUSHED' && torrent.downloaderId).map((torrent) => torrent.downloaderId!))]) {
     await syncTorrentDownloadStats(downloaderId).catch(() => undefined)
   }
+  return { successCount, failedCount: failed.length, failed }
+}
+
+torrentsRouter.post('/batch-push', requireAuth, async (req, res) => {
+  const ids = requestIds(req.body)
+  if (!ids.length) return res.status(400).json({ message: '请选择要推送的种子' })
+  const result = await batchPushTorrentsCore(ids, {
+    actorId: res.locals.user?.id,
+    actorName: res.locals.user?.username,
+    source: 'MANUAL'
+  })
   await recordOperationLog({
     action: '批量推送种子',
-    message: `批量推送 ${ids.length} 个种子，成功 ${successCount} 个，失败 ${failed.length} 个`,
-    status: failed.length ? 'FAILED' : 'SUCCESS',
+    message: `批量推送 ${ids.length} 个种子，成功 ${result.successCount} 个，失败 ${result.failedCount} 个`,
+    status: result.failedCount ? 'FAILED' : 'SUCCESS',
     ...operationActor(res, req)
   })
-  const batchAddFailures = failed.slice(0, 3).map((item) => `${item.title ?? item.id}：${item.message}`).join('\n')
+  const notificationNames = ids.map((id) => id)
+  const batchAddFailures = result.failed.slice(0, 3).map((item) => `${item.title ?? item.id}：${item.message}`).join('\n')
   await dispatchNotification({
     event: 'TORRENT_ADDED',
-    title: failed.length ? '批量种子添加完成（含失败）' : '批量种子添加成功',
-    message: `${formatNotificationTorrentNames(notificationNames)}\n共尝试 ${ids.length} 个，成功 ${successCount}，失败 ${failed.length}${batchAddFailures ? `\n${batchAddFailures}` : ''}`
+    title: result.failedCount ? '批量种子添加完成（含失败）' : '批量种子添加成功',
+    message: `${formatNotificationTorrentNames(notificationNames)}\n共尝试 ${ids.length} 个，成功 ${result.successCount}，失败 ${result.failedCount}${batchAddFailures ? `\n${batchAddFailures}` : ''}`
   })
-  res.json({ successCount, failedCount: failed.length, failed })
+  res.json({ successCount: result.successCount, failedCount: result.failedCount, failed: result.failed })
 })
 
 torrentsRouter.post('/batch-delete', requireAuth, async (req, res) => {

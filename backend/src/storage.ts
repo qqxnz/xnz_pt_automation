@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -17,7 +17,7 @@ import {
   runMigrations,
   SCHEMA_VERSION
 } from './storage/migrations/index.js'
-import { createPasswordHash } from './utils/password.js'
+import { createPasswordHash, verifyPassword } from './utils/password.js'
 import { localDayRangeIso } from './utils/time.js'
 
 export type UserRecord = {
@@ -87,7 +87,7 @@ export type SigninLogRecord = {
   siteId: string
   siteName: string
   runMode: 'AUTO' | 'MANUAL'
-  triggerSource: 'scheduler' | 'manual-button' | 'scheduler-backfill'
+  triggerSource: 'scheduler' | 'manual-button' | 'scheduler-backfill' | 'mcp'
   status: 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNSUPPORTED'
   message: string
   errorMessage?: string
@@ -118,7 +118,7 @@ export type TorrentLogRecord = {
   status: 'SUCCESS' | 'FAILED'
   message: string
   reason?: string
-  source?: 'AUTO' | 'MANUAL' | 'SCHEDULER' | 'TASK'
+  source?: 'AUTO' | 'MANUAL' | 'SCHEDULER' | 'TASK' | 'MCP'
   actorId?: string
   actorName?: string
   createdAt: string
@@ -335,6 +335,21 @@ export type SystemSettings = {
   proxyTestUrl: string
   maxConcurrentTasks: number
   defaultUserAgent: string
+  mcpEnabled: boolean
+  mcpRequireLoopback: boolean
+}
+
+export type ApiTokenRecord = {
+  id: string
+  name: string
+  tokenHash: string
+  tokenPrefix: string
+  enabled: boolean
+  allowWrites: boolean
+  createdAt: string
+  lastUsedAt?: string
+  expiresAt?: string
+  notes?: string
 }
 
 export type DownloaderRecord = {
@@ -456,7 +471,9 @@ export const defaultSystemSettings: SystemSettings = {
   requestTimeoutMs: 15000,
   proxyTestUrl: 'https://www.gstatic.com/generate_204',
   maxConcurrentTasks: 2,
-  defaultUserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  defaultUserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  mcpEnabled: false,
+  mcpRequireLoopback: true
 }
 
 async function initialAdminUser(): Promise<UserRecord> {
@@ -2807,4 +2824,131 @@ function downloaderFromRow(row: any): DownloaderRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+// ---------------------------------------------------------------------------
+// api_tokens（v25）：MCP / 第三方 Agent 接入凭据
+// 仅存 token_hash（scrypt）和 token_prefix；明文只在创建时返回一次。
+// ---------------------------------------------------------------------------
+
+export const API_TOKEN_PREFIX_LENGTH = 8
+
+export function generateApiTokenPlaintext() {
+  // 32 字节随机 → base64url；带 tk_ 前缀便于识别
+  const random = randomBytes(24).toString('base64url').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
+  return `tk_${random}`
+}
+
+function apiTokenFromRow(row: any): ApiTokenRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    tokenHash: row.token_hash,
+    tokenPrefix: row.token_prefix,
+    enabled: fromBool(row.enabled),
+    allowWrites: fromBool(row.allow_writes),
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    notes: row.notes ?? undefined
+  }
+}
+
+export async function listApiTokensFromDb(): Promise<ApiTokenRecord[]> {
+  const db = await readyDb()
+  return (db.prepare('SELECT * FROM api_tokens ORDER BY created_at DESC, id DESC').all() as any[]).map(apiTokenFromRow)
+}
+
+export async function getApiTokenFromDb(id: string): Promise<ApiTokenRecord | undefined> {
+  const db = await readyDb()
+  const row = db.prepare('SELECT * FROM api_tokens WHERE id = ?').get(id) as any
+  return row ? apiTokenFromRow(row) : undefined
+}
+
+export async function insertApiTokenToDb(record: ApiTokenRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(
+      `INSERT INTO api_tokens (id, name, token_hash, token_prefix, enabled, allow_writes, created_at, last_used_at, expires_at, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      record.id,
+      record.name,
+      record.tokenHash,
+      record.tokenPrefix,
+      bool(record.enabled),
+      bool(record.allowWrites),
+      record.createdAt,
+      optional(record.lastUsedAt ?? null),
+      optional(record.expiresAt ?? null),
+      optional(record.notes ?? null)
+    )
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function updateApiTokenInDb(record: ApiTokenRecord): Promise<void> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare(
+      `UPDATE api_tokens SET name = ?, token_hash = ?, token_prefix = ?, enabled = ?, allow_writes = ?, last_used_at = ?, expires_at = ?, notes = ?
+       WHERE id = ?`
+    ).run(
+      record.name,
+      record.tokenHash,
+      record.tokenPrefix,
+      bool(record.enabled),
+      bool(record.allowWrites),
+      optional(record.lastUsedAt ?? null),
+      optional(record.expiresAt ?? null),
+      optional(record.notes ?? null),
+      record.id
+    )
+    db.exec('COMMIT')
+    if (result.changes === 0) throw new Error(`api_tokens 中找不到 id=${record.id}`)
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function deleteApiTokenFromDb(id: string): Promise<boolean> {
+  const db = await readyDb()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = db.prepare('DELETE FROM api_tokens WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export async function touchApiTokenLastUsed(id: string, lastUsedAt: string): Promise<void> {
+  const db = await readyDb()
+  db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE id = ?').run(lastUsedAt, id)
+}
+
+export type VerifyApiTokenResult =
+  | { ok: true; token: ApiTokenRecord }
+  | { ok: false; reason: 'NOT_FOUND' | 'DISABLED' | 'EXPIRED' }
+
+export async function verifyApiToken(plaintext: string): Promise<VerifyApiTokenResult> {
+  if (!plaintext || typeof plaintext !== 'string') return { ok: false, reason: 'NOT_FOUND' }
+  const candidates = await listApiTokensFromDb()
+  for (const token of candidates) {
+    const match = await verifyPassword(plaintext, token.tokenHash).catch(() => false)
+    if (match) {
+      if (!token.enabled) return { ok: false, reason: 'DISABLED' }
+      if (token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now()) return { ok: false, reason: 'EXPIRED' }
+      return { ok: true, token }
+    }
+  }
+  return { ok: false, reason: 'NOT_FOUND' }
 }

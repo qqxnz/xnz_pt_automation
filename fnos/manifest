@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.44
+version=0.6.45
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.44<br/>优化任务模块：按 v8 设计稿重做 TasksPage,卡片分抓取规则 chip 卡片 + 5 列指标网格(执行间隔/下次/最近/本次推送/完成时间);自动执行开关移到副标题位置,操作区简化为 5 项(测试/运行/编辑/日志/删除);新增未启用状态视觉(降透明度 + 灰虚线徽标);覆盖定时运行中/手动运行中/成功/失败/未启用 5 种状态。
+changelog=0.6.45<br/>新增 MCP 接入：AI Agent(Claude Desktop / Cursor / 自定义客户端)可通过 Model Context Protocol 控制 PT Automation。新增 17 个 MCP 工具覆盖站点/下载器/任务/种子/日志/系统设置 7 个模块;默认仅 Token + X-MCP-Token 鉴权,写工具需勾选 allow_writes 才可调用,所有写操作记入 operation_logs(actor=mcp:<token 名称>);HTTP 入口默认仅 loopback 可访问,可在【系统设置 → MCP 接入】中生成 Token 并开启远程访问。新增 docs/mcp-quickstart.md。

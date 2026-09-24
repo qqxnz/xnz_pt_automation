@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js'
 import { backupRouter } from './routes/backup.js'
 import { downloadersRouter } from './routes/downloaders.js'
 import { logsRouter } from './routes/logs.js'
+import { mcpTokensRouter } from './routes/mcpTokens.js'
 import { notificationsRouter } from './routes/notifications.js'
 import { settingsRouter } from './routes/settings.js'
 import { sitesRouter } from './routes/sites/index.js'
@@ -15,6 +16,7 @@ import { siteStatisticsRouter } from './routes/siteStatistics.js'
 import { statsRouter } from './routes/stats.js'
 import { tasksRouter } from './routes/tasks.js'
 import { torrentsRouter } from './routes/torrents.js'
+import { createMcpHttpHandler } from './mcp/http.js'
 import { requestLogger } from './utils/logger.js'
 import { requireSetup } from './middleware/auth.js'
 
@@ -86,6 +88,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/backup', backupRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/mcp/tokens', mcpTokensRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/sites', sitesRouter)
@@ -93,6 +96,13 @@ app.use('/api/site-statistics', siteStatisticsRouter)
 app.use('/api/downloaders', downloadersRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/torrents', torrentsRouter)
+
+// MCP HTTP 端点：JSON-RPC over Streamable HTTP。鉴权 / 校验在 handler 内部完成。
+if (process.env.MCP_HTTP_ENABLED !== 'false') {
+  app.post('/mcp', express.json({ limit: '2mb' }), createMcpHttpHandler())
+  app.get('/mcp', createMcpHttpHandler())
+  app.delete('/mcp', createMcpHttpHandler())
+}
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const frontendDist = path.resolve(backendDir, '..', 'frontend', 'dist')

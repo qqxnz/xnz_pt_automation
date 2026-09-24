@@ -12,6 +12,30 @@ import {
 import { logger, recordOperationLog } from '../utils/logger.js'
 import { getQbTorrentItems, getQbTransferInfo, QbittorrentError, testQbConnection } from '../utils/qbittorrent.js'
 
+/**
+ * 单下载器连通性测试（带落库 + 返回结果）。MCP test_downloader 工具复用。
+ */
+export async function testDownloaderConnection(downloader: DownloaderRecord) {
+  try {
+    const result = await testQbConnection(downloader)
+    downloader.status = 'ONLINE'
+    downloader.statusMessage = result.message
+    downloader.lastTestedAt = result.testedAt
+    downloader.lastSyncedAt = result.testedAt
+    downloader.updatedAt = result.testedAt
+    await updateDownloaderInDb(downloader)
+    return result
+  } catch (error) {
+    const testedAt = new Date().toISOString()
+    downloader.status = statusFromError(error)
+    downloader.statusMessage = errorMessage(error)
+    downloader.lastTestedAt = testedAt
+    downloader.updatedAt = testedAt
+    await updateDownloaderInDb(downloader)
+    throw error
+  }
+}
+
 export const downloadersRouter = Router()
 
 type DownloaderPayload = {
@@ -285,21 +309,10 @@ downloadersRouter.post('/:id/test', requireAuth, async (req, res) => {
   if (!downloader) return res.status(404).json({ message: '下载器不存在' })
 
   try {
-    const result = await testQbConnection(downloader)
-    downloader.status = 'ONLINE'
-    downloader.statusMessage = result.message
-    downloader.lastTestedAt = result.testedAt
-    downloader.lastSyncedAt = result.testedAt
-    downloader.updatedAt = result.testedAt
-    await updateDownloaderInDb(downloader)
+    const result = await testDownloaderConnection(downloader)
     return res.json(result)
   } catch (error) {
     const testedAt = new Date().toISOString()
-    downloader.status = statusFromError(error)
-    downloader.statusMessage = errorMessage(error)
-    downloader.lastTestedAt = testedAt
-    downloader.updatedAt = testedAt
-    await updateDownloaderInDb(downloader)
     return res.status(400).json({
       success: false,
       status: downloader.status,

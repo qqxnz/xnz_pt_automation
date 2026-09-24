@@ -4,6 +4,7 @@ import SetupPage from '../pages/SetupPage.vue'
 import DashboardPage from '../pages/DashboardPage.vue'
 import DownloadersPage from '../pages/DownloadersPage.vue'
 import LogsPage from '../pages/LogsPage.vue'
+import McpTokensPage from '../pages/McpTokensPage.vue'
 import NotificationsPage from '../pages/NotificationsPage.vue'
 import ModulePage from '../pages/ModulePage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
@@ -38,6 +39,7 @@ export const router = createRouter({
     { path: '/logs', name: 'logs', component: LogsPage, meta: { requiresAuth: true } },
     { path: '/notifications', name: 'notifications', component: NotificationsPage, meta: { requiresAuth: true } },
     { path: '/settings', name: 'settings', component: SettingsPage, meta: { requiresAuth: true } },
+    { path: '/settings/mcp', name: 'settings-mcp', component: McpTokensPage, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' }
   ]
 })

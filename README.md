@@ -139,6 +139,31 @@ designs/
 | 任务 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/tasks.svg`，`docs/tasks-plan.md`。 |
 | 日志 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/logs.svg`，`docs/logs-plan.md`。 |
 | 系统设置 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `designs/settings.svg`，`docs/settings-plan.md`。 |
+| MCP 接入 | ✅ 已完成 | ✅ 已完成 | ✅ 已完成 | `docs/mcp-quickstart.md`（设计参考与上手）。 |
+
+## MCP 接入
+
+为 AI Agent（Claude Desktop / Cursor / 自定义客户端）提供 [Model Context Protocol](https://modelcontextprotocol.io/) 接入，覆盖站点/下载器/任务/种子/日志等只读能力，以及签到、运行任务、推送/删除种子等写操作。
+
+快速开始：
+
+1. 登录 Web → **系统设置 → MCP 接入** → **生成新 Token**（按需勾选「允许写入」）。
+2. 在 Agent 配置中加入：
+   ```jsonc
+   // Claude Desktop
+   {
+     "mcpServers": {
+       "xnz-pt": {
+         "type": "streamableHttp",
+         "url": "http://<nas-ip>:3180/mcp",
+         "headers": { "X-MCP-Token": "tk_xxxxxxxx" }
+       }
+     }
+   }
+   ```
+3. 默认仅本机（loopback）可访问；远程接入需在【系统设置】中关闭 `mcp_require_loopback` 并启用 HTTPS 反代。
+
+详细说明见 [`docs/mcp-quickstart.md`](docs/mcp-quickstart.md)。
 
 ## 开发前限制规则
 

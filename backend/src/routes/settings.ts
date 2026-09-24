@@ -69,7 +69,9 @@ function validateSettings(payload: unknown, allowInternalKeys = false): { settin
       requestTimeoutMs: Number(settings.requestTimeoutMs),
       proxyTestUrl: String(settings.proxyTestUrl).trim(),
       maxConcurrentTasks: Number(settings.maxConcurrentTasks),
-      defaultUserAgent: userAgent
+      defaultUserAgent: userAgent,
+      mcpEnabled: Boolean(settings.mcpEnabled),
+      mcpRequireLoopback: Boolean(settings.mcpRequireLoopback)
     }
   }
 }
