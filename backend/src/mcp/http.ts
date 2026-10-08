@@ -71,9 +71,8 @@ export function createMcpHttpHandler(): RequestHandler {
         scopes: tokenRecord.allowWrites ? ['read', 'write'] : ['read'],
         extra: {
           token: tokenRecord,
-          caller: 'http',
           remoteAddress: req.ip
-        } as { token: ApiTokenRecord; caller: 'http'; remoteAddress: string | undefined }
+        } as { token: ApiTokenRecord; remoteAddress: string | undefined }
       }
 
       // StreamableHTTP transport: stateless（每次请求新 transport）— 简单可靠

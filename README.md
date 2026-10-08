@@ -143,7 +143,7 @@ designs/
 
 ## MCP 接入
 
-为 AI Agent（Claude Desktop / Cursor / 自定义客户端）提供 [Model Context Protocol](https://modelcontextprotocol.io/) 接入，覆盖站点/下载器/任务/种子/日志等只读能力，以及签到、运行任务、推送/删除种子等写操作。
+通过 HTTP 为 AI Agent（Claude Desktop / Cursor / 自定义客户端）提供 [Model Context Protocol](https://modelcontextprotocol.io/) 接入，覆盖站点/下载器/任务/种子/日志等只读能力，以及签到、运行任务、推送/删除种子等写操作。
 
 快速开始：
 

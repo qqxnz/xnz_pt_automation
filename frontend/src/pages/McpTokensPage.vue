@@ -27,12 +27,9 @@
       <section class="cc-card mcp-info-card">
         <h2>接入说明</h2>
         <p>
-          MCP（Model Context Protocol）是 Anthropic 提出的 Agent ↔ 工具协议。本系统暴露两类接入：
+          MCP（Model Context Protocol）是 Agent 与工具之间的协议。本系统通过 Streamable HTTP 提供 MCP 接入，端点为 <code>POST http://&lt;nas&gt;:3180/mcp</code>，使用 <code>X-MCP-Token</code> Header 鉴权。
         </p>
-        <ul class="mcp-info-list">
-          <li><strong>HTTP</strong>：端点 <code>POST http://&lt;nas&gt;:3180/mcp</code>，Header 携带 <code>X-MCP-Token</code>。默认仅本机可访问，远程需在【系统设置】中关闭 <code>mcp_require_loopback</code>。</li>
-          <li><strong>stdio</strong>：通过容器内 <code>mcp-server stdio</code> 启动；需要环境变量 <code>PTA_MCP_TOKEN</code> 与 <code>PTA_API_URL</code>。详情见 <code>docs/mcp-quickstart.md</code>。</li>
-        </ul>
+        <p>默认仅本机可访问；远程接入需在【系统设置】中关闭 <code>mcp_require_loopback</code>。</p>
         <p class="mcp-info-tip">
           <strong>Token 仅在生成时返回一次</strong>。请立即保存到密码管理器；后续只能重新生成。
         </p>

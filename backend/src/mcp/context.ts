@@ -4,14 +4,10 @@ import type { ApiTokenRecord } from '../storage.js'
  * 每次 Tool / Resource / Prompt 调用携带的上下文。
  * - token 是 ApiTokenRecord（已校验 enabled + 未过期）
  * - requestId 用于日志串联
- * - caller 区分 stdio / http / inproc
  */
-export type McpCaller = 'http' | 'stdio' | 'inproc'
-
 export type McpContext = {
   token: ApiTokenRecord
   requestId: string
-  caller: McpCaller
   remoteAddress?: string
 }
 

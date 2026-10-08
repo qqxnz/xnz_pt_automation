@@ -28,7 +28,6 @@ import type { ApiTokenRecord } from '../storage.js'
 
 type McpAuthExtra = {
   token: ApiTokenRecord
-  caller?: McpContext['caller']
   remoteAddress?: string
 }
 
@@ -331,17 +330,13 @@ type McpExtraLike = {
 
 function ctxOf(extra: McpExtraLike): McpContext {
   const extraData = extra.authInfo?.extra as McpAuthExtra | undefined
-  // stdio / 单实例 http 模式：cli.ts 把 token 放到 globalThis.__MCP_AUTH__
-  const fallback = (globalThis as Record<string, unknown>).__MCP_AUTH__ as McpAuthExtra | undefined
-  const data: McpAuthExtra | undefined = extraData?.token ? extraData : fallback?.token ? fallback : undefined
-  if (!data?.token) {
-    throw new McpToolError(-32002, 'MCP 上下文缺失 Token（authInfo 与 globalThis.__MCP_AUTH__ 都为空）')
+  if (!extraData?.token) {
+    throw new McpToolError(-32002, 'MCP 上下文缺失 Token（HTTP 鉴权信息为空）')
   }
   return {
-    token: data.token,
+    token: extraData.token,
     requestId: extra.sessionId ?? 'inproc',
-    caller: data.caller ?? 'inproc',
-    remoteAddress: data.remoteAddress
+    remoteAddress: extraData.remoteAddress
   }
 }
 

@@ -1,6 +1,6 @@
 # MCP 接入快速上手
 
-> PT Automation v0.6.45 起内置 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 接入，让 Claude / Cursor / 自定义 Agent 通过自然语言完成「查站点、看任务、推送种子、跑签到」等操作。
+> PT Automation v0.6.45 起内置 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) HTTP 接入，让 Claude / Cursor / 自定义 Agent 通过自然语言完成「查站点、看任务、推送种子、跑签到」等操作。
 
 ## 1. 在 Web 端生成 Token
 
@@ -11,7 +11,7 @@
 
 > **重要**：Token 是 Agent 访问系统的唯一凭据，等同于管理员账号。生成后请勿在聊天截图、公开仓库或论坛上贴出。
 
-## 2. HTTP 模式（推荐用于本地/同网段 Agent）
+## 2. HTTP 接入
 
 ### 端点
 
@@ -53,42 +53,7 @@ X-MCP-Token: tk_xxxxxxxxxxxxxxxx
 }
 ```
 
-## 3. stdio 模式（容器内/本机直连）
-
-如果你的 Agent 跑在容器内或同一台机器，可以用 stdio 模式直接拉起：
-
-```bash
-PTA_API_URL=http://localhost:3180 \
-PTA_MCP_TOKEN=tk_xxxxxxxxxxxxxxxx \
-node backend/dist/mcp/cli.js stdio
-```
-
-或通过 npm bin（在装了所有/已编译后）：
-
-```bash
-PTA_API_URL=http://localhost:3180 PTA_MCP_TOKEN=tk_xxx npx mcp-server stdio
-```
-
-Claude Desktop 的 stdio 配置：
-
-```jsonc
-{
-  "mcpServers": {
-    "xnz-pt": {
-      "command": "node",
-      "args": ["/path/to/xnz_pt_automation/backend/dist/mcp/cli.js", "stdio"],
-      "env": {
-        "PTA_API_URL": "http://localhost:3180",
-        "PTA_MCP_TOKEN": "tk_xxxxxxxxxxxxxxxx"
-      }
-    }
-  }
-}
-```
-
-> stdio 模式下 backend 与 Agent 是两个独立进程，stdio 仅做协议转换。HTTP 入口仍需 `mcp_enabled=true`，且本机/同机部署可绕过 `mcp_require_loopback`。
-
-## 4. 自带的工具一览
+## 3. 自带的工具一览
 
 | 工具 | 读/写 | 说明 |
 | --- | --- | --- |
@@ -112,7 +77,7 @@ Claude Desktop 的 stdio 配置：
 
 > 标 **W** 的工具需要 Token 在生成时勾选「允许写入」，否则会返回 `-32002 FORBIDDEN`。
 
-## 5. 自带的 Resources / Prompts
+## 4. 自带的 Resources / Prompts
 
 - **Resources**
   - `pt://system/info` — 系统信息快照
@@ -121,7 +86,7 @@ Claude Desktop 的 stdio 配置：
   - `daily-checkup` — 让 Agent 帮你做每日例行检查
   - `cleanup-low-speeds` — 让 Agent 协助识别低速种子
 
-## 6. 烟雾测试
+## 5. 烟雾测试
 
 确认服务起来后，跑：
 
@@ -133,7 +98,7 @@ bash scripts/mcp-smoke.sh
 
 成功时会输出 `smoke test passed` 和 `tool count: 17`。
 
-## 7. 常见问题
+## 6. 常见问题
 
 **Q：401 / Token invalid**
 A：检查 `X-MCP-Token` 是否与【系统设置 → MCP 接入】里的 Token 完全一致；确认 Token 没被禁用 / 过期。
