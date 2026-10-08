@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.46
+version=0.6.47
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.46<br/>MCP 接入统一为 Streamable HTTP API，移除 stdio 启动器及相关配置；保留 Token 鉴权、读写权限控制和现有 17 个 MCP 工具。
+changelog=0.6.47<br/>修复 Docker 多架构镜像发布：关闭阿里云 CR 不兼容的 BuildKit provenance OCI 清单，确保 v0.6.47 镜像可正常推送。

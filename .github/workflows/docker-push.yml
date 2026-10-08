@@ -51,3 +51,4 @@ jobs:
           ${{ env.ALIYUN_IMAGE }}:latest
           ${{ env.ALIYUN_IMAGE }}:${{ steps.version.outputs.version }}
         push: true
+        provenance: false # Aliyun CR rejects BuildKit's OCI provenance manifest
