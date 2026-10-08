@@ -1,5 +1,5 @@
 appname=qqxnz.pta
-version=0.6.47
+version=0.6.48
 display_name=PTA
 desc=${manifest.desc}
 arch=x86_64
@@ -16,4 +16,4 @@ service_port=3180
 disable_authorization_path=false
 desktop_uidir=ui
 desktop_applaunchname=qqxnz.pta.web
-changelog=0.6.47<br/>修复 Docker 多架构镜像发布：关闭阿里云 CR 不兼容的 BuildKit provenance OCI 清单，确保 v0.6.47 镜像可正常推送。
+changelog=0.6.48<br/>修复 Docker 多架构构建：采用 Debian slim Node 镜像，规避 Alpine arm64 musl 环境下 npm 安装阶段退出；保留阿里云兼容的 provenance 配置。

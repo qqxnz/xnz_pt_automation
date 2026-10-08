@@ -1,4 +1,6 @@
-FROM node:22-alpine AS deps
+# Use the Debian-based image for reliable multi-arch Node.js builds. The
+# Alpine arm64 musl Node build is experimental and can fail under QEMU.
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
@@ -25,20 +27,22 @@ COPY frontend/src frontend/src
 ENV NODE_ENV=production
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
-ARG VERSION=0.6.47
+ARG VERSION=0.6.48
 ARG DATA_DIR=/data
 ARG SCHEMA_VERSION=25
 
 # 强制使用 Asia/Shanghai 时区，避免容器默认 UTC 与用户本地时区错位
 # 导致「今日流量」按字符串日期匹配时查不到数据
-RUN apk add --no-cache tzdata && \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone && \
-    apk del tzdata
+    apt-get purge -y --auto-remove tzdata && \
+    rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \
     PORT=3180 \
